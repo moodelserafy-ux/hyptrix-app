@@ -1,0 +1,11 @@
+{
+  "name": "Hyptrix Cinema Tycoon",
+  "short_name": "Hyptrix",
+  "description": "Build a fictional cinema and television production empire.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A0C",
+  "theme_color": "#0A0A0C",
+  "orientation": "portrait",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

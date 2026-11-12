@@ -1,0 +1,46 @@
+{
+  "meta": { "pack_name": "Hyptrix Fictional Cinema Universe", "version": "1.0.0" },
+  "actors": [
+    {"id":"act_1","name":"سيف الدين راشد","gender":"male","age":38,"tier":"S","image_url":"","base_salary":45000000,"stats":{"overall":92,"acting":82,"charisma":98,"box_office_pull":99,"ego":90},"genre_mastery":{"action":96,"popular_drama":98,"comedy":65,"romance":50,"psychological_horror":45}},
+    {"id":"act_2","name":"ليلى النجار","gender":"female","age":34,"tier":"S","image_url":"","base_salary":39000000,"stats":{"overall":94,"acting":97,"charisma":90,"box_office_pull":88,"ego":72},"genre_mastery":{"romance":98,"popular_drama":88,"biography":95,"comedy":70,"psychological_horror":82}},
+    {"id":"act_3","name":"آدم الكيلاني","gender":"male","age":31,"tier":"A","image_url":"","base_salary":26000000,"stats":{"overall":86,"acting":89,"charisma":88,"box_office_pull":84,"ego":84},"genre_mastery":{"action":90,"crime_mystery":93,"sci_fi":86,"popular_drama":72}},
+    {"id":"act_4","name":"مريم عزمي","gender":"female","age":29,"tier":"A","image_url":"","base_salary":22000000,"stats":{"overall":84,"acting":90,"charisma":86,"box_office_pull":82,"ego":66},"genre_mastery":{"comedy":92,"romance":88,"popular_drama":84,"fantasy":78}},
+    {"id":"act_5","name":"فارس البدري","gender":"male","age":47,"tier":"A","image_url":"","base_salary":18000000,"stats":{"overall":85,"acting":95,"charisma":82,"box_office_pull":75,"ego":58},"genre_mastery":{"historical":94,"crime_mystery":92,"popular_drama":89,"psychological_horror":88}},
+    {"id":"act_6","name":"نوران شريف","gender":"female","age":25,"tier":"B","image_url":"","base_salary":9000000,"stats":{"overall":77,"acting":81,"charisma":83,"box_office_pull":73,"ego":42},"genre_mastery":{"romance":85,"comedy":82,"sci_fi":74,"supernatural_horror":79}},
+    {"id":"act_7","name":"جلال منصور","gender":"male","age":55,"tier":"A","image_url":"","base_salary":15000000,"stats":{"overall":83,"acting":96,"charisma":77,"box_office_pull":68,"ego":48},"genre_mastery":{"historical":97,"biography":95,"popular_drama":93,"crime_mystery":90}},
+    {"id":"act_8","name":"ياسين فوزي","gender":"male","age":23,"tier":"C","image_url":"","base_salary":3500000,"stats":{"overall":64,"acting":68,"charisma":72,"box_office_pull":60,"ego":35},"genre_mastery":{"action":72,"comedy":76,"sci_fi":70,"romance":65}},
+    {"id":"act_9","name":"داليا هاشم","gender":"female","age":41,"tier":"B","image_url":"","base_salary":8000000,"stats":{"overall":78,"acting":91,"charisma":75,"box_office_pull":67,"ego":54},"genre_mastery":{"psychological_horror":90,"crime_mystery":88,"biography":84,"popular_drama":80}},
+    {"id":"act_10","name":"رامي السيوفي","gender":"male","age":36,"tier":"B","image_url":"","base_salary":10000000,"stats":{"overall":79,"acting":82,"charisma":85,"box_office_pull":80,"ego":93},"genre_mastery":{"action":88,"heist":92,"comedy":72,"crime_mystery":84}},
+    {"id":"act_11","name":"هنا مراد","gender":"female","age":22,"tier":"C","image_url":"","base_salary":2500000,"stats":{"overall":61,"acting":65,"charisma":73,"box_office_pull":58,"ego":28},"genre_mastery":{"fantasy":76,"romance":74,"supernatural_horror":73,"comedy":68}},
+    {"id":"act_12","name":"مازن رفاعي","gender":"male","age":44,"tier":"B","image_url":"","base_salary":7500000,"stats":{"overall":76,"acting":89,"charisma":70,"box_office_pull":64,"ego":61},"genre_mastery":{"popular_drama":91,"historical":85,"crime_mystery":83,"action":76}}
+  ],
+  "crew": [
+    {"id":"dir_1","name":"شريف النابلسي","role":"director","image_url":"","base_salary":15000000,"stats":{"overall":90,"vision":95,"control":91,"efficiency":80,"pacing":88},"best_genres":["action","crime_mystery","historical"]},
+    {"id":"dir_2","name":"رنا السعدي","role":"director","image_url":"","base_salary":12000000,"stats":{"overall":87,"vision":91,"control":93,"efficiency":87,"pacing":91},"best_genres":["romance","psychological_horror","biography"]},
+    {"id":"dir_3","name":"معتز الصواف","role":"director","image_url":"","base_salary":7000000,"stats":{"overall":78,"vision":82,"control":77,"efficiency":92,"pacing":79},"best_genres":["comedy","popular_drama","heist"]},
+    {"id":"wr_1","name":"يمنى صبري","role":"screenwriter","image_url":"","base_salary":6500000,"stats":{"overall":91,"plot_strength":96,"dialogue":94,"pacing":84},"best_genres":["crime_mystery","psychological_horror","biography"]},
+    {"id":"wr_2","name":"باسم حمدان","role":"screenwriter","image_url":"","base_salary":5000000,"stats":{"overall":86,"plot_strength":88,"dialogue":91,"pacing":88},"best_genres":["popular_drama","comedy","romance"]},
+    {"id":"wr_3","name":"آية جابر","role":"screenwriter","image_url":"","base_salary":3200000,"stats":{"overall":75,"plot_strength":77,"dialogue":81,"pacing":75},"best_genres":["fantasy","sci_fi","supernatural_horror"]},
+    {"id":"dop_1","name":"نديم وهبة","role":"cinematographer","image_url":"","base_salary":4200000,"stats":{"overall":89,"visuals":95,"lighting":91,"composition":92},"best_genres":["historical","fantasy","sci_fi","romance"]},
+    {"id":"dop_2","name":"سلمى فريد","role":"cinematographer","image_url":"","base_salary":3000000,"stats":{"overall":82,"visuals":85,"lighting":84,"composition":83},"best_genres":["crime_mystery","psychological_horror","popular_drama"]},
+    {"id":"mus_1","name":"كريم الألفي","role":"composer","image_url":"","base_salary":3800000,"stats":{"overall":88,"emotion":94,"memorability":90,"versatility":82},"best_genres":["romance","historical","psychological_horror"]},
+    {"id":"mus_2","name":"تاليا نجيب","role":"composer","image_url":"","base_salary":2600000,"stats":{"overall":82,"emotion":85,"memorability":88,"versatility":86},"best_genres":["action","sci_fi","fantasy"]},
+    {"id":"ed_1","name":"حازم راضي","role":"editor_vfx","image_url":"","base_salary":4500000,"stats":{"overall":90,"rhythm":94,"vfx":96,"continuity":89},"best_genres":["action","sci_fi","supernatural_horror","heist"]},
+    {"id":"ed_2","name":"مي عبدالسلام","role":"editor_vfx","image_url":"","base_salary":2800000,"stats":{"overall":81,"rhythm":85,"vfx":78,"continuity":89},"best_genres":["comedy","romance","crime_mystery"]}
+  ],
+  "competitor_studios": [
+    {"id":"comp_1","name":"إمبراطورية النيل","logo_url":"","market_power":91,"preferred_genres":["action","popular_drama"]},
+    {"id":"comp_2","name":"عدسة المدى","logo_url":"","market_power":82,"preferred_genres":["romance","comedy","biography"]},
+    {"id":"comp_3","name":"أطلس للحكايات","logo_url":"","market_power":76,"preferred_genres":["sci_fi","fantasy","crime_mystery"]}
+  ],
+  "streaming_platforms": [
+    {"id":"plat_1","name":"سينما بلس","logo_url":"","budget_capacity":92},
+    {"id":"plat_2","name":"مدار ستريم","logo_url":"","budget_capacity":83},
+    {"id":"plat_3","name":"حكاية الآن","logo_url":"","budget_capacity":74}
+  ],
+  "festivals": [
+    {"id":"fest_1","name":"مهرجان الأهرامات الذهبي","logo_url":"","prestige":95},
+    {"id":"fest_2","name":"ليالي المتوسط السينمائية","logo_url":"","prestige":87},
+    {"id":"fest_3","name":"جوائز الشاشة العربية","logo_url":"","prestige":82}
+  ]
+}
