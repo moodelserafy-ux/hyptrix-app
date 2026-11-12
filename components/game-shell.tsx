@@ -460,7 +460,7 @@ export function GameShell() {
 
   // The outer setup gate above guarantees a studio for every in-game screen.
   // Capture the narrowed value so nested render functions retain the non-null type.
-  const activeStudio: Studio = studio!;
+  const activeStudio = studio;
 
   function renderOverview() {
     return <>
@@ -544,9 +544,9 @@ export function GameShell() {
   }
 
   function renderResults() {
-    if (!activeProject || !activeProject.result) return <><PageHeading kicker="BOX OFFICE & CRITICS" title="نتائج الإصدار" desc="بعد طرح العمل ستظهر هنا المراجعات، الإيرادات، والضجة الإعلامية."/><div className="empty-state"><Newspaper size={28} className="mx-auto gold-text"/><p className="text-xs mt-3">لا يوجد إصدار مكتمل لعرض نتائجه.</p><button className="btn btn-gold mt-4" onClick={() => setScreen("production")}>الذهاب لغرفة الإنتاج</button></div></>;
     const project = activeProject;
-    const result = project.result;
+    const result = project?.result;
+    if (!project || !result) return <><PageHeading kicker="BOX OFFICE & CRITICS" title="نتائج الإصدار" desc="بعد طرح العمل ستظهر هنا المراجعات، الإيرادات، والضجة الإعلامية."/><div className="empty-state"><Newspaper size={28} className="mx-auto gold-text"/><p className="text-xs mt-3">لا يوجد إصدار مكتمل لعرض نتائجه.</p><button className="btn btn-gold mt-4" onClick={() => setScreen("production")}>الذهاب لغرفة الإنتاج</button></div></>;
     const marketBoard = [
       ...(project.rivalReleases ?? []).map((rival) => ({ studioName: rival.studioName, boxOffice: rival.boxOffice, player: false })),
       { studioName: studio?.name ?? "استوديو اللاعب", boxOffice: project.boxOffice ?? 0, player: true },
