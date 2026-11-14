@@ -2,7 +2,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { useGameStore, AutomaticFestivalCeremonyItem } from '@/lib/store';
+import {
+  useGameStore,
+  AutomaticFestivalCeremonyItem,
+  buildThreeSeasonFestivals,
+} from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import {
   Trophy,
@@ -10,6 +14,7 @@ import {
   PlusCircle,
   MessageSquareQuote,
   Award,
+  Tv,
 } from 'lucide-react';
 
 export function Stage6FestivalsAwards() {
@@ -28,87 +33,21 @@ export function Stage6FestivalsAwards() {
   const proj = lastReleasedProject;
   const [activeFestIdx, setActiveFestIdx] = useState(0);
 
-  // Build all festival ceremonies automatically for the season
+  // Build strictly 3 distinct festival ceremonies for the season (each includes Best Film & Best Series)
   const ceremonies: AutomaticFestivalCeremonyItem[] = React.useMemo(() => {
     if (!proj) return [];
-    const rival1 =
-      proj.rivalReleases.find((r) => r.status !== 'delayed') ||
-      proj.rivalReleases[0];
-    const rivalTitle = rival1?.title || 'ملوك الساحة';
-    const rivalStudio = rival1?.studioName || 'المتحدة للإنتاج السينمائي';
-    const rivalStar = rival1?.leadStarName || 'كريم عبد العزيز';
-    const score = proj.criticScore;
+    return buildThreeSeasonFestivals({
+      project: proj,
+      studioName,
+      currentYear,
+      db,
+    }).ceremonies;
+  }, [proj, studioName, currentYear, db]);
 
-    return db.festivals.slice(0, 3).map((fest, fIdx) => {
-      const thresholdOffset = fIdx * 0.25;
-      const winBestWork = score >= 7.5 + thresholdOffset;
-      const winDirector = score >= 7.3 + thresholdOffset;
-      const winActor = score >= 7.1 + thresholdOffset;
-      const winScript =
-        proj.synopsis.length >= 25 && score >= 7.0 + thresholdOffset;
-
-      const awards = [
-        {
-          category:
-            proj.format === 'film'
-              ? 'جائزة أفضل فيلم سينمائي للعام'
-              : 'جائزة أفضل مسلسل درامي للعام',
-          nominees: [proj.title, rivalTitle],
-          winner: winBestWork ? proj.title : rivalTitle,
-          winningProjectTitle: winBestWork ? proj.title : rivalTitle,
-          winningStudioName: winBestWork ? studioName : rivalStudio,
-          isPlayerWinner: winBestWork,
-        },
-        {
-          category: 'جائزة أفضل إخراج',
-          nominees: [proj.directorName, 'مروان حامد'],
-          winner: winDirector ? proj.directorName : 'مروان حامد',
-          winningProjectTitle: winDirector ? proj.title : rivalTitle,
-          winningStudioName: winDirector ? studioName : rivalStudio,
-          isPlayerWinner: winDirector,
-        },
-        {
-          category: 'جائزة أفضل تمثيل (دور أول)',
-          nominees: [proj.leadNames[0] || 'بطل العمل', rivalStar],
-          winner: winActor ? proj.leadNames[0] || 'بطل العمل' : rivalStar,
-          winningProjectTitle: winActor ? proj.title : rivalTitle,
-          winningStudioName: winActor ? studioName : rivalStudio,
-          isPlayerWinner: winActor,
-        },
-        {
-          category: 'جائزة أفضل سيناريو وحبكة درامية',
-          nominees: [`سيناريو «${proj.title}»`, `سيناريو «${rivalTitle}»`],
-          winner: winScript
-            ? `سيناريو «${proj.title}»`
-            : `سيناريو «${rivalTitle}»`,
-          winningProjectTitle: winScript ? proj.title : rivalTitle,
-          winningStudioName: winScript ? studioName : rivalStudio,
-          isPlayerWinner: winScript,
-        },
-      ];
-
-      return {
-        id: `fest_view_${fest.id}_${proj.id}`,
-        festivalId: fest.id,
-        festivalName: fest.name,
-        prestige: fest.prestige,
-        year: currentYear,
-        playerProjectTitle: proj.title,
-        juryStatement:
-          winBestWork || winActor
-            ? `أشادت لجنة تحكيم ${fest.name} بالمعالجة الدرامية المتقنة في «${proj.title}» من إنتاج «${studioName}»، مؤكدة أن تكامل الرؤية الإخراجية لـ ${proj.directorName} مع حضور ${proj.leadNames[0] || 'بطل العمل'} صنع تجربة استثنائية هذا الموسم.`
-            : `ثمنت لجنة تحكيم ${fest.name} المستوى الفني المتميز لأعمال الموسم، وذهبت الجوائز الكبرى للأعمال الأعلى تقييماً نقدياً وسط منافسة قوية.`,
-        festivalBuzz: `حفاوة كبيرة بصناع الأعمال الفائزة على السجادة الحمراء في ${fest.name}!`,
-        awards,
-        playerWonCount: awards.filter((a) => a.isPlayerWinner).length,
-      };
-    });
-  }, [proj, db.festivals, currentYear, studioName]);
-
-  // Automatically record & trigger sudden sequential festival popups if not yet recorded
+  // Only record & queue the 3 festival popups if they were NOT already triggered automatically at the end of Stage 5
   useEffect(() => {
     if (!proj || ceremonies.length === 0) return;
-    if (proj.awardsWon.length === 0) {
+    if (!proj.festivalsTriggered && proj.awardsWon.length === 0) {
       ceremonies.forEach((c) => {
         const wonLabels = c.awards
           .filter((cat) => cat.isPlayerWinner)
@@ -132,10 +71,10 @@ export function Stage6FestivalsAwards() {
           <div>
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-black text-amber-800">
               <Trophy className="h-3.5 w-3.5 text-amber-600" />
-              النتائج الرسمية لمهرجانات وجوائز عام {currentYear}
+              النتائج الرسمية للمهرجانات الـ 3 الكبرى لعام {currentYear}
             </span>
             <h2 className="font-display mt-1 text-lg font-black text-slate-900">
-              سجل الفائزين في مهرجانات الموسم
+              سجل الفائزين في مهرجانات الموسم (أفلام ومسلسلات)
             </h2>
           </div>
           {proj && (
@@ -145,7 +84,7 @@ export function Stage6FestivalsAwards() {
           )}
         </div>
 
-        {/* Festival Switcher Tabs */}
+        {/* 3 Festival Switcher Tabs */}
         {ceremonies.length > 1 && (
           <div className="mt-3.5 grid grid-cols-3 gap-2">
             {ceremonies.map((fest, idx) => {
@@ -172,7 +111,7 @@ export function Stage6FestivalsAwards() {
                       active ? 'text-amber-100' : 'text-emerald-700'
                     }`}
                   >
-                    {wonCount > 0 ? `فزت بـ ${wonCount} جوائز` : 'منافسة الموسم'}
+                    {wonCount > 0 ? `فزت بـ ${wonCount} جوائز` : 'حسمها المنافسون'}
                   </span>
                 </button>
               );
@@ -217,41 +156,49 @@ export function Stage6FestivalsAwards() {
           </div>
 
           <div className="space-y-2.5">
-            {currentCeremony.awards.map((res, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, x: 16 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.06 }}
-                className={`rounded-2xl border-2 p-3.5 ${
-                  res.isPlayerWinner
-                    ? 'border-emerald-300 border-b-4 border-b-emerald-400 bg-emerald-50/80'
-                    : 'border-indigo-100 bg-[#F8FAFF]'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-black text-violet-700">
-                    {res.category}
-                  </span>
-                  {res.isPlayerWinner ? (
-                    <span className="flex items-center gap-1 font-black text-emerald-700">
-                      <CheckCircle2 className="h-4 w-4" />
-                      جائزة لشركتك!
+            {currentCeremony.awards.map((res, idx) => {
+              const isSeriesCat = res.category.includes('مسلسل');
+              return (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.06 }}
+                  className={`rounded-2xl border-2 p-3.5 ${
+                    res.isPlayerWinner
+                      ? 'border-emerald-300 border-b-4 border-b-emerald-400 bg-emerald-50/80'
+                      : 'border-indigo-100 bg-[#F8FAFF]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 font-black text-violet-700">
+                      {isSeriesCat ? (
+                        <Tv className="h-4 w-4 text-cyan-600" />
+                      ) : (
+                        <Award className="h-4 w-4 text-amber-500" />
+                      )}
+                      <span>{res.category}</span>
                     </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-slate-500">
-                      شركة منافسة
-                    </span>
-                  )}
-                </div>
-                <div className="font-display mt-1 text-sm font-black text-slate-900">
-                  الفائز: {res.winner}
-                </div>
-                <div className="mt-0.5 text-[11px] font-bold text-slate-500">
-                  العمل: «{res.winningProjectTitle}» · إنتاج: {res.winningStudioName}
-                </div>
-              </motion.div>
-            ))}
+                    {res.isPlayerWinner ? (
+                      <span className="flex items-center gap-1 font-black text-emerald-700">
+                        <CheckCircle2 className="h-4 w-4" />
+                        جائزة لشركتك! (+18M قيمة سوقية)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-500">
+                        شركة منافسة
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-display mt-1 text-sm font-black text-slate-900">
+                    الفائز: {res.winner}
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-bold text-slate-500">
+                    العمل: «{res.winningProjectTitle}» · إنتاج: {res.winningStudioName}
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
 
           <button

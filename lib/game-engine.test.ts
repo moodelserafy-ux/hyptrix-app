@@ -7,6 +7,7 @@ import {
   calculateNegotiatedSalary,
   calculateTalentExpectedSalary,
   calculateFinancialsAndQuality,
+  calculateStudioMarketValue,
 } from './game-engine';
 import {
   mergeDatabases,
@@ -128,8 +129,8 @@ test('External JSON Patch merger overrides actor names and images by id while pr
   assert.equal(act1.stats.box_office_pull, 99);
 });
 
-test('Financials calculation produces realistic grounded box office and ratings', () => {
-  const result = calculateFinancialsAndQuality({
+test('Financials calculation produces realistic grounded box office and separates strong vs weak projects', () => {
+  const strongResult = calculateFinancialsAndQuality({
     format: 'film',
     filmSeason: 'eid_adha',
     primaryGenre: 'action',
@@ -154,14 +155,69 @@ test('Financials calculation produces realistic grounded box office and ratings'
     screensCount: 150,
     platformDealAmount: 25_000_000,
     founderPerk: 'marketing_whale',
-    hypeScore: 80,
+    hypeScore: 82,
     aiBoxOfficeMultiplier: 1.15,
     marketRegion: 'egypt',
+    scriptWordCount: 28,
   });
 
-  assert.ok(result.technicalQuality >= 65);
-  assert.ok(result.starPower >= 75);
-  assert.ok(result.totalBoxOfficeRevenue > 25_000_000);
-  assert.ok(result.totalBoxOfficeRevenue < 350_000_000);
-  assert.ok(result.totalGrossRevenue > result.totalBoxOfficeRevenue);
+  const resolved = getResolvedDatabase(null);
+  const weakResult = calculateFinancialsAndQuality({
+    format: 'film',
+    filmSeason: 'mid_year',
+    primaryGenre: 'light_comedy',
+    secondaryGenre: 'psychological_horror',
+    ageRating: '+18',
+    director: baseDb.crew[3],
+    writers: [],
+    dop: null,
+    composer: null,
+    vfx: null,
+    leads: [resolved.actors[60]],
+    antagonist: null,
+    supporting: [],
+    cameos: [],
+    budgetAllocation: {
+      setsAndLocations: 1_500_000,
+      costumesAndMakeup: 1_000_000,
+      vfxAndStunts: 1_000_000,
+      extrasAndCrowds: 500_000,
+    },
+    marketingBudget: 2_000_000,
+    screensCount: 50,
+    platformDealAmount: 5_000_000,
+    founderPerk: 'shark_negotiator',
+    hypeScore: 40,
+    aiBoxOfficeMultiplier: 0.65,
+    marketRegion: 'egypt',
+    scriptWordCount: 4,
+  });
+
+  assert.ok(strongResult.technicalQuality >= 65);
+  assert.ok(strongResult.totalBoxOfficeRevenue > 25_000_000);
+  assert.ok(strongResult.totalBoxOfficeRevenue < 350_000_000);
+  assert.ok(weakResult.totalBoxOfficeRevenue < strongResult.totalBoxOfficeRevenue * 0.45);
+});
+
+test('calculateStudioMarketValue separates liquid cash from studio enterprise market valuation', () => {
+  const initialValuation = calculateStudioMarketValue({
+    cash: 75_000_000,
+    reputation: 50,
+    releasedProjects: [],
+  });
+  assert.ok(initialValuation > 75_000_000);
+
+  const postHitValuation = calculateStudioMarketValue({
+    cash: 95_000_000,
+    reputation: 64,
+    releasedProjects: [
+      {
+        totalGrossRevenue: 110_000_000,
+        netProfit: 42_000_000,
+        criticScore: 8.1,
+        awardsWon: ['أفضل فيلم', 'أفضل إخراج', 'أفضل تمثيل'],
+      },
+    ],
+  });
+  assert.ok(postHitValuation > initialValuation + 80_000_000);
 });

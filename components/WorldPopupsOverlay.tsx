@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useGameStore, formatGameDate } from '@/lib/store';
 import {
@@ -14,6 +14,8 @@ import {
   Star,
   HeartCrack,
   Award,
+  TrendingUp,
+  Tv,
 } from 'lucide-react';
 
 export function WorldPopupsOverlay() {
@@ -28,9 +30,41 @@ export function WorldPopupsOverlay() {
   const activeFestival = festivalModalQueue[0] || null;
   const activeNews = !activeFestival ? breakingNewsQueue[0] || null : null;
 
+  // Step-by-step animated envelope reveal for festival awards keyed by festival ID
+  const [revealState, setRevealState] = useState<{
+    festId: string;
+    count: number;
+  }>({ festId: '', count: 1 });
+
+  const revealedCount =
+    activeFestival && revealState.festId === activeFestival.id
+      ? revealState.count
+      : 1;
+
+  useEffect(() => {
+    if (!activeFestival) return;
+    const festId = activeFestival.id;
+    const total = activeFestival.awards.length;
+    const interval = setInterval(() => {
+      setRevealState((prev) => {
+        const currentCount = prev.festId === festId ? prev.count : 1;
+        if (currentCount >= total) {
+          clearInterval(interval);
+          return { festId, count: total };
+        }
+        return { festId, count: currentCount + 1 };
+      });
+    }, 650);
+    return () => clearInterval(interval);
+  }, [activeFestival]);
+
+  const festivalStepNumber = activeFestival
+    ? Math.max(1, 4 - festivalModalQueue.length)
+    : 1;
+
   return (
     <AnimatePresence>
-      {/* 1. Sudden Grand Festival & Awards Ceremony Popup (Each festival appears on its own!) */}
+      {/* 1. Sudden Grand Festival & Awards Ceremony Popup (Strictly 3 festivals per season, animated envelope reveal) */}
       {activeFestival && (
         <motion.div
           key={activeFestival.id}
@@ -51,13 +85,19 @@ export function WorldPopupsOverlay() {
             <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 p-4 text-white shadow-md">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-xs">
+                  <motion.div
+                    animate={{ rotate: [0, -8, 8, 0], scale: [1, 1.08, 1] }}
+                    transition={{ duration: 2.2, repeat: Infinity }}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-xs"
+                  >
                     <Trophy className="h-7 w-7 text-white" />
-                  </div>
+                  </motion.div>
                   <div>
                     <div className="inline-flex items-center gap-1 rounded-full bg-black/20 px-2.5 py-0.5 text-[10px] font-black text-amber-50">
                       <Sparkles className="h-3 w-3" />
-                      <span>بث مباشر · حفل جوائز عام {activeFestival.year}</span>
+                      <span>
+                        المهرجان {festivalStepNumber} من 3 · موسم جوائز {activeFestival.year}
+                      </span>
                     </div>
                     <h2 className="font-display mt-1 text-lg font-black sm:text-xl">
                       {activeFestival.festivalName}
@@ -79,7 +119,7 @@ export function WorldPopupsOverlay() {
                   <span>بيان لجنة التحكيم العليا</span>
                 </span>
                 <span className="rounded-lg bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white">
-                  حصدت {activeFestival.playerWonCount} جوائز
+                  حصدت شركتك {activeFestival.playerWonCount} من {activeFestival.awards.length} جوائز
                 </span>
               </div>
               <p className="mt-1.5 font-bold leading-relaxed text-slate-800">
@@ -87,50 +127,72 @@ export function WorldPopupsOverlay() {
               </p>
             </div>
 
-            {/* Individual Awards List (Who won what & which project) */}
+            {/* Animated Envelope-by-Envelope Awards List (Includes Best Film & Best Series) */}
             <div className="mt-4 space-y-2.5">
-              <div className="text-xs font-black text-slate-700">
-                القائمة الكاملة للفائزين في جوائز {activeFestival.festivalName}:
+              <div className="flex items-center justify-between text-xs font-black text-slate-700">
+                <span>إعلان الفائزين رسمياً على المسرح:</span>
+                {revealedCount < activeFestival.awards.length && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRevealState({
+                        festId: activeFestival.id,
+                        count: activeFestival.awards.length,
+                      })
+                    }
+                    className="text-[11px] font-black text-violet-600 hover:underline"
+                  >
+                    كشف جميع الجوائز فوراً ({activeFestival.awards.length})
+                  </button>
+                )}
               </div>
-              {activeFestival.awards.map((award, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, x: 14 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.08 }}
-                  className={`rounded-2xl border-2 p-3.5 transition ${
-                    award.isPlayerWinner
-                      ? 'border-emerald-400 border-b-4 border-b-emerald-500 bg-gradient-to-r from-emerald-50 via-white to-teal-50 shadow-xs'
-                      : 'border-indigo-100 bg-[#F8FAFF]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="flex items-center gap-1.5 font-black text-violet-800">
-                      <Award className="h-4 w-4 text-amber-500" />
-                      <span>{award.category}</span>
-                    </span>
-                    {award.isPlayerWinner ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black text-white">
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span>فوز لشركتك!</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-slate-500">
-                        شركة منافسة
-                      </span>
-                    )}
-                  </div>
 
-                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-display text-sm font-black text-slate-900">
-                      الفائز: <span className="text-indigo-950">{award.winner}</span>
+              {activeFestival.awards.slice(0, revealedCount).map((award, idx) => {
+                const isSeriesCat = award.category.includes('مسلسل');
+                return (
+                  <motion.div
+                    key={`${activeFestival.id}_award_${idx}`}
+                    initial={{ opacity: 0, scale: 0.92, y: 14 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+                    className={`rounded-2xl border-2 p-3.5 transition ${
+                      award.isPlayerWinner
+                        ? 'border-emerald-400 border-b-4 border-b-emerald-500 bg-gradient-to-r from-emerald-50 via-white to-teal-50 shadow-xs'
+                        : 'border-indigo-100 bg-[#F8FAFF]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="flex items-center gap-1.5 font-black text-violet-800">
+                        {isSeriesCat ? (
+                          <Tv className="h-4 w-4 text-cyan-600" />
+                        ) : (
+                          <Award className="h-4 w-4 text-amber-500" />
+                        )}
+                        <span>{award.category}</span>
+                      </span>
+                      {award.isPlayerWinner ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-black text-white shadow-2xs">
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span>فوز لشركتك! (+18M قيمة سوقية)</span>
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                          حسمتها شركة منافسة
+                        </span>
+                      )}
                     </div>
-                    <div className="text-[11px] font-bold text-slate-600">
-                      العمل: «{award.winningProjectTitle}» ({award.winningStudioName})
+
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-display text-sm font-black text-slate-900">
+                        الفائز: <span className="text-indigo-950">{award.winner}</span>
+                      </div>
+                      <div className="text-[11px] font-bold text-slate-600">
+                        العمل: «{award.winningProjectTitle}» ({award.winningStudioName})
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
 
             <button
@@ -141,15 +203,15 @@ export function WorldPopupsOverlay() {
               <Trophy className="h-4 w-4" />
               <span>
                 {festivalModalQueue.length > 1
-                  ? `الانتقال للمهرجان التالي (متبقي ${festivalModalQueue.length - 1})`
-                  : 'اعتماد نتائج المهرجان ومتابعة اللعب'}
+                  ? `الانتقال للمهرجان التالي (متبقي ${festivalModalQueue.length - 1} من 3)`
+                  : 'اعتماد الجوائز ومتابعة اللعب'}
               </span>
             </button>
           </motion.div>
         </motion.div>
       )}
 
-      {/* 2. Sudden Breaking News Screen Popup (Appears one story at a time!) */}
+      {/* 2. Sudden Journalistic Breaking News Screen Popup (With Real Gameplay Impact Badge) */}
       {activeNews && (
         <motion.div
           key={activeNews.id}
@@ -166,18 +228,18 @@ export function WorldPopupsOverlay() {
             transition={{ type: 'spring', stiffness: 340, damping: 26 }}
             className="w-full max-w-md rounded-3xl border-2 border-indigo-200 border-b-4 border-b-indigo-400 bg-white p-5 shadow-2xl sm:p-6"
           >
-            {/* Top Breaking Banner */}
+            {/* Top Journalistic Breaking Banner */}
             <div className="flex items-center justify-between gap-2 border-b border-indigo-100 pb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-2xl text-white shadow-xs ${
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl text-white shadow-xs ${
                     activeNews.category === 'actor_deceased' ||
                     activeNews.category === 'actor_retired'
                       ? 'bg-slate-800'
                       : activeNews.category === 'actor_evolution' ||
                         activeNews.category === 'rising_talent'
                       ? 'bg-amber-500'
-                      : 'bg-violet-600'
+                      : 'bg-gradient-to-br from-violet-600 to-indigo-600'
                   }`}
                 >
                   {activeNews.category === 'actor_deceased' ||
@@ -194,18 +256,18 @@ export function WorldPopupsOverlay() {
                   )}
                 </div>
                 <div>
-                  <span className="inline-flex items-center gap-1 rounded-lg bg-violet-100 px-2 py-0.5 text-[10px] font-black text-violet-800">
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-violet-100 px-2.5 py-0.5 text-[10px] font-black text-violet-800">
                     <Flame className="h-3 w-3 text-violet-600" />
                     <span>{activeNews.badgeLabel}</span>
                   </span>
                   <div className="mt-0.5 text-[10px] font-bold text-slate-400">
-                    {formatGameDate(activeNews.day, activeNews.year)}
+                    نشرة أخبار الفن السابع · {formatGameDate(activeNews.day, activeNews.year)}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Headline & Story */}
+            {/* Journalistic Headline & Story */}
             <div className="mt-4">
               <h3 className="font-display text-base font-black leading-snug text-slate-900 sm:text-lg">
                 {activeNews.headline}
@@ -214,8 +276,16 @@ export function WorldPopupsOverlay() {
                 {activeNews.detail}
               </p>
 
+              {/* Direct Gameplay Impact Pill */}
+              {activeNews.gameImpactLabel && (
+                <div className="mt-3 flex items-center justify-center gap-1.5 rounded-2xl border-2 border-violet-200 bg-violet-50/90 px-3 py-2 text-xs font-black text-violet-900">
+                  <TrendingUp className="h-4 w-4 shrink-0 text-violet-600" />
+                  <span>التأثير الفعلي: {activeNews.gameImpactLabel}</span>
+                </div>
+              )}
+
               {activeNews.extraStatBadge && (
-                <div className="mt-3 flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-900">
+                <div className="mt-2.5 flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black text-amber-900">
                   ✨ {activeNews.extraStatBadge}
                 </div>
               )}

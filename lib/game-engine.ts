@@ -17,11 +17,17 @@ export function formatMoney(amount: number): string {
   const abs = Math.abs(amount);
 
   if (abs >= 1_000_000_000_000) {
-    const val = (abs / 1_000_000_000_000).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    const val = (abs / 1_000_000_000_000)
+      .toFixed(2)
+      .replace(/\.00$/, '')
+      .replace(/(\.\d)0$/, '$1');
     return `${sign}${val}T`;
   }
   if (abs >= 1_000_000_000) {
-    const val = (abs / 1_000_000_000).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    const val = (abs / 1_000_000_000)
+      .toFixed(2)
+      .replace(/\.00$/, '')
+      .replace(/(\.\d)0$/, '$1');
     return `${sign}${val}B`;
   }
   if (abs >= 1_000_000) {
@@ -32,6 +38,59 @@ export function formatMoney(amount: number): string {
     return `${sign}${Math.round(abs / 1_000)}K`;
   }
   return `${sign}${Math.round(abs)}`;
+}
+
+/**
+ * Separates Studio Market Valuation (القيمة السوقية للشركة) from Liquid Treasury Cash (خزينة السيولة).
+ * Market Value reflects IP library catalog value, brand reputation, festival awards, and 55% of liquid cash.
+ */
+export function calculateStudioMarketValue(params: {
+  cash: number;
+  reputation: number;
+  releasedProjects: {
+    totalGrossRevenue: number;
+    netProfit: number;
+    criticScore: number;
+    awardsWon: string[];
+  }[];
+  marketValueModifier?: number;
+}): number {
+  const { cash, reputation, releasedProjects, marketValueModifier = 0 } = params;
+
+  const baseBrandEquity = 68_000_000;
+  const liquidCashWeight = Math.round(cash * 0.55);
+  const reputationEquity = (reputation - 50) * 1_650_000;
+
+  let ipCatalogValue = 0;
+  let totalAwards = 0;
+
+  for (const proj of releasedProjects) {
+    totalAwards += proj.awardsWon.length;
+    if (proj.criticScore >= 7.6 && proj.netProfit > 0) {
+      ipCatalogValue += Math.round(proj.totalGrossRevenue * 0.58);
+    } else if (proj.criticScore >= 6.2) {
+      ipCatalogValue += Math.round(proj.totalGrossRevenue * 0.32);
+    } else if (proj.netProfit < -8_000_000) {
+      // Heavy box-office bomb damages studio market valuation!
+      ipCatalogValue -= 16_000_000;
+    } else {
+      ipCatalogValue += Math.round(proj.totalGrossRevenue * 0.12);
+    }
+  }
+
+  const awardsPrestigeEquity = totalAwards * 12_500_000;
+
+  return Math.max(
+    25_000_000,
+    Math.round(
+      baseBrandEquity +
+        liquidCashWeight +
+        reputationEquity +
+        ipCatalogValue +
+        awardsPrestigeEquity +
+        marketValueModifier
+    )
+  );
 }
 
 // Genre Synergy Matrix
@@ -67,9 +126,19 @@ export function calculateGenreSynergy(
   secondary: GenreId | null,
   directorVision = 75,
   writerPlot = 75
-): { score: number; label: string; isHarmonious: boolean; isWeirdSavedByGenius: boolean } {
+): {
+  score: number;
+  label: string;
+  isHarmonious: boolean;
+  isWeirdSavedByGenius: boolean;
+} {
   if (!secondary || primary === secondary) {
-    return { score: 5, label: 'تركيز درامي موحد (+5%)', isHarmonious: true, isWeirdSavedByGenius: false };
+    return {
+      score: 5,
+      label: 'تركيز درامي موحد (+5%)',
+      isHarmonious: true,
+      isWeirdSavedByGenius: false,
+    };
   }
 
   const key1 = `${primary}:${secondary}`;
@@ -121,7 +190,8 @@ export function getCardTierClass(overall: number): {
     return {
       tierName: 'MYTHIC',
       badgeText: 'سوبر ستار شباك أول',
-      borderClass: 'border-violet-400 border-b-4 border-b-violet-500 shadow-[0_14px_34px_-8px_rgba(124,58,237,0.22)]',
+      borderClass:
+        'border-violet-400 border-b-4 border-b-violet-500 shadow-[0_14px_34px_-8px_rgba(124,58,237,0.22)]',
       bgGradient: 'from-[#F5F3FF] via-white to-[#ECFEFF]',
       textColor: 'text-violet-700',
     };
@@ -130,7 +200,8 @@ export function getCardTierClass(overall: number): {
     return {
       tierName: 'ELITE',
       badgeText: 'نجم صف أول',
-      borderClass: 'border-cyan-400 border-b-4 border-b-cyan-500 shadow-[0_12px_28px_-8px_rgba(6,182,212,0.18)]',
+      borderClass:
+        'border-cyan-400 border-b-4 border-b-cyan-500 shadow-[0_12px_28px_-8px_rgba(6,182,212,0.18)]',
       bgGradient: 'from-[#ECFEFF] via-white to-[#F0F9FF]',
       textColor: 'text-cyan-700',
     };
@@ -139,7 +210,8 @@ export function getCardTierClass(overall: number): {
     return {
       tierName: 'PRO',
       badgeText: 'محترف متمرس',
-      borderClass: 'border-indigo-200 border-b-4 border-b-indigo-300 shadow-[0_8px_20px_-6px_rgba(99,102,241,0.12)]',
+      borderClass:
+        'border-indigo-200 border-b-4 border-b-indigo-300 shadow-[0_8px_20px_-6px_rgba(99,102,241,0.12)]',
       bgGradient: 'from-[#EEF2FF] via-white to-slate-50',
       textColor: 'text-indigo-700',
     };
@@ -147,7 +219,8 @@ export function getCardTierClass(overall: number): {
   return {
     tierName: 'RISING',
     badgeText: 'موهبة صاعدة',
-    borderClass: 'border-rose-300 border-b-4 border-b-rose-400 shadow-[0_8px_20px_-6px_rgba(244,63,94,0.12)]',
+    borderClass:
+      'border-rose-300 border-b-4 border-b-rose-400 shadow-[0_8px_20px_-6px_rgba(244,63,94,0.12)]',
     bgGradient: 'from-[#FFF1F2] via-white to-[#FFF7ED]',
     textColor: 'text-rose-600',
   };
@@ -169,13 +242,20 @@ export function evaluateCastChemistry(
   const highEgoNames = highEgoActors.map((a) => a.name);
 
   if (highEgoActors.length >= 2) {
-    const rawRisk = Math.min(98, 55 + (highEgoActors.length - 1) * 25 - Math.max(0, directorControl - 80));
+    const rawRisk = Math.min(
+      98,
+      55 +
+        (highEgoActors.length - 1) * 25 -
+        Math.max(0, directorControl - 80)
+    );
     return {
       egoClashRisk: rawRisk,
       highEgoStars: highEgoNames,
       hasSevereClash: true,
       chemistryScore: Math.max(40, 90 - rawRisk / 2),
-      warningMessage: `تحذير: اجتماع (${highEgoNames.join(' و ')}) بغرور معدي 90 هيعمل خناقات كبيرة في اللوكيشن على ترتيب الأسماء على التتر وحجم الصورة في البوستر!`,
+      warningMessage: `تحذير: اجتماع (${highEgoNames.join(
+        ' و '
+      )}) بغرور فوق 90 قد يثير خلافات في اللوكيشن حول ترتيب الأسماء على التتر!`,
     };
   }
 
@@ -228,16 +308,20 @@ export function calculateTalentExpectedSalary(params: {
   idealSalary: number;
   acceptanceDifficultyLabel: string;
 } {
-  const { baseSalary, ego, genreMasteryScore, studioReputation, isCameo } = params;
+  const { baseSalary, ego, genreMasteryScore, studioReputation, isCameo } =
+    params;
   const rawBase = isCameo ? Math.round(baseSalary * 0.22) : baseSalary;
 
-  // High ego stars demand a premium, especially if studio reputation is under 75
-  const egoMultiplier = ego >= 92 ? 1.18 : ego >= 85 ? 1.1 : ego >= 75 ? 1.02 : 0.94;
-  const repPenalty = studioReputation < 60 ? 1.15 : studioReputation < 75 ? 1.06 : 0.96;
-  // If the genre is not their specialty (< 78), they demand more money to take the risk
-  const genreFactor = genreMasteryScore >= 88 ? 0.95 : genreMasteryScore < 75 ? 1.18 : 1.04;
+  const egoMultiplier =
+    ego >= 92 ? 1.18 : ego >= 85 ? 1.1 : ego >= 75 ? 1.02 : 0.94;
+  const repPenalty =
+    studioReputation < 60 ? 1.15 : studioReputation < 75 ? 1.06 : 0.96;
+  const genreFactor =
+    genreMasteryScore >= 88 ? 0.95 : genreMasteryScore < 75 ? 1.18 : 1.04;
 
-  const expectedMinimumSalary = Math.round(rawBase * egoMultiplier * repPenalty * genreFactor);
+  const expectedMinimumSalary = Math.round(
+    rawBase * egoMultiplier * repPenalty * genreFactor
+  );
   const idealSalary = Math.round(expectedMinimumSalary * 1.12);
 
   const acceptanceDifficultyLabel =
@@ -275,22 +359,99 @@ export interface RivalRelease {
 }
 
 const RIVAL_FILM_TITLES: Record<GenreId, string[]> = {
-  action: ['الرصاصة الأخيرة في بورسعيد', 'أسد الكنانة', 'عملية الفجر الأسود', 'حيتان الأسفلت', 'المهمة المستحيلة في سيناء'],
-  popular_drama: ['ملوك الحارة القديمة', 'سلطان الغلابة', 'دموع الأصول', 'حارة الجدعان', 'المعلم الكبير'],
-  comedy: ['إفلاس خمس نجوم', 'معالي الوزير بالصدفة', 'جمعية المنتفعين', 'خطة نص الليل'],
-  light_comedy: ['عريس تحت التمرين', 'إجازة في الساحل', 'عائلة هاي كلاس', 'جوازة في الكواليس'],
-  psychological_horror: ['الغرفة رقم 9', 'همس المرايا', 'متاهة العقل', 'الظل الآخر'],
-  supernatural_horror: ['عهد الرصد', 'قصر البارون الملعون', 'خاتم الجان', 'بوابة الأسرار'],
-  crime_mystery: ['لغز جريمة الزمالك', 'الشاهد الصامت', 'ملف القضية 404', 'تحقيقات منتصف الليل'],
-  sci_fi: ['القاهرة 2099', 'النسخة الأخيرة', 'ما وراء الزمن', 'المدار المفقود'],
-  romance: ['شتاء في الإسكندرية', 'موعد على النيل', 'رسائل لم تقرأ', 'أيام الوعد'],
-  historical: ['فرسان المحروسة', 'عهد المماليك', 'معركة الكرامة', 'رايات النصر'],
-  biography: ['أسطورة الفن', 'رحلة العبقري', 'صوت الخلود', 'مذكرات الزمن الجميل'],
-  heist: ['خزينة البنك المركزي', 'سرقة القرن', 'خطة الشبح', 'الشفرة الماسية'],
-  fantasy: ['مملكة النيل المفقودة', 'حارس البوابة القديمة', 'أسطورة العنقاء', 'جزيرة السحر'],
-  superhero: ['الظل القرمزي', 'حامي المدينة', 'البرق الأسود', 'درع العدالة'],
+  action: [
+    'الرصاصة الأخيرة في بورسعيد',
+    'أسد الكنانة',
+    'عملية الفجر الأسود',
+    'حيتان الأسفلت',
+    'المهمة المستحيلة في سيناء',
+  ],
+  popular_drama: [
+    'ملوك الحارة القديمة',
+    'سلطان الغلابة',
+    'دموع الأصول',
+    'حارة الجدعان',
+    'المعلم الكبير',
+  ],
+  comedy: [
+    'إفلاس خمس نجوم',
+    'معالي الوزير بالصدفة',
+    'جمعية المنتفعين',
+    'خطة نص الليل',
+  ],
+  light_comedy: [
+    'عريس تحت التمرين',
+    'إجازة في الساحل',
+    'عائلة هاي كلاس',
+    'جوازة في الكواليس',
+  ],
+  psychological_horror: [
+    'الغرفة رقم 9',
+    'همس المرايا',
+    'متاهة العقل',
+    'الظل الآخر',
+  ],
+  supernatural_horror: [
+    'عهد الرصد',
+    'قصر البارون الملعون',
+    'خاتم الجان',
+    'بوابة الأسرار',
+  ],
+  crime_mystery: [
+    'لغز جريمة الزمالك',
+    'الشاهد الصامت',
+    'ملف القضية 404',
+    'تحقيقات منتصف الليل',
+  ],
+  sci_fi: [
+    'القاهرة 2099',
+    'النسخة الأخيرة',
+    'ما وراء الزمن',
+    'المدار المفقود',
+  ],
+  romance: [
+    'شتاء في الإسكندرية',
+    'موعد على النيل',
+    'رسائل لم تقرأ',
+    'أيام الوعد',
+  ],
+  historical: [
+    'فرسان المحروسة',
+    'عهد المماليك',
+    'معركة الكرامة',
+    'رايات النصر',
+  ],
+  biography: [
+    'أسطورة الفن',
+    'رحلة العبقري',
+    'صوت الخلود',
+    'مذكرات الزمن الجميل',
+  ],
+  heist: [
+    'خزينة البنك المركزي',
+    'سرقة القرن',
+    'خطة الشبح',
+    'الشفرة الماسية',
+  ],
+  fantasy: [
+    'مملكة النيل المفقودة',
+    'حارس البوابة القديمة',
+    'أسطورة العنقاء',
+    'جزيرة السحر',
+  ],
+  superhero: [
+    'الظل القرمزي',
+    'حامي المدينة',
+    'البرق الأسود',
+    'درع العدالة',
+  ],
 };
 
+/**
+ * Generates fierce, realistic rival releases where 1-2 major studios can dominate
+ * the box office (70M - 135M EGP) if the player doesn't craft a top-tier work,
+ * while another rival might flop or delay its project!
+ */
 export function generateRivalReleases(
   competitors: CompetitorStudio[],
   availableActors: ActorItem[],
@@ -299,13 +460,23 @@ export function generateRivalReleases(
   seedOffset = 1
 ): RivalRelease[] {
   const freeActors = availableActors.filter(
-    (a) => !excludeActorIds.includes(a.id) && a.status !== 'retired' && a.status !== 'deceased'
+    (a) =>
+      !excludeActorIds.includes(a.id) &&
+      a.status !== 'retired' &&
+      a.status !== 'deceased'
   );
   const pool = freeActors.length >= 4 ? freeActors : availableActors;
 
-  // Pick up to 4 studios; 3 release and 1 might delay or skip the season realistically
-  return competitors.slice(0, 4).map((comp, idx) => {
-    const genre = (comp.preferred_genres[idx % comp.preferred_genres.length] || 'action') as GenreId;
+  // Rotate which studios lead the season so rankings shake up!
+  const rotatedCompetitors = [...competitors].sort((a, b) => {
+    const hashA = ((a.market_power * 13 + seedOffset * 31) % 97);
+    const hashB = ((b.market_power * 13 + seedOffset * 31) % 97);
+    return hashB - hashA;
+  });
+
+  return rotatedCompetitors.slice(0, 4).map((comp, idx) => {
+    const genre = (comp.preferred_genres[idx % comp.preferred_genres.length] ||
+      'action') as GenreId;
     const titles = RIVAL_FILM_TITLES[genre] || RIVAL_FILM_TITLES.action;
     const title = titles[(idx + seedOffset) % titles.length];
     const actor = pool[(idx * 2 + seedOffset) % pool.length];
@@ -322,22 +493,38 @@ export function generateRivalReleases(
         audienceScore: 0,
         boxOfficeRevenue: 0,
         status: 'delayed',
-        delayReason: 'تأجل الطرح للموسم القادم بسبب استكمال المونتاج والخدع البصرية',
+        delayReason:
+          'تأجل الطرح للموسم القادم بسبب استكمال المونتاج والخدع البصرية',
       };
     }
 
-    const powerFactor = (comp.market_power * 0.5 + (actor?.stats.box_office_pull || 76) * 0.5) / 100;
-    const tierOffset = idx === 0 ? 0.6 : idx === 1 ? -0.3 : -1.1;
+    const powerFactor =
+      (comp.market_power * 0.55 +
+        (actor?.stats.box_office_pull || 80) * 0.45) /
+      100;
+
+    // idx === 0 is the Season Blockbuster Rival (strong contender for #1!)
+    // idx === 1 is a solid Upper-Mid Rival
+    // idx === 2 is a Rival that underperformed or flopped
+    const tierOffset = idx === 0 ? 1.15 : idx === 1 ? 0.35 : -1.25;
     const criticScore = Number(
-      Math.min(8.8, Math.max(4.4, 5.8 + powerFactor * 2.4 + tierOffset)).toFixed(1)
+      Math.min(8.9, Math.max(4.2, 6.1 + powerFactor * 2.1 + tierOffset)).toFixed(
+        1
+      )
     );
     const audienceScore = Number(
-      Math.min(9.1, Math.max(4.8, criticScore + (idx === 0 ? 0.4 : -0.2))).toFixed(1)
+      Math.min(
+        9.2,
+        Math.max(4.5, criticScore + (idx === 0 ? 0.4 : -0.2))
+      ).toFixed(1)
     );
-    const spreadMultiplier = idx === 0 ? 1.15 : idx === 1 ? 0.82 : 0.52;
-    const baseRev = Math.round(
-      (16_000_000 + powerFactor * 58_000_000) * spreadMultiplier * seasonMultiplier
-    );
+
+    const baseRev =
+      idx === 0
+        ? Math.round((48_000_000 + powerFactor * 64_000_000) * seasonMultiplier)
+        : idx === 1
+        ? Math.round((28_000_000 + powerFactor * 42_000_000) * seasonMultiplier)
+        : Math.round((9_000_000 + powerFactor * 19_000_000) * seasonMultiplier);
 
     return {
       id: `rival_${comp.id}_${idx}`,
@@ -353,6 +540,11 @@ export function generateRivalReleases(
   });
 }
 
+/**
+ * Grounded & realistic financial and quality simulation.
+ * A project ONLY succeeds if script depth, genre harmony, cast mastery, crew completeness,
+ * and production/marketing budgets are genuinely well-executed.
+ */
 export function calculateFinancialsAndQuality(params: {
   format: ProjectFormat;
   episodes?: SeriesEpisodes;
@@ -378,6 +570,7 @@ export function calculateFinancialsAndQuality(params: {
   hypeScore: number;
   aiBoxOfficeMultiplier: number;
   marketRegion: MarketRegion;
+  scriptWordCount?: number;
 }): {
   technicalQuality: number;
   starPower: number;
@@ -410,6 +603,7 @@ export function calculateFinancialsAndQuality(params: {
     hypeScore,
     aiBoxOfficeMultiplier,
     marketRegion,
+    scriptWordCount = 20,
   } = params;
 
   const synergy = calculateGenreSynergy(
@@ -419,25 +613,34 @@ export function calculateFinancialsAndQuality(params: {
     writers[0]?.stats.plot_strength || 75
   );
 
-  // If technical crew slots are left empty, quality suffers realistically!
-  const dopScore = dop ? dop.stats.overall : 48;
-  const compScore = composer ? composer.stats.overall : 50;
-  const vfxScore = vfx ? vfx.stats.overall : 45;
+  // Missing technical crew slots severely penalize quality
+  const dopScore = dop ? dop.stats.overall : 42;
+  const compScore = composer ? composer.stats.overall : 44;
+  const vfxScore = vfx ? vfx.stats.overall : 40;
 
-  // Check if lead actors actually master this genre!
+  // Check if lead actors actually fit this genre!
   const leadActing =
     leads.length > 0
       ? leads.reduce((acc, l) => {
-          const mastery = l.genre_mastery[primaryGenre] ?? 68;
-          return acc + l.stats.acting * 0.65 + mastery * 0.35;
+          const mastery = l.genre_mastery[primaryGenre] ?? 62;
+          return acc + l.stats.acting * 0.6 + mastery * 0.4;
         }, 0) / leads.length
-      : 55;
+      : 48;
 
-  const directorGenreFit = director.best_genres.includes(primaryGenre) ? 6 : -4;
+  const directorGenreFit = director.best_genres.includes(primaryGenre) ? 6 : -6;
 
   const antagBonus = antagonist
-    ? (antagonist.stats.acting * 0.5 + antagonist.stats.charisma * 0.5 - 68) * 0.3
-    : -5; // Missing an antagonist hurts dramatic conflict
+    ? (antagonist.stats.acting * 0.5 + antagonist.stats.charisma * 0.5 - 68) *
+      0.32
+    : -6;
+
+  // Script effort impact: shallow scripts (< 10 words) hurt quality
+  const scriptBonus =
+    scriptWordCount >= 22
+      ? 6
+      : scriptWordCount >= 12
+      ? 1
+      : -12;
 
   const prodSpendTotal =
     budgetAllocation.setsAndLocations +
@@ -445,93 +648,99 @@ export function calculateFinancialsAndQuality(params: {
     budgetAllocation.vfxAndStunts +
     budgetAllocation.extrasAndCrowds;
 
-  // Realistic production budget impact: underspending (< 15M) penalizes quality
   const prodBonus =
-    prodSpendTotal < 12_000_000
-      ? -8
-      : prodSpendTotal < 20_000_000
-      ? 0
-      : Math.min(10, (prodSpendTotal - 20_000_000) / 5_000_000);
+    prodSpendTotal < 14_000_000
+      ? -10
+      : prodSpendTotal < 22_000_000
+      ? -2
+      : Math.min(9, (prodSpendTotal - 22_000_000) / 5_500_000);
 
   let rawQuality =
-    director.stats.overall * 0.32 +
-    leadActing * 0.28 +
+    director.stats.overall * 0.31 +
+    leadActing * 0.27 +
     dopScore * 0.14 +
     compScore * 0.12 +
     vfxScore * 0.14 +
     synergy.score * 0.45 +
     directorGenreFit +
     antagBonus +
+    scriptBonus +
     prodBonus;
 
   if (founderPerk === 'visionary_director') {
-    rawQuality *= 1.07;
+    rawQuality *= 1.06;
   }
 
-  const technicalQuality = Math.min(96, Math.max(28, Math.round(rawQuality)));
+  const technicalQuality = Math.min(95, Math.max(28, Math.round(rawQuality)));
 
   const leadPull =
     leads.length > 0
       ? Math.max(...leads.map((l) => l.stats.box_office_pull))
-      : 50;
+      : 45;
   const supportPull =
     supporting.length > 0
-      ? supporting.reduce((s, a) => s + a.stats.box_office_pull, 0) / supporting.length
-      : 48;
-  const cameoBoost = cameos.length * 4;
+      ? supporting.reduce((s, a) => s + a.stats.box_office_pull, 0) /
+        supporting.length
+      : 45;
+  const cameoBoost = cameos.length * 3;
 
   const starPower = Math.min(
-    97,
+    96,
     Math.round(
-      leadPull * 0.62 +
+      leadPull * 0.6 +
         supportPull * 0.22 +
-        (antagonist?.stats.charisma || 55) * 0.16 +
+        (antagonist?.stats.charisma || 52) * 0.18 +
         cameoBoost
     )
   );
 
   const regionMultiplier =
     marketRegion === 'hollywood'
-      ? 3.5
+      ? 3.2
       : marketRegion === 'europe'
-      ? 2.1
+      ? 2.0
       : marketRegion === 'gulf'
-      ? 1.55
+      ? 1.45
       : 1.0;
 
-  const ageMultiplier = ageRating === 'G' ? 1.12 : ageRating === '+18' ? 0.78 : 1.0;
+  const ageMultiplier =
+    ageRating === 'G' ? 1.08 : ageRating === '+18' ? 0.76 : 1.0;
 
   const seasonBoost =
     format === 'film'
       ? filmSeason === 'eid_adha'
-        ? 1.25
+        ? 1.18
         : filmSeason === 'eid_fitr'
-        ? 1.2
+        ? 1.14
         : filmSeason === 'summer'
-        ? 1.08
-        : 0.88
+        ? 1.04
+        : 0.85
       : seriesSeason === 'ramadan'
-      ? 1.3
-      : 0.95;
-
-  // Realistic marketing & screen impact
-  const marketingFactor = 0.65 + Math.min(0.75, marketingBudget / 28_000_000);
-  const screensFactor = format === 'film' ? Math.max(0.45, Math.min(1.35, screensCount / 130)) : 1.0;
-  const hypeFactor = Math.max(0.65, 0.75 + (hypeScore - 50) / 140);
-
-  // Word-of-mouth quality curve: bad movies (< 60 quality) drop sharply after opening!
-  const wordOfMouthFactor =
-    technicalQuality >= 82
       ? 1.22
-      : technicalQuality >= 70
-      ? 1.0
-      : technicalQuality >= 58
-      ? 0.76
-      : 0.52;
+      : 0.92;
+
+  const marketingFactor = 0.55 + Math.min(0.65, marketingBudget / 32_000_000);
+  const screensFactor =
+    format === 'film'
+      ? Math.max(0.42, Math.min(1.22, screensCount / 145))
+      : 1.0;
+  const hypeFactor = Math.max(0.58, 0.72 + (hypeScore - 55) / 150);
+
+  // Strict word-of-mouth curve: weak movies crash at the box office!
+  const wordOfMouthFactor =
+    technicalQuality >= 83
+      ? 1.25
+      : technicalQuality >= 74
+      ? 0.96
+      : technicalQuality >= 64
+      ? 0.68
+      : technicalQuality >= 54
+      ? 0.42
+      : 0.24;
 
   const baseGross =
     format === 'film'
-      ? (starPower * 290_000 + technicalQuality * 240_000) *
+      ? (starPower * 215_000 + technicalQuality * 185_000) *
         seasonBoost *
         marketingFactor *
         screensFactor *
@@ -542,24 +751,32 @@ export function calculateFinancialsAndQuality(params: {
         regionMultiplier
       : 0;
 
-  let firstWeekRevenue = Math.round(baseGross * 0.36);
+  let firstWeekRevenue = Math.round(baseGross * 0.38);
   if (founderPerk === 'marketing_whale') {
-    firstWeekRevenue = Math.round(firstWeekRevenue * 1.12);
+    firstWeekRevenue = Math.round(firstWeekRevenue * 1.1);
   }
 
   const totalBoxOfficeRevenue =
-    format === 'film' ? Math.round(firstWeekRevenue + baseGross * 0.64) : 0;
+    format === 'film' ? Math.round(firstWeekRevenue + baseGross * 0.62) : 0;
+
+  // Platform & TV revenue scales realistically with quality (platforms pay bonuses only for hits)
+  const platformQualityFactor =
+    technicalQuality >= 76
+      ? 0.95
+      : technicalQuality >= 64
+      ? 0.72
+      : 0.48;
 
   const totalStreamingRevenue = Math.round(
-    platformDealAmount * (technicalQuality >= 65 ? 1.0 : 0.75) +
+    platformDealAmount * platformQualityFactor +
       (format === 'series'
-        ? (starPower * 260_000 + technicalQuality * 250_000) *
+        ? (starPower * 175_000 + technicalQuality * 165_000) *
           seasonBoost *
           marketingFactor *
           wordOfMouthFactor *
           aiBoxOfficeMultiplier *
           regionMultiplier
-        : totalBoxOfficeRevenue * 0.18)
+        : totalBoxOfficeRevenue * 0.14)
   );
 
   return {

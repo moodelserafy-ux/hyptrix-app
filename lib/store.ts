@@ -12,6 +12,7 @@ import {
   ProductionBudgetAllocation,
   RivalRelease,
   formatMoney,
+  calculateStudioMarketValue,
 } from './game-engine';
 import {
   GenreId,
@@ -186,6 +187,7 @@ export interface WorldBreakingNewsModalItem {
   detail: string;
   highlightName?: string;
   extraStatBadge?: string;
+  gameImpactLabel?: string;
 }
 
 export interface FestivalAwardWinnerItem {
@@ -583,6 +585,215 @@ const DYNAMIC_AI_ACTORS_POOL: {
   { name: 'تالين الأرنؤوطي', gender: 'female', archetype: 'بطلة الفانتازيا والأساطير الجديدة', primaryGenre: 'fantasy', secondaryGenre: 'supernatural_horror' },
 ];
 
+/**
+ * Builds strictly 3 distinct festival ceremonies for the season without duplication.
+ * Includes BOTH "جائزة أفضل فيلم سينمائي للعام" AND "جائزة أفضل مسلسل درامي للعام"
+ * and evaluates each category independently against rival studios so no single work sweeps everything automatically.
+ */
+export function buildThreeSeasonFestivals(params: {
+  project: ReleasedProjectRecord;
+  studioName: string;
+  currentYear: number;
+  db: MasterDatabase;
+}): {
+  ceremonies: AutomaticFestivalCeremonyItem[];
+  allWonAwardLabels: string[];
+  leadActorWonCount: number;
+} {
+  const { project, studioName, currentYear, db } = params;
+  const activeRivals = project.rivalReleases.filter(
+    (r) => r.status !== 'delayed'
+  );
+
+  const topRival1 = activeRivals[0] || {
+    title: 'الرصاصة الذهبية',
+    studioName: 'المتحدة للإنتاج السينمائي',
+    leadStarName: 'كريم عبد العزيز',
+    criticScore: 7.9,
+  };
+  const topRival2 = activeRivals[1] || {
+    title: 'شارع السلطان',
+    studioName: 'مجموعة سينرجي للترفيه',
+    leadStarName: 'أحمد عز',
+    criticScore: 7.5,
+  };
+  const topRival3 = activeRivals[2] || {
+    title: 'الوريث الأخير',
+    studioName: 'العدل جروب للدراما والسينما',
+    leadStarName: 'منى زكي',
+    criticScore: 7.3,
+  };
+
+  const isPlayerFilm = project.format === 'film';
+  const ceremonies: AutomaticFestivalCeremonyItem[] = [];
+  const allWonAwardLabels: string[] = [];
+  let leadActorWonCount = 0;
+
+  // Strictly 3 distinct festivals per season
+  const threeFestivals = db.festivals.slice(0, 3);
+
+  threeFestivals.forEach((fest, fIdx) => {
+    // Each festival has its own critical strictness & taste so results vary across the 3 festivals!
+    const festivalLensOffset = fIdx === 0 ? 0.15 : fIdx === 1 ? -0.1 : 0.35;
+    const rivalBestScore = Math.max(
+      topRival1.criticScore || 7.6,
+      7.4 + fIdx * 0.2
+    );
+
+    const playerEffectiveScore = project.criticScore - festivalLensOffset;
+
+    // 1. Best Film Category (Player only competes here if they made a Film AND beat the top rival film)
+    const playerWinsBestFilm =
+      isPlayerFilm && playerEffectiveScore >= rivalBestScore + 0.1;
+
+    // 2. Best Series Category (Player only competes here if they made a Series AND beat the top rival series)
+    const playerWinsBestSeries =
+      !isPlayerFilm && playerEffectiveScore >= rivalBestScore;
+
+    // 3. Best Director (Requires strong score; festival #2 might favor a rival visionary director)
+    const playerWinsDirector =
+      playerEffectiveScore >= rivalBestScore - 0.1 &&
+      (fIdx !== 2 || project.criticScore >= 8.2);
+
+    // 4. Best Lead Actor (Can be won by the player's star even if the film/series lost Best Picture, or vice versa!)
+    const playerWinsActor =
+      project.criticScore >= 7.3 + (fIdx === 1 ? 0 : 0.35) &&
+      (fIdx !== 0 || project.audienceScore >= 7.5);
+
+    // 5. Best Screenplay (Requires rich script synopsis AND high critic score)
+    const scriptWords = project.synopsis.trim().split(/\s+/).length;
+    const playerWinsScript =
+      scriptWords >= 16 &&
+      playerEffectiveScore >= 7.5 + (fIdx === 2 ? 0.2 : 0);
+
+    const awards: FestivalAwardWinnerItem[] = [
+      {
+        category: 'جائزة أفضل فيلم سينمائي للعام',
+        nominees: isPlayerFilm
+          ? [project.title, topRival1.title, topRival2.title]
+          : [topRival1.title, topRival2.title, 'ليلة سقوط الكينج'],
+        winner: playerWinsBestFilm ? project.title : topRival1.title,
+        winningProjectTitle: playerWinsBestFilm
+          ? project.title
+          : topRival1.title,
+        winningStudioName: playerWinsBestFilm
+          ? studioName
+          : topRival1.studioName,
+        isPlayerWinner: playerWinsBestFilm,
+      },
+      {
+        category: 'جائزة أفضل مسلسل درامي للعام',
+        nominees: !isPlayerFilm
+          ? [project.title, topRival2.title, topRival3.title]
+          : ['الحشاشين: العهد السري', topRival3.title, 'ليالي المحروسة'],
+        winner: playerWinsBestSeries
+          ? project.title
+          : !isPlayerFilm
+          ? topRival2.title
+          : topRival3.title,
+        winningProjectTitle: playerWinsBestSeries
+          ? project.title
+          : !isPlayerFilm
+          ? topRival2.title
+          : topRival3.title,
+        winningStudioName: playerWinsBestSeries
+          ? studioName
+          : !isPlayerFilm
+          ? topRival2.studioName
+          : topRival3.studioName,
+        isPlayerWinner: playerWinsBestSeries,
+      },
+      {
+        category: 'جائزة أفضل إخراج',
+        nominees: [project.directorName, 'مروان حامد', 'تامر محسن'],
+        winner: playerWinsDirector
+          ? project.directorName
+          : fIdx === 1
+          ? 'تامر محسن'
+          : 'مروان حامد',
+        winningProjectTitle: playerWinsDirector
+          ? project.title
+          : fIdx === 1
+          ? topRival3.title
+          : topRival1.title,
+        winningStudioName: playerWinsDirector
+          ? studioName
+          : fIdx === 1
+          ? topRival3.studioName
+          : topRival1.studioName,
+        isPlayerWinner: playerWinsDirector,
+      },
+      {
+        category: 'جائزة أفضل تمثيل (دور أول)',
+        nominees: [
+          project.leadNames[0] || 'بطل العمل',
+          topRival1.leadStarName,
+          topRival2.leadStarName,
+        ],
+        winner: playerWinsActor
+          ? project.leadNames[0] || 'بطل العمل'
+          : fIdx % 2 === 0
+          ? topRival1.leadStarName
+          : topRival2.leadStarName,
+        winningProjectTitle: playerWinsActor
+          ? project.title
+          : fIdx % 2 === 0
+          ? topRival1.title
+          : topRival2.title,
+        winningStudioName: playerWinsActor
+          ? studioName
+          : fIdx % 2 === 0
+          ? topRival1.studioName
+          : topRival2.studioName,
+        isPlayerWinner: playerWinsActor,
+      },
+      {
+        category: 'جائزة أفضل سيناريو وحبكة درامية',
+        nominees: [
+          `سيناريو «${project.title}»`,
+          `سيناريو «${topRival2.title}»`,
+        ],
+        winner: playerWinsScript
+          ? `سيناريو «${project.title}»`
+          : `سيناريو «${topRival2.title}»`,
+        winningProjectTitle: playerWinsScript ? project.title : topRival2.title,
+        winningStudioName: playerWinsScript
+          ? studioName
+          : topRival2.studioName,
+        isPlayerWinner: playerWinsScript,
+      },
+    ];
+
+    const playerWonList = awards.filter((a) => a.isPlayerWinner);
+    playerWonList.forEach((a) => {
+      allWonAwardLabels.push(`${a.category} (${fest.name})`);
+    });
+    if (playerWinsActor) {
+      leadActorWonCount += 1;
+    }
+
+    ceremonies.push({
+      id: `season_fest_${fest.id}_${project.id}`,
+      festivalId: fest.id,
+      festivalName: fest.name,
+      prestige: fest.prestige,
+      year: currentYear,
+      playerProjectTitle: project.title,
+      juryStatement:
+        playerWonList.length >= 2
+          ? `أشادت لجنة تحكيم ${fest.name} بالتكامل الدرامي والفني في «${project.title}» من إنتاج «${studioName}» ومنحته ${playerWonList.length} جوائز وسط منافسة شرسة.`
+          : playerWonList.length === 1
+          ? `حصد «${project.title}» جائزة مستحقة في ${fest.name}، بينما تقاسمت الشركات المنافسة باقي جوائز الموسم الكبرى.`
+          : `شهد ${fest.name} منافسة محتدمة هذا العام؛ ورغم ترشح «${project.title}» في القائمة القصيرة، حسمت أعمال «${topRival1.studioName}» و«${topRival2.studioName}» الجوائز الكبرى بفارق التقييمات النقدية.`,
+      festivalBuzz: `تغطية إعلامية واسعة على السجادة الحمراء في ${fest.name} لإعلان الفائزين في فئات السينما والدراما.`,
+      awards,
+      playerWonCount: playerWonList.length,
+    });
+  });
+
+  return { ceremonies, allWonAwardLabels, leadActorWonCount };
+}
+
 export interface HyptrixGameState {
   studioCreated: boolean;
   studioName: string;
@@ -592,6 +803,8 @@ export interface HyptrixGameState {
   currentRegion: MarketRegion;
   unlockedRegions: MarketRegion[];
   cash: number;
+  marketValue: number;
+  marketValueModifier: number;
   reputation: number;
   currentYear: number;
   gameDay: number;
@@ -603,6 +816,7 @@ export interface HyptrixGameState {
   releasedProjects: ReleasedProjectRecord[];
   lastReleasedProject: ReleasedProjectRecord | null;
   worldHistory: WorldHistoryEntry[];
+  aiMemoryLog: string[];
   actorAwardCounts: Record<string, number>;
   actorDynamicState: Record<string, ActorDynamicEvolutionState>;
   aiGeneratedActors: ActorItem[];
@@ -647,6 +861,18 @@ export interface HyptrixGameState {
   pushFestivalCeremonyModal: (ceremony: AutomaticFestivalCeremonyItem) => void;
   dismissFestivalCeremonyModal: () => void;
   addAiDiscoveredActor: (actor: ActorItem, newsHeadline?: string, newsDetail?: string) => void;
+  pushAiContextualNewsEvent: (event: {
+    headline: string;
+    detail: string;
+    badgeLabel?: string;
+    category?: WorldBreakingNewsModalItem['category'];
+    marketValueDelta?: number;
+    cashDelta?: number;
+    reputationDelta?: number;
+    hypeDelta?: number;
+    rivalStudioName?: string;
+    rivalNetWorthDelta?: number;
+  }) => void;
   importCustomDatabase: (patch: Partial<MasterDatabase>, sourceUrl?: string) => void;
   clearCustomDatabase: () => void;
   resetEntireGameAndStartFresh: () => void;
@@ -715,8 +941,10 @@ export const useGameStore = create<HyptrixGameState>()(
       founderPerk: 'visionary_director',
       currentRegion: 'egypt',
       unlockedRegions: ['egypt'],
-      cash: 185_000_000,
-      reputation: 65,
+      cash: 75_000_000,
+      marketValue: 110_000_000,
+      marketValueModifier: 0,
+      reputation: 62,
       currentYear: 2026,
       gameDay: 1,
       vipCoins: 250,
@@ -732,6 +960,9 @@ export const useGameStore = create<HyptrixGameState>()(
           eventText: 'تأسيس استوديو جديد بطموحات ضخمة للسيطرة على صناعة السينما والدراما.',
           category: 'milestone',
         },
+      ],
+      aiMemoryLog: [
+        'انطلاق الموسم السينمائي في مصر وسط منافسة شرسة بين كبرى شركات الإنتاج على شباك التذاكر.',
       ],
       actorAwardCounts: {},
       actorDynamicState: {},
@@ -754,13 +985,19 @@ export const useGameStore = create<HyptrixGameState>()(
           logo,
           founderPerk,
           currentRegion: region,
+          cash: 75_000_000,
+          marketValue: 110_000_000,
+          marketValueModifier: 0,
           activeScreen: 'STUDIO_HUB',
           worldHistory: [
             {
               year: 2026,
-              eventText: `تأسيس شركة "${studioName.trim() || 'العقرب ستوديوز'}" بقيادة ${ceoName.trim() || 'المدير التنفيذي'} في السوق المصري.`,
+              eventText: `تأسيس شركة "${studioName.trim() || 'العقرب ستوديوز'}" بقيادة ${ceoName.trim() || 'المدير التنفيذي'} بسيولة خزينة 75M ج.م وقيمة سوقية 110M ج.م.`,
               category: 'milestone',
             },
+          ],
+          aiMemoryLog: [
+            `أسس المنتج ${ceoName.trim() || 'المدير التنفيذي'} شركة "${studioName.trim() || 'العقرب ستوديوز'}" بسيولة خزينة 75M ج.م وقيمة سوقية ابتدائية 110M ج.م.`,
           ],
         }),
 
@@ -789,6 +1026,10 @@ export const useGameStore = create<HyptrixGameState>()(
           let nextAiActors = [...state.aiGeneratedActors];
           let nextEmergingStudios = [...state.emergingCompetitors];
           const nextHistory = [...state.worldHistory];
+          const nextMemory = [...(state.aiMemoryLog || [])];
+          const nextCompDelta = { ...state.competitorNetWorthDelta };
+          let nextMarketValMod = state.marketValueModifier || 0;
+          let nextRep = state.reputation;
 
           // 1. Evaluate pending talent offers that have reached their responseDueDay
           for (const key of Object.keys(updatedOffers)) {
@@ -796,16 +1037,23 @@ export const useGameStore = create<HyptrixGameState>()(
             if (offer.status === 'pending' && newGameDay >= offer.responseDueDay) {
               if (!offer.willAccept) {
                 updatedOffers[key] = { ...offer, status: 'rejected' };
+                nextMarketValMod -= 2_500_000;
+                updatedDraft.hypeScore = Math.max(15, updatedDraft.hypeScore - 3);
+                const headline = `بيان فني: ${offer.talentName} يعتذر رسمياً عن بطولة عمل شركة «${state.studioName}»`;
                 newNewsItems.push({
                   id: `news_offer_rej_${offer.talentId}_${newGameDay}`,
                   day: newGameDay,
                   year: newYear,
                   category: 'contract_reply',
-                  badgeLabel: 'رد رسمي من وكيل الفنان',
-                  headline: `${offer.talentName} يعتذر عن دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}»`,
-                  detail: offer.aiReason,
+                  badgeLabel: 'خبر صحفي · مفاوضات النجوم',
+                  headline,
+                  detail: `${offer.aiReason} — وأشارت مصادر صحفية إلى أن اعتذار ${offer.talentName} عن دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}» دفع المنتج ${state.ceoName} للبحث عن بديل سريع.`,
                   highlightName: offer.talentName,
+                  gameImpactLabel: 'تأثير الخبر: -3% ترقب الجمهور · -2.5M ج.م القيمة السوقية',
                 });
+                nextMemory.unshift(
+                  `رفض النجم ${offer.talentName} عرض شركة "${state.studioName}" لدور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في عمل "${updatedDraft.title || 'مشروع جديد'}".`
+                );
               } else {
                 const signedOffer: TalentOfferRecord = {
                   ...offer,
@@ -813,17 +1061,24 @@ export const useGameStore = create<HyptrixGameState>()(
                 };
                 updatedOffers[key] = signedOffer;
                 updatedDraft = applyAcceptedOfferToDraft(updatedDraft, signedOffer);
+                nextMarketValMod += 4_500_000;
+                updatedDraft.hypeScore = Math.min(100, updatedDraft.hypeScore + 5);
+                const headline = `انفراد صحفي: ${offer.talentName} يوقّع عقد «${updatedDraft.title || 'العمل الجديد'}» مع المنتج ${state.ceoName}!`;
                 newNewsItems.push({
                   id: `news_offer_acc_${offer.talentId}_${newGameDay}`,
                   day: newGameDay,
                   year: newYear,
                   category: 'contract_reply',
-                  badgeLabel: 'توقيع عقد رسمي ✓',
-                  headline: `${offer.talentName} يوقّع رسمياً لدور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}»!`,
-                  detail: offer.aiReason,
+                  badgeLabel: 'عاجل · تعاقدات الموسم ✓',
+                  headline,
+                  detail: `${offer.aiReason} — وقد ارتفعت القيمة السوقية لشركة «${state.studioName}» عقب الإعلان الرسمي عن انضمام ${offer.talentName} في دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}» مقابل ${formatMoney(offer.offeredSalary)} ج.م.`,
                   highlightName: offer.talentName,
-                  extraStatBadge: `الأجر المتفق عليه: ${formatMoney(offer.offeredSalary)} ج.م`,
+                  extraStatBadge: `قيمة العقد: ${formatMoney(offer.offeredSalary)} ج.م`,
+                  gameImpactLabel: 'تأثير الخبر: +5% ترقب الجمهور · +4.5M ج.م القيمة السوقية',
                 });
+                nextMemory.unshift(
+                  `وقّع النجم ${offer.talentName} مع شركة "${state.studioName}" بقيادة ${state.ceoName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" بأجر ${formatMoney(offer.offeredSalary)} ج.م.`
+                );
               }
             }
           }
@@ -842,7 +1097,7 @@ export const useGameStore = create<HyptrixGameState>()(
             );
           }
 
-          // 3. Dynamic World Events as days pass (every 6 days, trigger an authentic cinema world event)
+          // 3. Dynamic World Events as days pass (every 6 days, trigger an impactful cinema world event)
           const db = getResolvedDatabase(state.customDbPatch);
           const allStudios = [...db.competitor_studios, ...nextEmergingStudios];
           const liveActors = getLiveActorsWithEvolution({
@@ -868,7 +1123,7 @@ export const useGameStore = create<HyptrixGameState>()(
                 age: 20 + (newGameDay % 6),
                 tier: newOverall >= 82 ? 'A' : 'B',
                 image_url: '',
-                base_salary: 4_500_000 + (newGameDay % 5) * 500_000,
+                base_salary: 4_000_000 + (newGameDay % 5) * 500_000,
                 archetype: `موهبة صاعدة · ${template.archetype}`,
                 unlockDay: 1,
                 isRisingDiscovery: true,
@@ -887,24 +1142,26 @@ export const useGameStore = create<HyptrixGameState>()(
                 },
               };
               nextAiActors = [newActor, ...nextAiActors];
-              const headline = `ظهور موهبة صاعدة جديدة: «${newActor.name}» يخطف أنظار المخرجين!`;
-              const detail = `أشادت لجان النقاد بالموهبة الشابة «${newActor.name}» (${newActor.age} سنة - ${template.archetype}) بعد تألقه اللافت، وأصبح متاحاً الآن للتعاقد في سوق الممثلين بتقييم ${newOverall} وأجر ${formatMoney(newActor.base_salary)} ج.م.`;
+              const headline = `تقرير فني: صعود مفاجئ للموهبة الشابة «${newActor.name}» وتنافس الشركات على ضمه!`;
+              const detail = `أشادت الصحافة النقدية بالحضور اللافت للممثل الصاعد «${newActor.name}» (${newActor.age} سنة - ${template.archetype})، وأصبحت بطاقته متاحة الآن في سوق الممثلين بتقييم ${newOverall} وأجر ${formatMoney(newActor.base_salary)} ج.م.`;
               newNewsItems.push({
                 id: `world_rising_${newGameDay}`,
                 day: newGameDay,
                 year: newYear,
                 category: 'rising_talent',
-                badgeLabel: 'اكتشاف موهبة صاعدة جديدة ✨',
+                badgeLabel: 'بورصة النجوم · اكتشاف جديد ✨',
                 headline,
                 detail,
                 highlightName: newActor.name,
                 extraStatBadge: `تقييم ${newOverall} · العمر ${newActor.age} سنة`,
+                gameImpactLabel: 'تأثير الحدث: إضافة موهبة صاعدة جديدة لسوق الممثلين',
               });
               nextHistory.unshift({
                 year: newYear,
                 eventText: headline,
                 category: 'milestone',
               });
+              nextMemory.unshift(`ظهور الموهبة الصاعدة "${newActor.name}" (${newActor.age} سنة) في سوق الممثلين.`);
             } else if (
               eventRoll === 2 &&
               nextEmergingStudios.length < FICTIONAL_EMERGING_STUDIOS_POOL.length
@@ -912,26 +1169,28 @@ export const useGameStore = create<HyptrixGameState>()(
               // Event B: New Fictional Studio enters the market to compete!
               const newStudio = FICTIONAL_EMERGING_STUDIOS_POOL[nextEmergingStudios.length];
               nextEmergingStudios = [...nextEmergingStudios, { ...newStudio, foundedYear: newYear }];
-              const headline = `تأسيس شركة إنتاج منافسة جديدة: «${newStudio.name}» تدخل السوق بقوة!`;
-              const detail = `أعلن المنتج ${newStudio.ceoName} عن إطلاق شركة «${newStudio.name}» برأس مال ضخم لمنافسة كبار المنتجين على صدارة شباك التذاكر واستقطاب نجوم الصف الأول.`;
+              const headline = `زلزال في سوق الإنتاج: إطلاق شركة «${newStudio.name}» برأس مال ضخم لمنافسة «${state.studioName}»!`;
+              const detail = `أعلن المنتج ${newStudio.ceoName} عن تأسيس «${newStudio.name}» وضخ استثمارات كبرى لخطف نجوم الصف الأول ومنافسة شركة «${state.studioName}» التي يديرها ${state.ceoName} في جدول الترتيب العام.`;
               newNewsItems.push({
                 id: `world_studio_${newGameDay}`,
                 day: newGameDay,
                 year: newYear,
                 category: 'new_studio',
-                badgeLabel: 'منافس جديد في السوق 🎬',
+                badgeLabel: 'أخبار السوق · منافس جديد 🎬',
                 headline,
                 detail,
                 highlightName: newStudio.name,
                 extraStatBadge: `قوة سوقية ${newStudio.market_power}%`,
+                gameImpactLabel: `تأثير الحدث: دخول «${newStudio.name}» في جدول ترتيب الشركات`,
               });
               nextHistory.unshift({
                 year: newYear,
                 eventText: headline,
                 category: 'milestone',
               });
+              nextMemory.unshift(`تأسست شركة منافسة جديدة باسم "${newStudio.name}" بقيادة ${newStudio.ceoName}.`);
             } else if (eventRoll === 3) {
-              // Event C: Rival Studio signs an actor for their upcoming film/series (or delays a film)
+              // Event C: Major Rival Studio Leaderboard Shakeup OR Rival Star Signing!
               const studio = allStudios[newGameDay % allStudios.length];
               const availableStars = liveActors.filter(
                 (a) =>
@@ -943,21 +1202,39 @@ export const useGameStore = create<HyptrixGameState>()(
               );
               const targetActor = availableStars[(newGameDay * 3) % Math.max(1, availableStars.length)];
               if (studio && targetActor) {
-                const isDelayNews = newGameDay % 12 === 0;
-                if (isDelayNews) {
-                  const headline = `تأجيل طرح الفيلم الجديد لشركة «${studio.name}» بطولة ${targetActor.name}`;
-                  const detail = `قررت شركة «${studio.name}» تأجيل موعد عرض عملها الضخم الذي يقوم ببطولته ${targetActor.name} لاستكمال أعمال المونتاج وتفادي الزحام في شباك التذاكر.`;
+                const isRivalFlopCrisis = newGameDay % 12 === 0;
+                const prevComp = nextCompDelta[studio.name] || {
+                  netWorthDelta: 0,
+                  releasesDelta: 0,
+                  awardsDelta: 0,
+                };
+                if (isRivalFlopCrisis) {
+                  const dropAmount = -85_000_000;
+                  nextCompDelta[studio.name] = {
+                    ...prevComp,
+                    netWorthDelta: prevComp.netWorthDelta + dropAmount,
+                  };
+                  const headline = `خسائر فادحة تهز شركة «${studio.name}» وتراجع قيمتها السوقية بـ 85M ج.م!`;
+                  const detail = `تعرض المشروع الضخم لشركة «${studio.name}» لأزمة إنتاجية وتسويقية حادة أدت إلى تراجع أسهم الشركة في البورصة السينمائية وتغير مراكز الصدارة في الدوري المحلي.`;
                   newNewsItems.push({
-                    id: `world_delay_${newGameDay}`,
+                    id: `world_shakeup_${newGameDay}`,
                     day: newGameDay,
                     year: newYear,
                     category: 'rival_project',
-                    badgeLabel: 'أخبار الشركات المنافسة',
+                    badgeLabel: 'شقلبة في ترتيب الشركات 📉',
                     headline,
                     detail,
                     highlightName: studio.name,
+                    gameImpactLabel: `تأثير الخبر: هبوط القيمة السوقية لـ «${studio.name}» بـ -85M ج.م`,
                   });
+                  nextMemory.unshift(`تعرضت شركة "${studio.name}" لخسارة سوقية بقيمة 85M ج.م مما هز ترتيب الشركات.`);
                 } else {
+                  const surgeAmount = 75_000_000;
+                  nextCompDelta[studio.name] = {
+                    ...prevComp,
+                    netWorthDelta: prevComp.netWorthDelta + surgeAmount,
+                    releasesDelta: prevComp.releasesDelta + 1,
+                  };
                   const prevDyn = nextActorDynamic[targetActor.id] || {
                     overallDelta: 0,
                     actingDelta: 0,
@@ -971,11 +1248,11 @@ export const useGameStore = create<HyptrixGameState>()(
                     busyWithStudio: studio.name,
                     overallDelta: prevDyn.overallDelta + 1,
                     pullDelta: prevDyn.pullDelta + 1,
-                    salaryMultiplier: Number((prevDyn.salaryMultiplier * 1.05).toFixed(2)),
-                    lastEvolutionNote: `تألق في عمل مع ${studio.name} (+1 تقييم)`,
+                    salaryMultiplier: Number((prevDyn.salaryMultiplier * 1.06).toFixed(2)),
+                    lastEvolutionNote: `تألق في بطولة مع ${studio.name} (+1 تقييم)`,
                   };
-                  const headline = `شركة «${studio.name}» تتعاقد مع ${targetActor.name} لبطولة عملها الجديد!`;
-                  const detail = `وقّع النجم ${targetActor.name} (${targetActor.age} سنة) عقد بطولة عمل جديد مع «${studio.name}»، مما رفع أسهمه في السوق السينمائي وزاد من تقييمه الجماهيري.`;
+                  const headline = `صفقة مدوية: «${studio.name}» تخطف النجم ${targetActor.name} وتقفز قيمتها السوقية +75M ج.م!`;
+                  const detail = `أبرمت شركة «${studio.name}» عقد احتكار مؤقت مع النجم ${targetActor.name} (${targetActor.age} سنة) لبطولة أضخم أعمالها، مما أشعل المنافسة في جدول الترتيب العام ورفع أجر النجم في السوق.`;
                   newNewsItems.push({
                     id: `world_rival_sign_${newGameDay}`,
                     day: newGameDay,
@@ -985,12 +1262,14 @@ export const useGameStore = create<HyptrixGameState>()(
                     headline,
                     detail,
                     highlightName: targetActor.name,
-                    extraStatBadge: `ارتفع تقييم البطاقة +1`,
+                    extraStatBadge: `انشغال النجم 4 أيام · تقييم +1`,
+                    gameImpactLabel: `تأثير الخبر: قفزة سوقية +75M ج.م لشركة «${studio.name}»`,
                   });
+                  nextMemory.unshift(`تعاقدت شركة "${studio.name}" مع النجم ${targetActor.name} وقفزت قيمتها السوقية بـ 75M ج.م.`);
                 }
               }
             } else if (eventRoll === 4) {
-              // Event D: Veteran Actor Retirement or Passing Away (for older actors age >= 52)
+              // Event D: Veteran Actor Retirement or Passing Away (for older actors age >= 50)
               const veteranActors = liveActors.filter(
                 (a) =>
                   a.status === 'active' &&
@@ -1015,29 +1294,56 @@ export const useGameStore = create<HyptrixGameState>()(
                 };
 
                 const headline = isDeceased
-                  ? `رحيل الفنان القدير «${chosenVet.name}» عن عمر يناهز ${chosenVet.age} عاماً`
+                  ? `نبأ عاجل: رحيل الفنان القدير «${chosenVet.name}» عن عمر يناهز ${chosenVet.age} عاماً`
                   : `الفنان القدير «${chosenVet.name}» (${chosenVet.age} سنة) يعلن اعتزاله التمثيل نهائياً`;
                 const detail = isDeceased
-                  ? `خيّم الحزن على الوسط الفني بعد إعلان وفاة الفنان القدير «${chosenVet.name}» تاركاً إرثاً سينمائياً ودرامياً خالداً في ذاكرة الجمهور والنقاد.`
-                  : `أعلن الفنان «${chosenVet.name}» اكتفاءه بمسيرته الفنية الطويلة واعتزاله العمل السينمائي والدرامي وسط تكريم واسع من نقابة السينمائيين.`;
+                  ? `خيّم الحزن على الوسط الفني المصري والعربي بعد إعلان وفاة الفنان القدير «${chosenVet.name}» تاركاً إرثاً خالداً في ذاكرة السينما والدراما.`
+                  : `أعلن الفنان «${chosenVet.name}» اكتفاءه بمسيرته الفنية الحافلة واعتزاله العمل السينمائي والدرامي وسط تكريم واسع من صناع السينما.`;
 
                 newNewsItems.push({
                   id: `world_vet_${chosenVet.id}_${newGameDay}`,
                   day: newGameDay,
                   year: newYear,
                   category: isDeceased ? 'actor_deceased' : 'actor_retired',
-                  badgeLabel: isDeceased ? 'نبأ حزين في الوسط الفني 🕊️' : 'خبر اعتزال فني',
+                  badgeLabel: isDeceased ? 'خبر عاجل · الوسط الفني 🕊️' : 'خبر صحفي · اعتزال فني',
                   headline,
                   detail,
                   highlightName: chosenVet.name,
                   extraStatBadge: `العمر: ${chosenVet.age} سنة`,
+                  gameImpactLabel: `تأثير الخبر: خروج «${chosenVet.name}» من قائمة الممثلين المتاحين للتعاقد`,
                 });
                 nextHistory.unshift({
                   year: newYear,
                   eventText: headline,
                   category: 'milestone',
                 });
+                nextMemory.unshift(headline);
               }
+            } else {
+              // Event E: Media spotlight on the player's CEO & Studio valuation!
+              const isPositiveSpotlight = state.reputation >= 64;
+              const valShift = isPositiveSpotlight ? 14_000_000 : -9_000_000;
+              nextMarketValMod += valShift;
+              nextRep = Math.min(100, Math.max(15, state.reputation + (isPositiveSpotlight ? 2 : -2)));
+              const headline = isPositiveSpotlight
+                ? `تقرير اقتصادي: أسهم شركة «${state.studioName}» بقيادة ${state.ceoName} تجذب أنظار المستثمرين!`
+                : `تقرير نقدي يطالب شركة «${state.studioName}» بمغامرة فنية أكبر في مشروعها القادم`;
+              const detail = isPositiveSpotlight
+                ? `أشاد محللو سوق الترفيه بالاستراتيجية الإنتاجية للمدير التنفيذي ${state.ceoName}، مما رفع القيمة السوقية لشركة «${state.studioName}» بمقدار +14M ج.م.`
+                : `أشار نقاد الصناعة إلى أن الجمهور ينتظر من المنتج ${state.ceoName} وشركة «${state.studioName}» عملاً قوياً يعيد ترتيب أوراق المنافسة هذا الموسم.`;
+              newNewsItems.push({
+                id: `world_ceo_spotlight_${newGameDay}`,
+                day: newGameDay,
+                year: newYear,
+                category: 'production_news',
+                badgeLabel: 'بورصة شركات الإنتاج 📊',
+                headline,
+                detail,
+                highlightName: state.studioName,
+                gameImpactLabel: isPositiveSpotlight
+                  ? 'تأثير الخبر: +14M ج.م القيمة السوقية · +2% سمعة الشركة'
+                  : 'تأثير الخبر: -9M ج.م القيمة السوقية · -2% سمعة الشركة',
+              });
             }
           }
 
@@ -1049,15 +1355,27 @@ export const useGameStore = create<HyptrixGameState>()(
             });
           }
 
+          const nextMarketValue = calculateStudioMarketValue({
+            cash: state.cash,
+            reputation: nextRep,
+            releasedProjects: state.releasedProjects,
+            marketValueModifier: nextMarketValMod,
+          });
+
           return {
             gameDay: newGameDay,
             currentYear: newYear,
+            reputation: nextRep,
+            marketValueModifier: nextMarketValMod,
+            marketValue: nextMarketValue,
             draft: updatedDraft,
             actorDynamicState: nextActorDynamic,
             aiGeneratedActors: nextAiActors,
             emergingCompetitors: nextEmergingStudios,
+            competitorNetWorthDelta: nextCompDelta,
             breakingNewsQueue: [...state.breakingNewsQueue, ...newNewsItems],
             worldHistory: nextHistory,
+            aiMemoryLog: nextMemory.slice(0, 25),
           };
         }),
 
@@ -1237,19 +1555,29 @@ export const useGameStore = create<HyptrixGameState>()(
       completeProjectRelease: (record) =>
         set((state) => {
           const newCash = state.cash + record.netProfit;
-          const unlocked = [...state.unlockedRegions];
-          if (newCash >= 220_000_000 && !unlocked.includes('gulf')) unlocked.push('gulf');
-          if (newCash >= 450_000_000 && !unlocked.includes('europe')) unlocked.push('europe');
-          if (newCash >= 900_000_000 && !unlocked.includes('hollywood')) unlocked.push('hollywood');
+          const nextProjects = [record, ...state.releasedProjects];
 
           const repDelta =
             record.criticScore >= 7.8
               ? 6
-              : record.criticScore >= 6.5
+              : record.criticScore >= 6.6
               ? 2
-              : record.criticScore < 5.5
-              ? -4
-              : 0;
+              : record.criticScore < 5.6
+              ? -5
+              : -1;
+          const nextRep = Math.min(100, Math.max(15, state.reputation + repDelta));
+
+          const nextMarketValue = calculateStudioMarketValue({
+            cash: newCash,
+            reputation: nextRep,
+            releasedProjects: nextProjects,
+            marketValueModifier: state.marketValueModifier || 0,
+          });
+
+          const unlocked = [...state.unlockedRegions];
+          if (nextMarketValue >= 220_000_000 && !unlocked.includes('gulf')) unlocked.push('gulf');
+          if (nextMarketValue >= 450_000_000 && !unlocked.includes('europe')) unlocked.push('europe');
+          if (nextMarketValue >= 900_000_000 && !unlocked.includes('hollywood')) unlocked.push('hollywood');
 
           // Actor Card Evolution / Downgrade based on the film/series quality & success!
           const nextActorDynamic = { ...state.actorDynamicState };
@@ -1263,8 +1591,8 @@ export const useGameStore = create<HyptrixGameState>()(
             ...state.draft.supportingActorIds,
           ];
 
-          const isMajorHit = record.criticScore >= 7.4 || record.netProfit >= 25_000_000;
-          const isFlop = record.criticScore < 5.6 && record.netProfit < 0;
+          const isMajorHit = record.criticScore >= 7.4 && record.netProfit >= 15_000_000;
+          const isFlop = record.criticScore < 5.8 || record.netProfit < -5_000_000;
 
           for (const actorId of castIds) {
             const baseActor = allActors.find((a) => a.id === actorId);
@@ -1280,7 +1608,6 @@ export const useGameStore = create<HyptrixGameState>()(
             const currentOvr = baseActor.stats.overall + prev.overallDelta;
 
             if (isMajorHit) {
-              // Bronze/C or B-tier actors get a massive breakout leap!
               const isBreakoutCandidate = currentOvr < 82;
               const boostOvr = isBreakoutCandidate ? 5 : 2;
               const salaryBoost = isBreakoutCandidate ? 1.35 : 1.15;
@@ -1307,9 +1634,10 @@ export const useGameStore = create<HyptrixGameState>()(
                   category: 'actor_evolution',
                   badgeLabel: 'انفجار موهبة وتطور بطاقة ممثل 🔥',
                   headline: `تحول «${baseActor.name}» إلى نجم شباك بعد تألقه في «${record.title}»!`,
-                  detail: `بفضل السيناريو القوي والنجاح النقدي والجماهيري لـ «${record.title}»، قفزت طاقة بطاقة الممثل «${baseActor.name}» بمقدار (+${boostOvr} نقاط) ليصل إلى تقييم ${newOvr} (فئة ${newTier})، وبدأت شركات الإنتاج المنافسة تتهافت للتعاقد معه بأجر مضاعف!`,
+                  detail: `بفضل السيناريو المتقن والنجاح النقدي والجماهيري لـ «${record.title}»، قفزت طاقة بطاقة الممثل «${baseActor.name}» بمقدار (+${boostOvr} نقاط) ليصل إلى تقييم ${newOvr} (فئة ${newTier})، وارتفع أجره السوقي وسط تهافت الشركات المنافسة عليه!`,
                   highlightName: baseActor.name,
                   extraStatBadge: `التقييم الجديد: ${newOvr} (+${boostOvr}) · فئة ${newTier}`,
+                  gameImpactLabel: `تأثير الحدث: ترقية بطاقة «${baseActor.name}» إلى الفئة ${newTier}`,
                 });
               }
             } else if (isFlop) {
@@ -1331,35 +1659,57 @@ export const useGameStore = create<HyptrixGameState>()(
             }
           }
 
-          // Update competitor studios' net worths based on their actual AI-generated rival releases
+          // Update competitor studios' net worths & trigger dramatic Leaderboard Shakeups!
           const nextCompDelta = { ...state.competitorNetWorthDelta };
-          for (const rival of record.rivalReleases) {
-            if (rival.status === 'delayed') continue;
+          for (const [rIdx, rival] of record.rivalReleases.entries()) {
             const prevComp = nextCompDelta[rival.studioName] || {
               netWorthDelta: 0,
               releasesDelta: 0,
               awardsDelta: 0,
             };
+            if (rival.status === 'delayed') {
+              // Delayed project costs the rival studio market valuation
+              nextCompDelta[rival.studioName] = {
+                ...prevComp,
+                netWorthDelta: prevComp.netWorthDelta - 38_000_000,
+              };
+              continue;
+            }
+            // Top rival gets a massive valuation surge; bottom rival suffers a painful loss to shake up rankings!
+            const valuationShift =
+              rIdx === 0 && rival.boxOfficeRevenue >= 65_000_000
+                ? Math.round(rival.boxOfficeRevenue * 1.45)
+                : rIdx === 2 || rival.criticScore < 5.8
+                ? -72_000_000
+                : Math.round(rival.boxOfficeRevenue * 0.65);
+
             nextCompDelta[rival.studioName] = {
-              netWorthDelta: prevComp.netWorthDelta + Math.round(rival.boxOfficeRevenue * 0.45),
+              netWorthDelta: prevComp.netWorthDelta + valuationShift,
               releasesDelta: prevComp.releasesDelta + 1,
               awardsDelta: prevComp.awardsDelta + (rival.criticScore >= 8.0 ? 1 : 0),
             };
           }
 
+          const nextMemory = [
+            `طرحت شركة "${state.studioName}" بقيادة ${state.ceoName} ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بتكلفة ${formatMoney(record.totalBudget)} ج.م وحقق إجمالي إيرادات ${formatMoney(record.totalGrossRevenue)} ج.م (صافي الربح: ${formatMoney(record.netProfit)} ج.م) والمركز #${record.boxOfficeRank} في الموسم وتقييم نقاد ${record.criticScore}/10.`,
+            ...(state.aiMemoryLog || []),
+          ].slice(0, 25);
+
           return {
             cash: newCash,
-            reputation: Math.min(100, Math.max(15, state.reputation + repDelta)),
+            marketValue: nextMarketValue,
+            reputation: nextRep,
             unlockedRegions: unlocked,
-            releasedProjects: [record, ...state.releasedProjects],
+            releasedProjects: nextProjects,
             lastReleasedProject: record,
             actorDynamicState: nextActorDynamic,
             competitorNetWorthDelta: nextCompDelta,
             breakingNewsQueue: [...state.breakingNewsQueue, ...newNewsItems],
+            aiMemoryLog: nextMemory,
             worldHistory: [
               {
                 year: state.currentYear,
-                eventText: `طرح ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بإيرادات ${formatMoney(record.totalGrossRevenue)} ج.م وتقييم نقاد ${record.criticScore}/10.`,
+                eventText: `طرح ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بإيرادات ${formatMoney(record.totalGrossRevenue)} ج.م (المركز #${record.boxOfficeRank}) وتقييم نقاد ${record.criticScore}/10.`,
                 category: 'release',
               },
               ...state.worldHistory,
@@ -1377,7 +1727,6 @@ export const useGameStore = create<HyptrixGameState>()(
             ? [newsItem, ...(current.dailyNews || [])]
             : current.dailyNews || [];
 
-          // Check if we just finished the release run and haven't triggered the automatic festivals yet!
           const shouldAutoTriggerFestivals =
             nextDaysTracked >= maxSteps && !current.festivalsTriggered;
 
@@ -1388,111 +1737,51 @@ export const useGameStore = create<HyptrixGameState>()(
             festivalsTriggered: current.festivalsTriggered || shouldAutoTriggerFestivals,
           };
 
-          const autoFestivals: AutomaticFestivalCeremonyItem[] = [];
+          let nextFestivalQueue = [...state.festivalModalQueue];
           const updatedCounts = { ...state.actorAwardCounts };
           let totalNewAwardsForProject: string[] = [];
 
           if (shouldAutoTriggerFestivals) {
             const db = getResolvedDatabase(state.customDbPatch);
-            const activeRivals = current.rivalReleases.filter((r) => r.status !== 'delayed');
-            const rival1 = activeRivals[0]?.title || 'الرصاصة الأخيرة';
-            const rival1Studio = activeRivals[0]?.studioName || 'المتحدة للإنتاج';
-            const rival1Star = activeRivals[0]?.leadStarName || 'نجم منافس';
-            const rival2 = activeRivals[1]?.title || 'ملوك الحارة';
-            const rival2Studio = activeRivals[1]?.studioName || 'سينرجي';
-
-            // Generate 2 distinct festival ceremonies that pop up one after another automatically!
-            db.festivals.slice(0, 2).forEach((fest, fIdx) => {
-              const scoreThresholdOffset = fIdx === 0 ? 0 : 0.3;
-              const effScore = current.criticScore - scoreThresholdOffset;
-
-              const winBestWork = effScore >= 7.6;
-              const winDirector = effScore >= 7.4;
-              const winLead = effScore >= 7.2;
-              const winScript = current.synopsis.length > 35 && effScore >= 7.0;
-
-              const awards: FestivalAwardWinnerItem[] = [
-                {
-                  category:
-                    current.format === 'film'
-                      ? 'جائزة أفضل فيلم سينمائي للعام'
-                      : 'جائزة أفضل مسلسل درامي للعام',
-                  nominees: [current.title, rival1, rival2],
-                  winner: winBestWork ? current.title : rival1,
-                  winningProjectTitle: winBestWork ? current.title : rival1,
-                  winningStudioName: winBestWork ? state.studioName : rival1Studio,
-                  isPlayerWinner: winBestWork,
-                },
-                {
-                  category: 'جائزة أفضل إخراج',
-                  nominees: [current.directorName, 'مروان حامد', 'تامر محسن'],
-                  winner: winDirector ? current.directorName : 'مروان حامد',
-                  winningProjectTitle: winDirector ? current.title : rival1,
-                  winningStudioName: winDirector ? state.studioName : rival1Studio,
-                  isPlayerWinner: winDirector,
-                },
-                {
-                  category: 'جائزة أفضل ممثل / بطولة مطلقة',
-                  nominees: [current.leadNames[0] || 'بطل العمل', rival1Star],
-                  winner: winLead ? current.leadNames[0] || 'بطل العمل' : rival1Star,
-                  winningProjectTitle: winLead ? current.title : rival1,
-                  winningStudioName: winLead ? state.studioName : rival1Studio,
-                  isPlayerWinner: winLead,
-                },
-                {
-                  category: 'جائزة أفضل سيناريو وحبكة درامية',
-                  nominees: [`سيناريو «${current.title}»`, `سيناريو «${rival2}»`],
-                  winner: winScript ? `سيناريو «${current.title}»` : `سيناريو «${rival2}»`,
-                  winningProjectTitle: winScript ? current.title : rival2,
-                  winningStudioName: winScript ? state.studioName : rival2Studio,
-                  isPlayerWinner: winScript,
-                },
-              ];
-
-              const playerWonList = awards.filter((a) => a.isPlayerWinner);
-              totalNewAwardsForProject = [
-                ...totalNewAwardsForProject,
-                ...playerWonList.map((a) => `${a.category} (${fest.name})`),
-              ];
-
-              if (winLead) {
-                for (const aId of state.draft.leadActorIds) {
-                  updatedCounts[aId] = (updatedCounts[aId] || 0) + 1;
-                }
-              }
-
-              autoFestivals.push({
-                id: `auto_fest_${fest.id}_${Date.now()}_${fIdx}`,
-                festivalId: fest.id,
-                festivalName: fest.name,
-                prestige: fest.prestige,
-                year: state.currentYear,
-                playerProjectTitle: current.title,
-                juryStatement:
-                  playerWonList.length >= 2
-                    ? `أشادت لجنة تحكيم ${fest.name} بالتكامل الفني والدرامي في «${current.title}» ومنحته ${playerWonList.length} جوائز كبرى وسط تصفيق حار.`
-                    : playerWonList.length === 1
-                    ? `نال «${current.title}» إشادة نقدية مميزة في ${fest.name} وحصد جائزة مستحقة وسط منافسة شرسة.`
-                    : `شهد ${fest.name} منافسة محتدمة هذا العام؛ ورغم وصول «${current.title}» للقائمة القصيرة للترشيحات، ذهبت الجوائز الكبرى للأعمال المنافسة.`,
-                festivalBuzz: `تغطية إعلامية واسعة على السجادة الحمراء في ${fest.name} لإعلان جوائز الموسم.`,
-                awards,
-                playerWonCount: playerWonList.length,
-              });
+            const built = buildThreeSeasonFestivals({
+              project: current,
+              studioName: state.studioName,
+              currentYear: state.currentYear,
+              db,
             });
+
+            totalNewAwardsForProject = built.allWonAwardLabels;
+            if (built.leadActorWonCount > 0) {
+              for (const aId of state.draft.leadActorIds) {
+                updatedCounts[aId] = (updatedCounts[aId] || 0) + built.leadActorWonCount;
+              }
+            }
+            // Replace festivalModalQueue with strictly the 3 unique ceremonies for this project!
+            nextFestivalQueue = built.ceremonies;
           }
 
-          if (totalNewAwardsForProject.length > 0) {
-            updatedLast.awardsWon = [...updatedLast.awardsWon, ...totalNewAwardsForProject];
+          if (totalNewAwardsForProject.length > 0 && current.awardsWon.length === 0) {
+            updatedLast.awardsWon = totalNewAwardsForProject;
           }
+
+          const updatedProjects = state.releasedProjects.map((p) =>
+            p.id === updatedLast.id ? updatedLast : p
+          );
+          const nextRep = Math.min(100, state.reputation + totalNewAwardsForProject.length * 3);
+          const nextMarketVal = calculateStudioMarketValue({
+            cash: state.cash,
+            reputation: nextRep,
+            releasedProjects: updatedProjects,
+            marketValueModifier: state.marketValueModifier || 0,
+          });
 
           return {
             lastReleasedProject: updatedLast,
-            releasedProjects: state.releasedProjects.map((p) =>
-              p.id === updatedLast.id ? updatedLast : p
-            ),
+            releasedProjects: updatedProjects,
             actorAwardCounts: updatedCounts,
-            reputation: Math.min(100, state.reputation + totalNewAwardsForProject.length * 3),
-            festivalModalQueue: [...state.festivalModalQueue, ...autoFestivals],
+            reputation: nextRep,
+            marketValue: nextMarketVal,
+            festivalModalQueue: nextFestivalQueue,
           };
         }),
 
@@ -1500,10 +1789,10 @@ export const useGameStore = create<HyptrixGameState>()(
         set((state) => {
           const updatedProjects = state.releasedProjects.map((p) => {
             if (p.id !== projectId || p.trollsCampaigned) return p;
-            const bonusRev = Math.round(p.totalGrossRevenue * 0.18);
+            const bonusRev = Math.round(p.totalGrossRevenue * 0.15);
             return {
               ...p,
-              audienceScore: Number(Math.min(9.6, p.audienceScore + 1.2).toFixed(1)),
+              audienceScore: Number(Math.min(9.5, p.audienceScore + 0.9).toFixed(1)),
               totalGrossRevenue: p.totalGrossRevenue + bonusRev,
               netProfit: p.netProfit + bonusRev,
               trollsCampaigned: true,
@@ -1518,7 +1807,7 @@ export const useGameStore = create<HyptrixGameState>()(
           return {
             releasedProjects: updatedProjects,
             lastReleasedProject: updatedLast,
-            cash: state.cash + 15_000_000,
+            cash: state.cash + 10_000_000,
           };
         }),
 
@@ -1537,22 +1826,33 @@ export const useGameStore = create<HyptrixGameState>()(
             updatedCounts[actorId] = (updatedCounts[actorId] || 0) + 1;
           }
           const latestProj = state.lastReleasedProject;
+          const mergedAwards = latestProj
+            ? Array.from(new Set([...latestProj.awardsWon, ...awards]))
+            : awards;
           const updatedLast = latestProj
-            ? { ...latestProj, awardsWon: [...latestProj.awardsWon, ...awards] }
+            ? { ...latestProj, awardsWon: mergedAwards, festivalsTriggered: true }
             : null;
+          const updatedProjects = state.releasedProjects.map((p) =>
+            p.id === latestProj?.id ? { ...p, awardsWon: mergedAwards, festivalsTriggered: true } : p
+          );
+          const nextRep = Math.min(100, state.reputation + awards.length * 3);
+          const nextMarketVal = calculateStudioMarketValue({
+            cash: state.cash,
+            reputation: nextRep,
+            releasedProjects: updatedProjects,
+            marketValueModifier: state.marketValueModifier || 0,
+          });
 
           return {
-            currentYear: state.currentYear + 1,
-            reputation: Math.min(100, state.reputation + awards.length * 4),
+            reputation: nextRep,
+            marketValue: nextMarketVal,
             actorAwardCounts: updatedCounts,
             lastReleasedProject: updatedLast,
-            releasedProjects: state.releasedProjects.map((p) =>
-              p.id === latestProj?.id ? { ...p, awardsWon: [...p.awardsWon, ...awards] } : p
-            ),
+            releasedProjects: updatedProjects,
             worldHistory: [
               {
                 year: state.currentYear,
-                eventText: `في ${festivalName}: حصد الاستوديو ${awards.length} جوائز كبرى (${awards.join('، ')}).`,
+                eventText: `في ${festivalName}: حصد الاستوديو ${awards.length} جوائز (${awards.join('، ')}).`,
                 category: 'award',
               },
               ...state.worldHistory,
@@ -1571,9 +1871,15 @@ export const useGameStore = create<HyptrixGameState>()(
         })),
 
       pushFestivalCeremonyModal: (ceremony) =>
-        set((state) => ({
-          festivalModalQueue: [...state.festivalModalQueue, ceremony],
-        })),
+        set((state) => {
+          // Deduplicate by festivalId so we NEVER queue more than the 3 season festivals!
+          if (state.festivalModalQueue.some((c) => c.festivalId === ceremony.festivalId)) {
+            return state;
+          }
+          return {
+            festivalModalQueue: [...state.festivalModalQueue, ceremony].slice(0, 3),
+          };
+        }),
 
       dismissFestivalCeremonyModal: () =>
         set((state) => ({
@@ -1599,10 +1905,98 @@ export const useGameStore = create<HyptrixGameState>()(
               `لفت الوجه الجديد «${actor.name}» (${actor.age} سنة) أنظار صناع السينما والدراما بفضل حضوره القوي، وأصبح متاحاً الآن للتعاقد في سوق الممثلين.`,
             highlightName: actor.name,
             extraStatBadge: `تقييم ${actor.stats.overall} · العمر ${actor.age} سنة`,
+            gameImpactLabel: `تأثير الخبر: انضمام «${actor.name}» رسمياً لسوق الممثلين`,
           };
           return {
             aiGeneratedActors: [actor, ...state.aiGeneratedActors],
             breakingNewsQueue: [...state.breakingNewsQueue, newsItem],
+            aiMemoryLog: [
+              `ظهر الممثل الصاعد الجديد "${actor.name}" (${actor.age} سنة) في الساحة الفنية بتقييم ${actor.stats.overall}.`,
+              ...(state.aiMemoryLog || []),
+            ].slice(0, 25),
+          };
+        }),
+
+      pushAiContextualNewsEvent: (event) =>
+        set((state) => {
+          const mvDelta = event.marketValueDelta || 0;
+          const cashDelta = event.cashDelta || 0;
+          const repDelta = event.reputationDelta || 0;
+          const hypeDelta = event.hypeDelta || 0;
+
+          const nextCash = Math.max(5_000_000, state.cash + cashDelta);
+          const nextRep = Math.min(100, Math.max(15, state.reputation + repDelta));
+          const nextMvMod = (state.marketValueModifier || 0) + mvDelta;
+          const nextMarketVal = calculateStudioMarketValue({
+            cash: nextCash,
+            reputation: nextRep,
+            releasedProjects: state.releasedProjects,
+            marketValueModifier: nextMvMod,
+          });
+
+          const nextCompDelta = { ...state.competitorNetWorthDelta };
+          if (event.rivalStudioName && event.rivalNetWorthDelta) {
+            const prev = nextCompDelta[event.rivalStudioName] || {
+              netWorthDelta: 0,
+              releasesDelta: 0,
+              awardsDelta: 0,
+            };
+            nextCompDelta[event.rivalStudioName] = {
+              ...prev,
+              netWorthDelta: prev.netWorthDelta + event.rivalNetWorthDelta,
+            };
+          }
+
+          const impactParts: string[] = [];
+          if (mvDelta !== 0) {
+            impactParts.push(
+              `${mvDelta > 0 ? '+' : ''}${formatMoney(mvDelta)} ج.م القيمة السوقية`
+            );
+          }
+          if (cashDelta !== 0) {
+            impactParts.push(
+              `${cashDelta > 0 ? '+' : ''}${formatMoney(cashDelta)} ج.م السيولة`
+            );
+          }
+          if (repDelta !== 0) {
+            impactParts.push(`${repDelta > 0 ? '+' : ''}${repDelta}% السمعة`);
+          }
+          if (hypeDelta !== 0) {
+            impactParts.push(`${hypeDelta > 0 ? '+' : ''}${hypeDelta}% حماس الجمهور`);
+          }
+          if (event.rivalStudioName && event.rivalNetWorthDelta) {
+            impactParts.push(
+              `${event.rivalStudioName}: ${event.rivalNetWorthDelta > 0 ? '+' : ''}${formatMoney(event.rivalNetWorthDelta)} ج.م`
+            );
+          }
+
+          const newsItem: WorldBreakingNewsModalItem = {
+            id: `ai_ctx_news_${Date.now()}`,
+            day: state.gameDay,
+            year: state.currentYear,
+            category: event.category || 'production_news',
+            badgeLabel: event.badgeLabel || 'تغطية صحفية حصرية 📰',
+            headline: event.headline,
+            detail: event.detail,
+            highlightName: event.rivalStudioName || state.studioName,
+            gameImpactLabel:
+              impactParts.length > 0
+                ? `تأثير الخبر: ${impactParts.join(' · ')}`
+                : undefined,
+          };
+
+          return {
+            cash: nextCash,
+            reputation: nextRep,
+            marketValueModifier: nextMvMod,
+            marketValue: nextMarketVal,
+            competitorNetWorthDelta: nextCompDelta,
+            draft: {
+              ...state.draft,
+              hypeScore: Math.min(100, Math.max(15, state.draft.hypeScore + hypeDelta)),
+            },
+            breakingNewsQueue: [...state.breakingNewsQueue, newsItem],
+            aiMemoryLog: [event.headline, ...(state.aiMemoryLog || [])].slice(0, 25),
           };
         }),
 
@@ -1653,8 +2047,10 @@ export const useGameStore = create<HyptrixGameState>()(
           founderPerk: 'visionary_director',
           currentRegion: 'egypt',
           unlockedRegions: ['egypt'],
-          cash: 185_000_000,
-          reputation: 65,
+          cash: 75_000_000,
+          marketValue: 110_000_000,
+          marketValueModifier: 0,
+          reputation: 62,
           currentYear: 2026,
           gameDay: 1,
           vipCoins: 250,
@@ -1670,6 +2066,9 @@ export const useGameStore = create<HyptrixGameState>()(
               eventText: 'تأسيس استوديو جديد بطموحات ضخمة للسيطرة على صناعة السينما والدراما.',
               category: 'milestone',
             },
+          ],
+          aiMemoryLog: [
+            'انطلاق الموسم السينمائي في مصر وسط منافسة شرسة بين كبرى شركات الإنتاج على شباك التذاكر.',
           ],
           actorAwardCounts: {},
           actorDynamicState: {},

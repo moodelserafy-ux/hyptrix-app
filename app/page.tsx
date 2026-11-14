@@ -24,22 +24,22 @@ import { PWAInstallButton } from '@/components/PWAInstallButton';
 import {
   Crown,
   Wallet,
+  TrendingUp,
   Calendar,
   Home,
   Lock,
   Check,
-  Gem,
   Clock,
   PauseCircle,
   Settings,
 } from 'lucide-react';
 
 const QUEST_ORDER: { id: ActiveStageScreen; label: string }[] = [
-  { id: 'PROJECT_SETUP', label: 'تطوير السيناريو' },
-  { id: 'CREW_CAST_CARDS', label: 'سوق الممثلين' },
+  { id: 'PROJECT_SETUP', label: 'السيناريو' },
+  { id: 'CREW_CAST_CARDS', label: 'النجوم' },
   { id: 'PRODUCTION_CRISES', label: 'التصوير' },
-  { id: 'RELEASE_SIMULATION', label: 'العرض والإيرادات' },
-  { id: 'FESTIVALS_AWARDS', label: 'المهرجانات' },
+  { id: 'RELEASE_SIMULATION', label: 'العرض' },
+  { id: 'FESTIVALS_AWARDS', label: 'الجوائز' },
 ];
 
 const SECONDS_PER_GAME_DAY = 15;
@@ -48,18 +48,22 @@ export default function HyptrixMainPage() {
   const {
     studioCreated,
     studioName,
+    ceoName,
     logo,
     cash,
+    marketValue,
+    reputation,
     currentYear,
     gameDay,
-    vipCoins,
     vipPassExpiresAt,
     activeScreen,
+    aiMemoryLog,
     groqApiKeyClient,
     preferredGroqModel,
     setActiveScreen,
     advanceGameDay,
     addAiDiscoveredActor,
+    pushAiContextualNewsEvent,
     quickStartDemoStudio,
   } = useGameStore();
 
@@ -68,8 +72,10 @@ export default function HyptrixMainPage() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [secondsIntoDay, setSecondsIntoDay] = useState(0);
   const [isPageActive, setIsPageActive] = useState(true);
+  const [isScrolled, setIsScrolled] = useState(false);
   const secondsRef = useRef(0);
   const lastAiTickDayRef = useRef(1);
+  const lastAiNewsDayRef = useRef(1);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -84,6 +90,17 @@ export default function HyptrixMainPage() {
     }, 0);
     return () => clearTimeout(timer);
   }, [quickStartDemoStudio]);
+
+  // Track scroll position for floating animated mobile game navbar
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 12);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Track whether the player is actively inside the website (tab visible and window focused)
   useEffect(() => {
@@ -111,7 +128,7 @@ export default function HyptrixMainPage() {
     };
   }, []);
 
-  // Automatic Real-Time Game Clock (NO manual day skip button):
+  // Automatic Real-Time Game Clock:
   // Advances automatically ONLY when the player has founded a studio AND is actively inside the website.
   useEffect(() => {
     if (!mounted || !studioCreated || !isPageActive) return;
@@ -132,10 +149,11 @@ export default function HyptrixMainPage() {
     return () => clearInterval(interval);
   }, [mounted, studioCreated, isPageActive, advanceGameDay]);
 
-  // Periodically ask the AI engine to invent a brand-new rising talent as days progress
+  // Periodically ask the AI engine to invent a brand-new rising talent OR generate contextual breaking news from AI memory
   useEffect(() => {
     if (!mounted || !studioCreated) return;
-    if (gameDay > lastAiTickDayRef.current && gameDay % 15 === 0) {
+
+    if (gameDay > lastAiTickDayRef.current && gameDay % 16 === 0) {
       lastAiTickDayRef.current = gameDay;
       fetch('/api/generate-event', {
         method: 'POST',
@@ -158,14 +176,62 @@ export default function HyptrixMainPage() {
         })
         .catch(() => {});
     }
+
+    if (gameDay > lastAiNewsDayRef.current && gameDay % 11 === 0) {
+      lastAiNewsDayRef.current = gameDay;
+      fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'generate_ai_memory_news',
+          groqKeyOverride: groqApiKeyClient,
+          preferredModel: preferredGroqModel,
+          payload: {
+            gameDay,
+            currentYear,
+            studioName,
+            ceoName,
+            cash,
+            marketValue,
+            reputation,
+            aiMemoryLog: aiMemoryLog.slice(0, 12),
+          },
+        }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && typeof data.headline === 'string' && typeof data.detail === 'string') {
+            pushAiContextualNewsEvent({
+              headline: data.headline,
+              detail: data.detail,
+              badgeLabel: data.badgeLabel || 'عاجل · الصحافة الفنية',
+              category: data.category || 'ai_industry_report',
+              marketValueDelta: Number(data.marketValueDelta || 0),
+              cashDelta: Number(data.cashDelta || 0),
+              reputationDelta: Number(data.reputationDelta || 0),
+              hypeDelta: Number(data.hypeDelta || 0),
+              rivalStudioName: data.rivalStudioName,
+              rivalNetWorthDelta: Number(data.rivalNetWorthDelta || 0),
+            });
+          }
+        })
+        .catch(() => {});
+    }
   }, [
     mounted,
     studioCreated,
     gameDay,
     currentYear,
+    studioName,
+    ceoName,
+    cash,
+    marketValue,
+    reputation,
+    aiMemoryLog,
     groqApiKeyClient,
     preferredGroqModel,
     addAiDiscoveredActor,
+    pushAiContextualNewsEvent,
   ]);
 
   useEffect(() => {
@@ -205,163 +271,206 @@ export default function HyptrixMainPage() {
         <div className="absolute bottom-10 right-1/3 h-72 w-72 rounded-full bg-rose-300/20 blur-3xl" />
       </div>
 
-      {/* Top Executive Studio HUD Bar */}
-      <header className="sticky top-0 z-30 border-b-2 border-indigo-100/90 bg-white/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-xl items-center justify-between gap-2 px-3 py-2 sm:px-4">
-          {/* Studio Identity + Home Return */}
-          <div className="flex min-w-0 items-center gap-2">
-            {studioCreated && activeScreen !== 'STUDIO_HUB' && (
+      {/* Floating Animated Mobile Game Navbar — Always Pinned & Moves Smoothly With Scroll */}
+      <motion.header
+        initial={{ y: -20, opacity: 0 }}
+        animate={{
+          y: 0,
+          opacity: 1,
+        }}
+        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+        className="fixed top-0 right-0 left-0 z-40 px-2 pt-2 sm:px-4"
+      >
+        <motion.div
+          animate={{
+            scale: isScrolled ? 0.985 : 1,
+          }}
+          transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+          className={`mx-auto max-w-xl overflow-hidden rounded-3xl border-2 transition-all duration-300 ${
+            isScrolled
+              ? 'border-violet-200/95 bg-white/95 shadow-[0_14px_34px_-10px_rgba(99,102,241,0.28)] backdrop-blur-xl'
+              : 'border-indigo-100/95 bg-white/95 shadow-[0_10px_28px_-12px_rgba(99,102,241,0.18)] backdrop-blur-md'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-1.5 px-3 py-2 sm:px-3.5">
+            {/* Studio Identity + Home Return */}
+            <div className="flex min-w-0 items-center gap-1.5">
+              {studioCreated && activeScreen !== 'STUDIO_HUB' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen('STUDIO_HUB')}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-[#F5F7FF] text-violet-700 transition active:border-b-2 active:translate-y-0.5"
+                  title="العودة للمقر الرئيسي"
+                  aria-label="العودة للمقر الرئيسي"
+                >
+                  <Home className="h-4 w-4" />
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => setActiveScreen('STUDIO_HUB')}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-[#F5F7FF] text-violet-700 transition active:border-b-2 active:translate-y-0.5"
-                title="العودة للمقر الرئيسي"
-                aria-label="العودة للمقر الرئيسي"
+                onClick={() =>
+                  setActiveScreen(studioCreated ? 'STUDIO_HUB' : 'STUDIO_CREATION')
+                }
+                className="flex min-w-0 items-center gap-2 text-right"
               >
-                <Home className="h-4 w-4" />
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() =>
-                setActiveScreen(studioCreated ? 'STUDIO_HUB' : 'STUDIO_CREATION')
-              }
-              className="flex min-w-0 items-center gap-2 text-right"
-            >
-              <div className="rounded-2xl border-2 border-indigo-100 bg-white p-1 shadow-xs">
-                <StudioLogoSvg config={logo} size={32} className="shrink-0" />
-              </div>
-              <div className="min-w-0 truncate">
-                <div className="font-display text-sm font-black tracking-tight text-violet-700">
-                  HYPTRIX
+                <div className="rounded-2xl border-2 border-indigo-100 bg-white p-1 shadow-2xs">
+                  <StudioLogoSvg config={logo} size={30} className="shrink-0" />
                 </div>
-                <div className="truncate text-[11px] font-black text-slate-700">
-                  {studioCreated ? studioName : 'تأسيس الاستوديو'}
-                </div>
-              </div>
-            </button>
-          </div>
-
-          {/* Studio Financial, Settings & VIP Controls */}
-          <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
-            {studioCreated && (
-              <>
-                <div
-                  data-testid="hud-cash-pill"
-                  className="flex items-center gap-1 rounded-2xl border-2 border-emerald-100 bg-emerald-50/90 px-2.5 py-1 text-[11px] font-black text-emerald-700"
-                >
-                  <Wallet className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>{formatMoney(cash)}</span>
-                </div>
-
-                <div className="hidden xs:flex items-center gap-1 rounded-2xl border-2 border-violet-100 bg-violet-50 px-2 py-1 text-[11px] font-black text-violet-700">
-                  <Gem className="h-3.5 w-3.5 text-violet-600" />
-                  <span>{vipCoins}</span>
-                </div>
-              </>
-            )}
-
-            <PWAInstallButton />
-
-            {/* Dedicated Settings Button (JSON Import & Full Reset) */}
-            <button
-              type="button"
-              data-testid="open-settings-button"
-              onClick={() => setSettingsModalOpen(true)}
-              className="flex min-h-[38px] items-center gap-1 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-[#F5F7FF] px-2.5 py-1.5 text-xs font-black text-slate-700 transition hover:border-violet-300 hover:text-violet-700 active:border-b-2 active:translate-y-0.5"
-              title="الإعدادات وملف البيانات وإعادة الضبط"
-              aria-label="الإعدادات"
-            >
-              <Settings className="h-4 w-4 text-violet-600" />
-              <span className="hidden sm:inline">الإعدادات</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setVipModalOpen(true)}
-              className={`flex min-h-[38px] items-center gap-1 rounded-2xl border-b-4 px-3 py-1.5 text-xs font-black text-white shadow-xs transition active:border-b-0 active:translate-y-1 whitespace-nowrap shrink-0 ${
-                isVipActive
-                  ? 'border-emerald-800/40 bg-emerald-500'
-                  : 'border-indigo-950/30 bg-gradient-to-r from-violet-600 to-fuchsia-600'
-              }`}
-            >
-              <Crown className="h-3.5 w-3.5 shrink-0" />
-              <span>VIP</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Active-Session Calendar & Time Bar (Automatic Only — No Manual Day Skip Button!) */}
-        {studioCreated && (
-          <div
-            data-testid="always-visible-time-bar"
-            className="border-t border-indigo-100/80 bg-gradient-to-r from-indigo-50/95 via-violet-50/90 to-cyan-50/90 px-3 py-1.5"
-          >
-            <div className="mx-auto flex max-w-xl items-center justify-between gap-2 text-[11px] tabular-nums">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="flex items-center gap-1 font-display font-black text-indigo-950">
-                  <Calendar className="h-3.5 w-3.5 text-violet-600 shrink-0" />
-                  <span>{formatGameDate(gameDay, currentYear)}</span>
-                </span>
-                <span className="text-[10px] font-bold text-slate-500">
-                  · اليوم #{gameDay}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                {isPageActive ? (
-                  <span className="inline-flex items-center gap-1 rounded-xl bg-white/90 px-2.5 py-0.5 text-[10px] font-bold text-slate-700 border border-indigo-100">
-                    <Clock className="h-3 w-3 text-violet-600 animate-spin" />
-                    <span>
-                      يمر تلقائياً ({Math.max(1, SECONDS_PER_GAME_DAY - secondsIntoDay)}ث لليوم الجديد)
-                    </span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-xl bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
-                    <PauseCircle className="h-3 w-3 text-amber-600" />
-                    <span>متوقف مؤقتاً</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Production Stage Stepper */}
-        {isInProductionQuest && (
-          <div className="border-t border-indigo-100 bg-[#F7F9FF] px-3 py-2">
-            <div className="mx-auto grid max-w-xl grid-cols-5 gap-1.5">
-              {QUEST_ORDER.map((q, idx) => {
-                const isDone = idx < currentQuestIndex;
-                const isCurrent = idx === currentQuestIndex;
-                const isLocked = idx > currentQuestIndex;
-
-                return (
-                  <div
-                    key={q.id}
-                    className={`flex items-center justify-center gap-1 rounded-xl border py-1.5 px-1 text-[10px] font-black transition-all ${
-                      isCurrent
-                        ? 'border-violet-600 bg-violet-600 text-white shadow-xs'
-                        : isDone
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-slate-200/70 bg-slate-100/80 text-slate-400'
-                    }`}
-                  >
-                    {isDone && <Check className="h-3 w-3 shrink-0 stroke-[3]" />}
-                    {isLocked && <Lock className="h-2.5 w-2.5 shrink-0" />}
-                    {isCurrent && <span className="tabular-nums">{idx + 1}.</span>}
-                    <span className="truncate">{q.label}</span>
+                <div className="min-w-0 truncate">
+                  <div className="font-display text-xs font-black tracking-tight text-violet-700">
+                    HYPTRIX
                   </div>
-                );
-              })}
+                  <div className="truncate text-[11px] font-black text-slate-800">
+                    {studioCreated ? studioName : 'تأسيس الاستوديو'}
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Dual Financial Pills (Treasury Cash vs Market Valuation) + Settings & VIP */}
+            <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
+              {studioCreated && (
+                <>
+                  {/* Liquid Treasury Cash */}
+                  <div
+                    data-testid="hud-cash-pill"
+                    title="خزينة السيولة النقدية المتاحة للإنتاج والأجور"
+                    className="flex items-center gap-1 rounded-2xl border-2 border-emerald-100 bg-emerald-50/95 px-2 py-1 text-[10px] font-black text-emerald-700 sm:px-2.5 sm:text-[11px]"
+                  >
+                    <Wallet className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    <div className="leading-tight">
+                      <span className="hidden sm:inline text-[9px] font-bold text-emerald-600/80 ml-1">
+                        الخزينة:
+                      </span>
+                      <span>{formatMoney(cash)}</span>
+                    </div>
+                  </div>
+
+                  {/* Studio Market Valuation */}
+                  <div
+                    data-testid="hud-market-value-pill"
+                    title="القيمة السوقية الإجمالية للشركة (تحدد مركزك في الترتيب)"
+                    className="flex items-center gap-1 rounded-2xl border-2 border-violet-200 bg-violet-50/95 px-2 py-1 text-[10px] font-black text-violet-800 sm:px-2.5 sm:text-[11px]"
+                  >
+                    <TrendingUp className="h-3.5 w-3.5 shrink-0 text-violet-600" />
+                    <div className="leading-tight">
+                      <span className="hidden sm:inline text-[9px] font-bold text-violet-600/80 ml-1">
+                        السوقية:
+                      </span>
+                      <span>{formatMoney(marketValue)}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <PWAInstallButton />
+
+              <button
+                type="button"
+                data-testid="open-settings-button"
+                onClick={() => setSettingsModalOpen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-[#F5F7FF] text-slate-700 transition hover:border-violet-300 hover:text-violet-700 active:border-b-2 active:translate-y-0.5"
+                title="الإعدادات وملف البيانات وإعادة الضبط"
+                aria-label="الإعدادات"
+              >
+                <Settings className="h-4 w-4 text-violet-600" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVipModalOpen(true)}
+                className={`flex h-9 items-center gap-1 rounded-2xl border-b-4 px-2.5 text-[11px] font-black text-white shadow-2xs transition active:border-b-0 active:translate-y-0.5 whitespace-nowrap shrink-0 ${
+                  isVipActive
+                    ? 'border-emerald-800/40 bg-emerald-500'
+                    : 'border-indigo-950/30 bg-gradient-to-r from-violet-600 to-fuchsia-600'
+                }`}
+              >
+                <Crown className="h-3.5 w-3.5 shrink-0" />
+                <span>VIP</span>
+              </button>
             </div>
           </div>
-        )}
-      </header>
 
-      {/* Main Mobile Game Viewport */}
-      <main className="mx-auto max-w-xl px-3 pt-3 pb-12 sm:px-4">
+          {/* Live Time & Date Ribbon Inside Floating Navbar */}
+          {studioCreated && (
+            <div
+              data-testid="always-visible-time-bar"
+              className="border-t border-indigo-100/80 bg-gradient-to-r from-indigo-50/90 via-violet-50/85 to-cyan-50/90 px-3 py-1"
+            >
+              <div className="flex items-center justify-between gap-2 text-[10px] tabular-nums sm:text-[11px]">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Calendar className="h-3.5 w-3.5 text-violet-600 shrink-0" />
+                  <span className="font-display font-black text-indigo-950 truncate">
+                    {formatGameDate(gameDay, currentYear)}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 shrink-0">
+                    · يوم #{gameDay}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isPageActive ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[9px] font-bold text-slate-700 border border-indigo-100 sm:text-[10px]">
+                      <Clock className="h-2.5 w-2.5 text-violet-600 animate-spin" />
+                      <span>
+                        اليوم القادم خلال {Math.max(1, SECONDS_PER_GAME_DAY - secondsIntoDay)}ث
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-800 border border-amber-200 sm:text-[10px]">
+                      <PauseCircle className="h-2.5 w-2.5 text-amber-600" />
+                      <span>متوقف مؤقتاً</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Compact Production Stage Stepper Inside Floating Bar */}
+          {isInProductionQuest && (
+            <div className="border-t border-indigo-100 bg-[#F7F9FF] px-2.5 py-1.5">
+              <div className="grid grid-cols-5 gap-1">
+                {QUEST_ORDER.map((q, idx) => {
+                  const isDone = idx < currentQuestIndex;
+                  const isCurrent = idx === currentQuestIndex;
+                  const isLocked = idx > currentQuestIndex;
+
+                  return (
+                    <div
+                      key={q.id}
+                      className={`flex items-center justify-center gap-1 rounded-xl border py-1 px-1 text-[10px] font-black transition-all ${
+                        isCurrent
+                          ? 'border-violet-600 bg-violet-600 text-white shadow-2xs'
+                          : isDone
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200/70 bg-slate-100/80 text-slate-400'
+                      }`}
+                    >
+                      {isDone && <Check className="h-2.5 w-2.5 shrink-0 stroke-[3]" />}
+                      {isLocked && <Lock className="h-2.5 w-2.5 shrink-0" />}
+                      {isCurrent && <span className="tabular-nums">{idx + 1}.</span>}
+                      <span className="truncate">{q.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </motion.header>
+
+      {/* Main Mobile Game Viewport with top spacing for the floating navbar */}
+      <main
+        className={`mx-auto max-w-xl px-3 pb-14 sm:px-4 ${
+          !studioCreated
+            ? 'pt-20'
+            : isInProductionQuest
+            ? 'pt-36'
+            : 'pt-28'
+        }`}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={!studioCreated ? 'CREATION' : activeScreen}

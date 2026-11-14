@@ -23,7 +23,6 @@ import {
   Play,
   Flame,
   Crown,
-  ArrowLeft,
   Settings,
 } from 'lucide-react';
 
@@ -40,6 +39,7 @@ export function StudioHubView({
     currentRegion,
     unlockedRegions,
     cash,
+    marketValue,
     reputation,
     currentYear,
     gameDay,
@@ -63,11 +63,11 @@ export function StudioHubView({
   );
 
   const studioRankTitle =
-    cash >= 1_000_000_000
+    marketValue >= 1_000_000_000
       ? 'إمبراطور السينما الملياردير'
-      : cash >= 450_000_000
+      : marketValue >= 550_000_000
       ? 'عملاق الإنتاج الدولي'
-      : cash >= 220_000_000
+      : marketValue >= 260_000_000
       ? 'قطب الإنتاج الإقليمي'
       : 'منتج سينمائي صاعد';
 
@@ -96,19 +96,19 @@ export function StudioHubView({
       id: 'gulf',
       name: 'السوق الخليجي',
       multiplier: 'عائد 1.75x',
-      reqLabel: 'يتطلب 220M ج.م',
+      reqLabel: 'يتطلب قيمة سوقية 250M ج.م',
     },
     {
       id: 'europe',
       name: 'السوق الأوروبي',
       multiplier: 'عائد 2.4x',
-      reqLabel: 'يتطلب 450M ج.م',
+      reqLabel: 'يتطلب قيمة سوقية 520M ج.م',
     },
     {
       id: 'hollywood',
       name: 'هوليوود العالمية',
       multiplier: 'عائد 4.0x',
-      reqLabel: 'يتطلب 900M ج.م',
+      reqLabel: 'يتطلب قيمة سوقية 950M ج.م',
     },
   ];
 
@@ -220,10 +220,9 @@ export function StudioHubView({
               <button
                 type="button"
                 onClick={handleResumeActiveProject}
-                className="flex shrink-0 items-center gap-1 rounded-xl border-b-4 border-amber-800/30 bg-amber-500 px-3.5 py-2 text-xs font-black text-white shadow-xs transition hover:bg-amber-600 active:border-b-0 active:translate-y-0.5"
+                className="flex shrink-0 items-center justify-center rounded-xl border-b-4 border-amber-800/30 bg-amber-500 px-4 py-2 text-xs font-black text-white shadow-xs transition hover:bg-amber-600 active:border-b-0 active:translate-y-0.5"
               >
-                <span>متابعة</span>
-                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>متابعة العمل</span>
               </button>
             </div>
           </div>
@@ -244,35 +243,69 @@ export function StudioHubView({
         </button>
       </motion.div>
 
-      {/* Compact 3-Pill Game Stats Row (Supports 1B / 1.25B formatting) */}
-      <div className="grid grid-cols-3 gap-3 tabular-nums">
-        <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-4 text-center shadow-xs">
-          <Wallet className="mx-auto h-5 w-5 text-emerald-600" />
+      {/* Dual Financial Separation Row: Liquid Treasury Cash vs Studio Market Valuation */}
+      <div className="grid grid-cols-2 gap-3 tabular-nums">
+        <div className="rounded-3xl border-2 border-emerald-200 border-b-4 border-b-emerald-300 bg-gradient-to-br from-emerald-50/70 via-white to-white p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-emerald-800">
+              خزينة السيولة النقدية
+            </span>
+            <Wallet className="h-4 w-4 text-emerald-600" />
+          </div>
           <div
             data-testid="hub-cash-value"
-            className="font-display mt-1.5 text-lg font-black text-emerald-700 whitespace-nowrap"
+            className="font-display mt-1.5 text-xl font-black text-emerald-700 whitespace-nowrap"
           >
-            {formatMoney(cash)}
+            {formatMoney(cash)} <span className="text-xs font-bold">ج.م</span>
           </div>
-          <div className="text-[10px] font-bold text-slate-500">رصيد الخزينة (ج.م)</div>
-        </div>
-
-        <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-4 text-center shadow-xs">
-          <Clapperboard className="mx-auto h-5 w-5 text-violet-600" />
-          <div className="font-display mt-1.5 text-lg font-black text-slate-900">
-            {releasedProjects.length}
-          </div>
-          <div className="text-[10px] font-bold text-slate-500">
-            إيرادات: {formatMoney(lifetimeBoxOffice)}
+          <div className="mt-0.5 text-[10px] font-bold text-slate-500">
+            متاحة لتمويل الأفلام وأجور النجوم
           </div>
         </div>
 
-        <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-4 text-center shadow-xs">
-          <Award className="mx-auto h-5 w-5 text-amber-500" />
-          <div className="font-display mt-1.5 text-lg font-black text-amber-600">
-            {totalAwards}
+        <div className="rounded-3xl border-2 border-violet-200 border-b-4 border-b-violet-300 bg-gradient-to-br from-violet-50/70 via-white to-white p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-violet-800">
+              القيمة السوقية للشركة
+            </span>
+            <TrendingUp className="h-4 w-4 text-violet-600" />
           </div>
-          <div className="text-[10px] font-bold text-slate-500">جوائز المهرجانات</div>
+          <div
+            data-testid="hub-market-value"
+            className="font-display mt-1.5 text-xl font-black text-violet-700 whitespace-nowrap"
+          >
+            {formatMoney(marketValue)} <span className="text-xs font-bold">ج.م</span>
+          </div>
+          <div className="mt-0.5 text-[10px] font-bold text-slate-500">
+            الأصول الفنية + السمعة + الجوائز
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary Studio Achievements Row */}
+      <div className="grid grid-cols-2 gap-3 tabular-nums">
+        <div className="flex items-center justify-between rounded-2xl border-2 border-indigo-100 bg-white px-4 py-3 shadow-2xs">
+          <div>
+            <div className="text-[10px] font-bold text-slate-500">
+              إجمالي أعمال الاستوديو
+            </div>
+            <div className="font-display text-sm font-black text-slate-900">
+              {releasedProjects.length} أعمال ({formatMoney(lifetimeBoxOffice)} ج.م)
+            </div>
+          </div>
+          <Clapperboard className="h-5 w-5 text-violet-600 shrink-0" />
+        </div>
+
+        <div className="flex items-center justify-between rounded-2xl border-2 border-indigo-100 bg-white px-4 py-3 shadow-2xs">
+          <div>
+            <div className="text-[10px] font-bold text-slate-500">
+              جوائز المهرجانات الكبرى
+            </div>
+            <div className="font-display text-sm font-black text-amber-600">
+              {totalAwards} جائزة رسمية
+            </div>
+          </div>
+          <Award className="h-5 w-5 text-amber-500 shrink-0" />
         </div>
       </div>
 
@@ -327,7 +360,7 @@ export function StudioHubView({
               ترتيب شركات الإنتاج
             </div>
             <div className="mt-0.5 text-[11px] font-bold text-amber-700">
-              المنافسة المحلية وحساب الاستوديو
+              المنافسة حسب القيمة السوقية
             </div>
           </div>
         </button>
@@ -351,7 +384,7 @@ export function StudioHubView({
         </button>
       </div>
 
-      {/* Quick Settings, JSON Import & Reset Bar */}
+      {/* Quick Settings, JSON Import & Reset Bar (No website arrows) */}
       {onOpenSettings && (
         <button
           type="button"
@@ -359,7 +392,7 @@ export function StudioHubView({
           className="flex w-full items-center justify-between rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-5 py-3.5 text-right shadow-xs transition hover:border-violet-400 active:border-b-2 active:translate-y-0.5"
         >
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
               <Settings className="h-5 w-5" />
             </div>
             <div>
@@ -367,11 +400,13 @@ export function StudioHubView({
                 الإعدادات · استيراد ملف JSON · مسح البيانات والبدء من جديد
               </div>
               <div className="text-[11px] font-bold text-slate-500">
-                إدارة ملفات البيانات المخصصة أو إعادة ضبط اللعبة بالكامل
+                إضافة ممثلين وشركات حقيقية بالصور أو إعادة ضبط اللعبة بالكامل
               </div>
             </div>
           </div>
-          <ArrowLeft className="h-4 w-4 text-violet-600" />
+          <span className="rounded-xl bg-violet-50 px-3 py-1 text-[11px] font-black text-violet-700">
+            فتح
+          </span>
         </button>
       )}
 
@@ -396,7 +431,7 @@ export function StudioHubView({
                   {activeSheet === 'markets' && 'خريطة التوزيع الإقليمية والعالمية'}
                   {activeSheet === 'archive' && 'أرشيف الأفلام والمسلسلات المنتجة'}
                   {activeSheet === 'history' && 'السجل التاريخي للاستوديو'}
-                  {activeSheet === 'leaderboard' && 'الترتيب المحلي لشركات الإنتاج'}
+                  {activeSheet === 'leaderboard' && 'الترتيب الرسمي لشركات الإنتاج'}
                 </h2>
                 <button
                   type="button"

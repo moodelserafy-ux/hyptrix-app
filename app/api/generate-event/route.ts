@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
       return await handleDiscoverAiRisingStar(p, groqKeyOverride, preferredModel);
     }
 
+    if (mode === 'generate_ai_memory_news') {
+      return await handleGenerateAiMemoryNews(p, groqKeyOverride, preferredModel);
+    }
+
     return await handleEvaluateRelease(p, groqKeyOverride, preferredModel);
   } catch (err) {
     console.error('Narrative Engine Error:', err);
@@ -917,6 +921,146 @@ async function handleDiscoverAiRisingStar(
   }
 
   return NextResponse.json({ actor: null });
+}
+
+/**
+ * World Simulation Mode: Generate Contextual Journalistic Breaking News from Background AI Memory Log
+ */
+async function handleGenerateAiMemoryNews(
+  payload: Record<string, unknown>,
+  groqKeyOverride?: string,
+  preferredModel?: string
+) {
+  const studioName = String(payload?.studioName || 'استوديو اللاعب');
+  const ceoName = String(payload?.ceoName || 'المنتج التنفيذي');
+  const gameDay = Number(payload?.gameDay || 10);
+  const currentYear = Number(payload?.currentYear || 2026);
+  const marketValue = Number(payload?.marketValue || 110_000_000);
+  const cash = Number(payload?.cash || 75_000_000);
+  const memoryArr = Array.isArray(payload?.aiMemoryLog)
+    ? (payload.aiMemoryLog as string[])
+    : [];
+
+  const memoryContext =
+    memoryArr.length > 0
+      ? memoryArr.slice(0, 10).join('\n- ')
+      : `تأسيس شركة «${studioName}» بقيادة «${ceoName}» بقيمة سوقية ${(marketValue / 1_000_000).toFixed(0)}M ج.م`;
+
+  const rivalPool = [
+    'المتحدة للإنتاج السينمائي',
+    'سينرجي تامر مرسي',
+    'العدل جروب',
+    'نيو سينشري للإنتاج',
+    'السبكي للإنتاج السينمائي',
+    'أفلام مصر العالمية',
+  ];
+  const chosenRival = rivalPool[(gameDay + currentYear) % rivalPool.length];
+
+  const systemPrompt = `أنت رئيس تحرير جريدة وبوابة أخبار فنية واقتصادية متخصصة في صناعة السينما والدراما في مصر والشرق الأوسط.
+لديك ذاكرة كاملة بكل ما حدث في عالم اللعبة حتى اليوم #${gameDay} من عام ${currentYear}:
+- اسم شركة اللاعب: "${studioName}"، المؤسس والمدير التنفيذي: "${ceoName}"
+- القيمة السوقية الحالية لشركة اللاعب: ${(marketValue / 1_000_000).toFixed(1)}M ج.م، والسيولة بالخزينة: ${(cash / 1_000_000).toFixed(1)}M ج.م
+- سجل ذاكرة الأحداث الأخيرة في عالم اللعبة:
+- ${memoryContext}
+
+المطلوب منك:
+كتابة خبر صحفي عاجل وحقيقي الصياغة (بأسلوب صحفي فني واقتصادي رصين ومشوق مثل عناوين الصحف الفنية الكبرى) يربط بين أحداث الذاكرة السابقة، ويكون له تأثير فعلي ومباشر على عالم اللعبة (إما رفع/خفض القيمة السوقية لشركة "${studioName}"، أو صفقة رعاية تضخ سيولة، أو هزة/قفزة كبيرة في القيمة السوقية لشركة منافسة مثل "${chosenRival}" تغير ترتيب الشركات).
+
+أرجع كائن JSON فقط يحتوي على:
+- headline: عنوان صحفي عاجل وقوي
+- detail: تفاصيل التقرير الصحفي في جملتين تذكران اسم "${studioName}" أو "${ceoName}" أو "${chosenRival}" وما حدث في الذاكرة
+- badgeLabel: تصنيف الخبر (مثل "عاجل · بورصة الإنتاج" أو "تقرير صحفي خاص" أو "كواليس الصناعة")
+- category: "ai_industry_report" أو "rival_project"
+- marketValueDelta: رقم التأثير على القيمة السوقية لشركة اللاعب بالجنيه (بين -18000000 و +26000000، أو 0 لو الخبر عن شركة منافسة فقط)
+- cashDelta: رقم التأثير على خزينة السيولة لشركة اللاعب (بين -5000000 و +12000000، أو 0)
+- reputationDelta: رقم بين -3 و +5
+- hypeDelta: رقم بين -4 و +8
+- rivalStudioName: اسم الشركة المنافسة المتأثرة (مثلاً "${chosenRival}")
+- rivalNetWorthDelta: رقم التأثير على القيمة السوقية للشركة المنافسة (بين -85000000 و +95000000)`;
+
+  const userPrompt = `اكتب خبراً صحفياً عاجلاً مبنياً على ذاكرة اللعبة الآن بصيغة JSON.`;
+
+  const groqRes = await callGroqJson(
+    systemPrompt,
+    userPrompt,
+    groqKeyOverride,
+    preferredModel
+  );
+
+  if (
+    groqRes &&
+    typeof groqRes.data.headline === 'string' &&
+    typeof groqRes.data.detail === 'string'
+  ) {
+    return NextResponse.json({
+      headline: groqRes.data.headline,
+      detail: groqRes.data.detail,
+      badgeLabel:
+        typeof groqRes.data.badgeLabel === 'string'
+          ? groqRes.data.badgeLabel
+          : 'عاجل · بورصة الإنتاج السينمائي',
+      category:
+        groqRes.data.category === 'rival_project'
+          ? 'rival_project'
+          : 'ai_industry_report',
+      marketValueDelta: Math.min(
+        35_000_000,
+        Math.max(-22_000_000, Number(groqRes.data.marketValueDelta || 0))
+      ),
+      cashDelta: Math.min(
+        15_000_000,
+        Math.max(-6_000_000, Number(groqRes.data.cashDelta || 0))
+      ),
+      reputationDelta: Math.min(
+        6,
+        Math.max(-4, Number(groqRes.data.reputationDelta || 2))
+      ),
+      hypeDelta: Math.min(
+        10,
+        Math.max(-5, Number(groqRes.data.hypeDelta || 4))
+      ),
+      rivalStudioName:
+        typeof groqRes.data.rivalStudioName === 'string'
+          ? groqRes.data.rivalStudioName
+          : chosenRival,
+      rivalNetWorthDelta: Math.min(
+        110_000_000,
+        Math.max(-90_000_000, Number(groqRes.data.rivalNetWorthDelta || 0))
+      ),
+    });
+  }
+
+  // Grounded contextual fallback using the player's actual memory log
+  const latestMemory = memoryArr[0] || `تحركات إنتاجية جديدة داخل «${studioName}» بقيادة ${ceoName}`;
+  const isRivalDrop = gameDay % 2 === 0;
+
+  if (isRivalDrop) {
+    return NextResponse.json({
+      headline: `تقرير اقتصادي: صعود أسهم «${studioName}» بقيادة ${ceoName} مقابل تعثر مشروع ضخم لـ «${chosenRival}»!`,
+      detail: `أشارت تقارير سوق الإنتاج بعد (${latestMemory}) إلى ارتفاع ثقة المستثمرين والمنصات في خطة «${studioName}»، بالتزامن مع خسائر إنتاجية مفاجئة تعرضت لها «${chosenRival}» هذا الشهر.`,
+      badgeLabel: 'عاجل · بورصة الإنتاج',
+      category: 'ai_industry_report',
+      marketValueDelta: 18_000_000,
+      cashDelta: 4_500_000,
+      reputationDelta: 2,
+      hypeDelta: 5,
+      rivalStudioName: chosenRival,
+      rivalNetWorthDelta: -68_000_000,
+    });
+  }
+
+  return NextResponse.json({
+    headline: `صفقة بث إقليمية تعزز القيمة السوقية لـ «${studioName}» ومنافسة محتدمة مع «${chosenRival}»`,
+    detail: `في أعقاب (${latestMemory})، نجح المنتج التنفيذي ${ceoName} في جذب اهتمام شبكات التوزيع العربية لترتفع القيمة السوقية للاستوديو وسط سباق محتدم على قمة الترتيب.`,
+    badgeLabel: 'تقرير صحفي خاص',
+    category: 'ai_industry_report',
+    marketValueDelta: 15_000_000,
+    cashDelta: 3_500_000,
+    reputationDelta: 2,
+    hypeDelta: 4,
+    rivalStudioName: chosenRival,
+    rivalNetWorthDelta: 52_000_000,
+  });
 }
 
 function buildGroundedRivalReleases(payload: Record<string, unknown>) {

@@ -298,6 +298,10 @@ export function Stage5ReleaseSimulation() {
 
     const totalBudget = talentPayroll + prodSpend + draft.marketingBudget;
 
+    const scriptWordCount = draft.scriptSynopsis.trim()
+      ? draft.scriptSynopsis.trim().split(/\s+/).length
+      : 0;
+
     const prelim = calculateFinancialsAndQuality({
       format: draft.format,
       episodes: draft.episodes,
@@ -323,6 +327,7 @@ export function Stage5ReleaseSimulation() {
       hypeScore: draft.hypeScore,
       aiBoxOfficeMultiplier: 1.0,
       marketRegion: currentRegion,
+      scriptWordCount,
     });
 
     const isSeries = draft.format === 'series';
@@ -410,6 +415,7 @@ export function Stage5ReleaseSimulation() {
         hypeScore: draft.hypeScore,
         aiBoxOfficeMultiplier: multiplier,
         marketRegion: currentRegion,
+        scriptWordCount,
       });
 
       const rivals: RivalRelease[] =

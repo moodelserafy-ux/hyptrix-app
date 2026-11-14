@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Medal,
   Sparkles,
+  Wallet,
 } from 'lucide-react';
 
 export function LeaderboardAndSettingsView() {
@@ -27,6 +28,7 @@ export function LeaderboardAndSettingsView() {
     ceoName,
     currentRegion,
     cash,
+    marketValue,
     releasedProjects,
     emergingCompetitors,
     competitorNetWorthDelta,
@@ -48,17 +50,20 @@ export function LeaderboardAndSettingsView() {
       studioName,
       ceoName,
       region: currentRegion,
-      netWorth: cash,
+      netWorth: marketValue,
       releasesCount: releasedProjects.length,
       awardsCount: totalAwards,
     }).then((baseEntries) => {
-      // Merge competitor netWorth deltas + any emerging fictional studios
+      // Merge competitor valuation deltas (hits, flops, awards) + any emerging studios
       const updated = baseEntries.map((row) => {
         if (row.isPlayer) return row;
         const delta = competitorNetWorthDelta[row.studioName];
         return {
           ...row,
-          netWorth: row.netWorth + (delta?.netWorthDelta || 0),
+          netWorth: Math.max(
+            45_000_000,
+            row.netWorth + (delta?.netWorthDelta || 0)
+          ),
           releasesCount: row.releasesCount + (delta?.releasesDelta || 0),
           awardsCount: row.awardsCount + (delta?.awardsDelta || 0),
         };
@@ -72,7 +77,10 @@ export function LeaderboardAndSettingsView() {
             studioName: em.name,
             ceoName: em.ceoName || 'رئيس مجلس الإدارة',
             region: 'egypt',
-            netWorth: em.market_power * 2_800_000 + (delta?.netWorthDelta || 0),
+            netWorth: Math.max(
+              45_000_000,
+              em.market_power * 2_800_000 + (delta?.netWorthDelta || 0)
+            ),
             releasesCount: 2 + (delta?.releasesDelta || 0),
             awardsCount: 1 + (delta?.awardsDelta || 0),
             specialtyLabel: `شركة إنتاج صاعدة (${em.preferred_genres.join(' / ')})`,
@@ -97,7 +105,7 @@ export function LeaderboardAndSettingsView() {
     studioName,
     ceoName,
     currentRegion,
-    cash,
+    marketValue,
     releasedProjects.length,
     totalAwards,
     emergingCompetitors,
@@ -120,38 +128,44 @@ export function LeaderboardAndSettingsView() {
       studioName,
       ceoName,
       region: currentRegion,
-      netWorth: cash,
+      netWorth: marketValue,
       releasesCount: releasedProjects.length,
       awardsCount: totalAwards,
       email: emailInput.trim(),
     });
-    setAuthStatus('تم ربط حساب الاستوديو وحفظ ترتيبك وثروتك بنجاح.');
+    setAuthStatus('تم ربط حساب الاستوديو وحفظ قيمتك السوقية وترتيبك السحابي بنجاح.');
   };
 
   return (
     <div className="mx-auto max-w-xl space-y-4">
-      {/* Player Current Local Rank Banner */}
+      {/* Player Current Official Valuation & Rank Banner */}
       {playerEntry && (
         <div className="rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-violet-600 via-indigo-600 to-cyan-600 p-5 text-white shadow-lg">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[11px] font-bold text-violet-100">
-                الترتيب المحلي الرسمي لشركات الإنتاج
+                البورصة الرسمية للقيمة السوقية لشركات الإنتاج
               </div>
               <div className="font-display mt-0.5 text-xl font-black">
                 {playerEntry.studioName}
               </div>
-              <div className="mt-1 text-xs font-medium text-indigo-100">
-                المدير التنفيذي: {playerEntry.ceoName} · صافي الثروة:{' '}
-                <strong className="font-black text-emerald-300">
-                  {formatMoney(playerEntry.netWorth)} ج.م
-                </strong>
+              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs font-medium text-indigo-100">
+                <span>
+                  القيمة السوقية:{' '}
+                  <strong className="font-black text-amber-300">
+                    {formatMoney(marketValue)} ج.م
+                  </strong>
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-2 py-0.5 text-[11px] font-bold text-emerald-200">
+                  <Wallet className="h-3 w-3" />
+                  <span>خزينة السيولة: {formatMoney(cash)} ج.م</span>
+                </span>
               </div>
             </div>
 
             <div className="flex flex-col items-center justify-center rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur-xs tabular-nums">
               <span className="text-[10px] font-bold text-violet-100">
-                المركز المحلي
+                المركز الحالي
               </span>
               <span className="font-display text-2xl font-black text-amber-300">
                 #{playerEntry.rank}
@@ -169,7 +183,7 @@ export function LeaderboardAndSettingsView() {
                 </span>
               </span>
               <span className="text-amber-200 tabular-nums">
-                فارق{' '}
+                فارق القيمة السوقية{' '}
                 {formatMoney(
                   Math.max(0, nextRivalAbove.netWorth - playerEntry.netWorth)
                 )}{' '}
@@ -228,7 +242,7 @@ export function LeaderboardAndSettingsView() {
                   </div>
                 </div>
 
-                <div className="mt-2 rounded-xl bg-emerald-50 px-2 py-1 font-display text-xs font-black text-emerald-700">
+                <div className="mt-2 rounded-xl bg-violet-50 px-2 py-1 font-display text-xs font-black text-violet-700">
                   {formatMoney(studio.netWorth)} ج.م
                 </div>
               </div>
@@ -237,7 +251,7 @@ export function LeaderboardAndSettingsView() {
         </div>
       )}
 
-      {/* Full Strictly-Sorted Local Studio League Table */}
+      {/* Full Strictly-Sorted Studio League Table (Ranked by Market Valuation) */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -247,11 +261,11 @@ export function LeaderboardAndSettingsView() {
           <div className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-amber-500" />
             <h3 className="font-display text-sm font-black text-slate-900">
-              جدول الترتيب المحلي لشركات الإنتاج
+              جدول الترتيب الرسمي لشركات الإنتاج
             </h3>
           </div>
           <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[10px] font-black text-violet-700">
-            مرتب حسب صافي الثروة
+            مرتب حسب القيمة السوقية
           </span>
         </div>
 
@@ -260,6 +274,9 @@ export function LeaderboardAndSettingsView() {
             const isEmerging = emergingCompetitors.some(
               (em) => em.name === row.studioName
             );
+            const deltaObj = competitorNetWorthDelta[row.studioName];
+            const netDelta = deltaObj?.netWorthDelta || 0;
+
             return (
               <div
                 key={row.studioName}
@@ -291,12 +308,23 @@ export function LeaderboardAndSettingsView() {
                       <span className="truncate">{row.studioName}</span>
                       {row.isPlayer && (
                         <span className="rounded-md bg-violet-600 px-1.5 py-0.5 text-[9px] text-white">
-                          أنت
+                          شركتك
                         </span>
                       )}
                       {isEmerging && (
                         <span className="inline-flex items-center gap-0.5 rounded-md bg-cyan-600 px-1.5 py-0.5 text-[9px] text-white">
                           <Sparkles className="h-2.5 w-2.5" /> صاعدة
+                        </span>
+                      )}
+                      {!row.isPlayer && netDelta !== 0 && (
+                        <span
+                          className={`rounded-md px-1.5 py-0.5 text-[9px] font-black ${
+                            netDelta > 0
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-rose-100 text-rose-700'
+                          }`}
+                        >
+                          {netDelta > 0 ? '▲ صعود' : '▼ تراجع'}
                         </span>
                       )}
                     </div>
@@ -313,11 +341,11 @@ export function LeaderboardAndSettingsView() {
                 </div>
 
                 <div className="shrink-0 text-left">
-                  <div className="font-display text-sm font-black text-emerald-700">
+                  <div className="font-display text-sm font-black text-violet-700">
                     {formatMoney(row.netWorth)} ج.م
                   </div>
                   <div className="text-[9px] font-bold text-slate-400">
-                    صافي القيمة
+                    القيمة السوقية
                   </div>
                 </div>
               </div>
@@ -331,7 +359,7 @@ export function LeaderboardAndSettingsView() {
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-violet-600" />
           <h3 className="text-sm font-black text-slate-900">
-            ربط حساب الاستوديو وحفظ الترتيب السحابي
+            ربط حساب الاستوديو وحفظ الترتيب السحابي (Supabase)
           </h3>
         </div>
 
