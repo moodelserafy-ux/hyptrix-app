@@ -13,11 +13,11 @@ export const FRAMES = [
   { id: "none", label: "بدون إطار" },
 ];
 export const PALETTES = [
-  { id: "gold", label: "ذهبي × أسود", main: "#D4AF37", secondary: "#F8E7A1", accent: "#5D4510" },
-  { id: "crimson", label: "قرمزي × فضي", main: "#E50914", secondary: "#E8E8E8", accent: "#71111A" },
-  { id: "cyber", label: "سايبربانك", main: "#36DDF5", secondary: "#C06BFF", accent: "#5834B5" },
-  { id: "emerald", label: "زمردي × أبيض", main: "#1D9B72", secondary: "#F2FFF9", accent: "#0D5A46" },
-  { id: "fire", label: "برتقالي ناري", main: "#F07822", secondary: "#E5E5E5", accent: "#773916" },
+  { id: "gold", label: "لافندر × سماوي", main: "#7865F5", secondary: "#73DDE4", accent: "#4036A8" },
+  { id: "crimson", label: "مرجاني × وردي", main: "#FF7F91", secondary: "#FFC3D0", accent: "#C74D70" },
+  { id: "cyber", label: "نيون × بنفسجي", main: "#55C9DE", secondary: "#B28BFF", accent: "#397DAA" },
+  { id: "emerald", label: "نعناعي × ليموني", main: "#64C9A8", secondary: "#D4ED8A", accent: "#31866D" },
+  { id: "fire", label: "خوخي × مشمشي", main: "#FFAD7A", secondary: "#FFE1A6", accent: "#C66F4C" },
 ];
 
 function Emblem({ type, main, secondary }: { type: string; main: string; secondary: string }) {
