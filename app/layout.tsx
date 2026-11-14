@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Hyptrix" },
 };
-export const viewport: Viewport = { themeColor: "#0A0A0C", width: "device-width", initialScale: 1, maximumScale: 1 };
+export const viewport: Viewport = { themeColor: "#10101b", width: "device-width", initialScale: 1, maximumScale: 1 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return <html lang="ar" dir="rtl"><body>{children}</body></html>;

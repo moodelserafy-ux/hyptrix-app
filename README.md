@@ -121,3 +121,7 @@ AD_REWARD_VERIFY_SECRET=...
 - بيانات لوحة المتصدرين يرسلها اللاعب بعد تسجيل الدخول، لذلك هي لوحة مجتمع/ترتيب ذاتي الإبلاغ وليست اقتصادًا خادميًا مقاومًا للغش؛ الحفاظ على تقدم محلي بلا تكلفة خادم يعني عدم إمكان إثبات صافي ثروة اللعبة من جهة موثوقة.
 - مؤشرات شباك التذاكر والأجور هي توازنات لعب ابتدائية قابلة للضبط، وليست توقعات مالية واقعية.
 - استيراد الصور يستخدم روابط مباشرة مخزنة في الحزمة؛ عرض صورة URL خارجية يحتاج إضافة مكون عرض مناسب وسياسة CSP/remote image حسب الاستضافة.
+
+## Visual refresh — Neo-Lumen (November 2026)
+
+The interface has been restyled around a vivid midnight palette: ultraviolet, electric cyan, soft orchid, neon pink, and lime accents. The redesign includes glass-like surfaces, more spacious cards, refined typography, touch-sized controls, a floating mobile tab bar with safe-area padding, responsive desktop navigation, animated screen transitions, subtle hover/press feedback, and reduced-motion accessibility support. Game logic, storage, API routes, and the external database schema are unchanged.
