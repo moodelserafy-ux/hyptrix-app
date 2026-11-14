@@ -42,18 +42,29 @@ export const useGameStore = create<GameState & GameActions>()(persist((setState,
     // after the UI has initialized its simulation cursor, preventing old days
     // from being replayed as fresh production/revenue ticks.
     const resumedDay = Math.max(1, current.gameDay ?? 1);
-    const resumedWeek = Math.floor((resumedDay - 1) / 7) + 1;
-    const resumedYear = 2026 + Math.floor((resumedDay - 1) / 364);
-    const migratedProjects = current.projects.map((project) => project.status === "draft" ? ({
-      ...project,
-      contracts: project.contracts.map((contract) => ({
-        ...contract,
-        response: contract.response ?? "pending",
-        responseDay: contract.responseDay ?? resumedDay + 1,
-      })),
-      proposalDay: project.proposalDay ?? current.gameDay,
-    }) : project);
-    setState({ ...(importedDatabase ? { customDb: importedDatabase } : {}), projects: migratedProjects, gameDay: resumedDay, week: ((resumedWeek - 1) % 52) + 1, year: resumedYear, lastTickAt: current.hasStudio ? (current.lastTickAt || now) : now, hydrated: true });
+    const resumedDate = new Date(Date.UTC(2026, 0, 1) + (resumedDay - 1) * 86_400_000);
+    const dayOfYear = Math.floor((Date.UTC(resumedDate.getUTCFullYear(), resumedDate.getUTCMonth(), resumedDate.getUTCDate()) - Date.UTC(resumedDate.getUTCFullYear(), 0, 1)) / 86_400_000);
+    const resumedWeek = Math.min(52, Math.floor(dayOfYear / 7) + 1);
+    const resumedYear = resumedDate.getUTCFullYear();
+    const migratedProjects = current.projects.map((project) => {
+      if (project.status !== "draft") return project;
+      // Older saves already had two selected leads but not the newer leadSelectionDone flag.
+      const legacyLeadIds = project.leadCandidates?.length ? project.leadCandidates : (project.cast?.leads ?? []);
+      const hasLegacyFinalLeads = (project.cast?.leads?.length ?? 0) === 2 && !project.leadCandidates?.length;
+      return {
+        ...project,
+        leadCandidates: legacyLeadIds,
+        leadSelectionDone: project.leadSelectionDone ?? hasLegacyFinalLeads,
+        contracts: (project.contracts ?? []).map((contract) => ({
+          ...contract,
+          role: hasLegacyFinalLeads && legacyLeadIds.includes(contract.memberId) ? "lead" : contract.role,
+          response: contract.response ?? "pending",
+          responseDay: contract.responseDay ?? resumedDay + 1,
+        })),
+        proposalDay: project.proposalDay ?? current.gameDay,
+      };
+    });
+    setState({ ...(importedDatabase ? { customDb: importedDatabase } : {}), projects: migratedProjects, gameDay: resumedDay, week: resumedWeek, year: resumedYear, lastTickAt: current.hasStudio ? (current.lastTickAt || now) : now, hydrated: true });
   },
   createStudio: (studio) => setState({ studio, hasStudio: true, lastTickAt: Date.now(), notification: `أهلاً بك في ${studio.name}. يبدأ المشوار الآن.` }),
   setCustomDb: (db) => {
@@ -75,12 +86,14 @@ export const useGameStore = create<GameState & GameActions>()(persist((setState,
     if (!state.hasStudio) return state;
     const now = Date.now();
     const lastTickAt = state.lastTickAt || now;
-    const elapsedDays = Math.min(90, Math.floor((now - lastTickAt) / 60_000));
+    const elapsedDays = Math.max(0, Math.floor((now - lastTickAt) / 60_000));
     if (elapsedDays < 1) return state;
     const gameDay = state.gameDay + elapsedDays;
-    const week = Math.floor((gameDay - 1) / 7) + 1;
-    const year = 2026 + Math.floor((gameDay - 1) / 364);
-    return { gameDay, week: ((week - 1) % 52) + 1, year, lastTickAt: elapsedDays === 90 ? now : lastTickAt + elapsedDays * 60_000 };
+    const date = new Date(Date.UTC(2026, 0, 1) + (gameDay - 1) * 86_400_000);
+    const dayOfYear = Math.floor((Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86_400_000);
+    const week = Math.min(52, Math.floor(dayOfYear / 7) + 1);
+    const year = date.getUTCFullYear();
+    return { gameDay, week, year, lastTickAt: lastTickAt + elapsedDays * 60_000 };
   }),
   setVip: (expiresAt) => setState({ vipExpiresAt: expiresAt }),
   setNotification: (message) => setState({ notification: message }),

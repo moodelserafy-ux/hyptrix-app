@@ -32,7 +32,7 @@ export interface Studio {
 export interface CastSelection { leads: string[]; antagonist: string; supporting: string[]; cameos: string[] }
 export interface ContractTerms { memberId: string; memberName: string; role: string; baseSalary: number; negotiatedSalary: number; backendPoints: number; ego: number; response?: "pending" | "accepted" | "rejected"; responseReason?: string; responseDay?: number }
 export interface CrewSelection { director: string; writers: string[]; cinematographer: string; composer: string; editor_vfx: string }
-export type ProjectStatus = "draft" | "production" | "post" | "released";
+export type ProjectStatus = "draft" | "production" | "post" | "marketing" | "released";
 export interface RivalRelease { studioName: string; boxOffice: number; revenueTarget?: number; dailyGross?: number }
 export interface Project {
   id: string; title: string; summary: string; format: "film" | "series"; episodes: number;
@@ -41,7 +41,7 @@ export interface Project {
   budget: { sets: number; costumes: number; vfx: number; extras: number };
   marketingBudget: number; releaseSeason: string; screens: number; platformId: string;
   status: ProjectStatus; productionProgress: number; crises: Crisis[]; hype: number; qualityModifier: number; negotiationDiscount: number; negotiatedActorId?: string; contracts: ContractTerms[];
-  result?: EvaluationResult; boxOffice?: number; backendPayout?: number; rivalReleases?: RivalRelease[]; createdYear: number; proposalDay?: number; productionStartDay?: number; plannedEndDay?: number; productionEndDay?: number; releaseDay?: number; revenueTarget?: number; dailyGross?: number;
+  result?: EvaluationResult; boxOffice?: number; backendPayout?: number; rivalReleases?: RivalRelease[]; createdYear: number; proposalDay?: number; productionStartDay?: number; plannedEndDay?: number; productionEndDay?: number; marketingStartDay?: number; marketingStrategy?: "digital" | "television" | "mixed"; releaseDay?: number; revenueTarget?: number; dailyGross?: number; licensingRevenue?: number; leadCandidates?: string[]; leadSelectionDone?: boolean;
 }
 export interface Crisis {
   id: string; title: string; description: string; choices: { label: string; cash: number; hype: number; quality: number }[];

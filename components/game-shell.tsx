@@ -15,7 +15,7 @@ import { DatabaseManager } from "@/components/database-manager";
 import { getResolvedDatabase } from "@/lib/database";
 import { showRewardedAd, type AdPlacement, type RewardedAdResult } from "@/lib/monetization";
 import { useGameStore } from "@/lib/store";
-import { calculateRevenue, createCrises, detectEgoRisk, estimateCost, getGenreSynergy, localEvaluation } from "@/lib/simulation";
+import { advanceRevenueDays, calculateRevenue, createCrises, detectEgoRisk, estimateCost, getGenreSynergy, localEvaluation } from "@/lib/simulation";
 import { getSupabaseBrowser } from "@/lib/supabase";
 import type { Actor, CrewMember, EvaluationResult, FounderPerk, GameDatabase, Genre, Market, Project, Studio } from "@/lib/types";
 
@@ -42,22 +42,30 @@ const initialForm = {
   releaseSeason: "الصيف", screens: 300, marketingBudget: 5_000_000, platformId: "plat_1",
   budget: { sets: 4_000_000, costumes: 2_500_000, vfx: 3_000_000, extras: 1_000_000 },
   director: "dir_1", writer1: "wr_1", writer2: "", cinematographer: "dop_1", composer: "mus_1", editor: "ed_1",
-  lead1: "act_1", lead2: "act_2", antagonist: "act_5", support1: "act_4", support2: "act_7", support3: "", support4: "", cameo1: "", cameo2: "",
+  lead1: "act_1", lead2: "act_2", lead3: "", lead4: "", antagonist: "act_5", support1: "act_4", support2: "act_7", support3: "", support4: "", cameo1: "", cameo2: "",
 };
 type FormState = typeof initialForm;
 type Screen = "overview" | "create" | "production" | "results" | "awards" | "leaderboard" | "settings";
 
 function money(value: number) {
   const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} مليار`;
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)} م`;
-  if (abs >= 1_000) return `${(value / 1_000).toFixed(0)} ألف`;
-  return `${Math.round(value).toLocaleString("en-US")}`;
+  const sign = value < 0 ? "−" : "";
+  const compact = (amount: number, divisor: number, decimals: number) =>
+    (Math.floor((amount / divisor) * (10 ** decimals)) / (10 ** decimals)).toLocaleString("en-US", { maximumFractionDigits: decimals });
+  if (abs >= 1_000_000_000_000) return `${sign}${compact(abs, 1_000_000_000_000, 2)}T`;
+  if (abs >= 1_000_000_000) return `${sign}${compact(abs, 1_000_000_000, 2)}B`;
+  if (abs >= 1_000_000) return `${sign}${compact(abs, 1_000_000, 3)}M`;
+  if (abs >= 1_000) return `${sign}${compact(abs, 1_000, 3)}K`;
+  return `${sign}${Math.round(abs).toLocaleString("en-US")}`;
 }
 function fullMoney(value: number) { return `${Math.round(value).toLocaleString("en-US")} ج.م`; }
 function labelGenre(id: Genre) { return GENRES.find((g) => g.id === id)?.label ?? id; }
 function tierName(actor: Actor) { return actor.stats.overall >= 90 ? "أيقونة" : actor.stats.overall >= 80 ? "نجم صف أول" : actor.stats.overall >= 70 ? "محترف" : "وجه صاعد"; }
 function averageStats(stats: Record<string, number>) { return Math.round(stats.overall ?? 0); }
+function contractRoleLabel(role: string) {
+  const labels: Record<string, string> = { director: "مخرج", screenwriter: "مؤلف", cinematographer: "مدير تصوير", composer: "موسيقار", editor_vfx: "مونتير / مؤثرات بصرية", lead_candidate: "مرشح بطولة", lead: "بطل رئيسي", antagonist: "الخصم الرئيسي", supporting: "ممثل مساعد", cameo: "ضيف شرف" };
+  return labels[role] ?? role;
+}
 function uniq(values: string[]) { return [...new Set(values.filter(Boolean))]; }
 
 function PageHeading({ kicker, title, desc, action }: { kicker: string; title: string; desc?: string; action?: ReactNode }) {
@@ -86,6 +94,7 @@ export function GameShell() {
   const year = useGameStore((s) => s.year);
   const week = useGameStore((s) => s.week);
   const gameDay = useGameStore((s) => s.gameDay);
+  const lastTickAt = useGameStore((s) => s.lastTickAt);
   const customDb = useGameStore((s) => s.customDb);
   const projects = useGameStore((s) => s.projects);
   const activeProjectId = useGameStore((s) => s.activeProjectId);
@@ -110,6 +119,7 @@ export function GameShell() {
   const [vipProgress, setVipProgress] = useState(0);
   const [busyAd, setBusyAd] = useState(false);
   const [busyAi, setBusyAi] = useState(false);
+  const [groqStatus, setGroqStatus] = useState<{ checking: boolean; active: boolean | null; model: string; detail: string }>({ checking: false, active: null, model: "openai/gpt-oss-120b", detail: "لم يتم اختبار اتصال Groq بعد." });
   const [adDemoNotice, setAdDemoNotice] = useState("");
   const [toast, setToast] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -130,6 +140,10 @@ export function GameShell() {
   const simulationInitializedRef = useRef(false);
   const [draftDiscount, setDraftDiscount] = useState(0);
   const [negotiationTarget, setNegotiationTarget] = useState("act_1");
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [leadSelection, setLeadSelection] = useState<{ projectId: string; selected: string[] } | null>(null);
+  const [replacementLeadChoice, setReplacementLeadChoice] = useState("");
+  const crisisDayRef = useRef<Set<string>>(new Set());
   const [resultToast, setResultToast] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
@@ -161,12 +175,15 @@ export function GameShell() {
     if (userEmail) refreshVip();
   }, [userEmail]);
   useEffect(() => { if (screen === "leaderboard") loadLeaderboard("all"); }, [screen]);
-  // One real minute equals one in-game day. Reconcile elapsed time so background-tab throttling cannot lose days.
+  // 24 in-game hours pass per real minute; the calendar advances one day per minute.
   useEffect(() => {
     if (!hydrated || !hasStudio) return;
-    syncClock();
-    const timer = window.setInterval(syncClock, 10_000);
-    return () => window.clearInterval(timer);
+    const tick = () => { syncClock(); setClockNow(Date.now()); };
+    tick();
+    const timer = window.setInterval(tick, 1_000);
+    const onVisible = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, [hydrated, hasStudio, syncClock]);
   useEffect(() => {
     for (const project of projects) {
@@ -182,6 +199,7 @@ export function GameShell() {
           stats: candidate?.stats,
           ...(actorCandidate ? { genre_mastery: actorCandidate.genre_mastery } : {}),
           ...(crewCandidate ? { best_genres: crewCandidate.best_genres } : {}),
+          studioReputation: studio?.reputation ?? 12,
         };
         fetch("/api/generate-event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "negotiation", project, candidate: candidateDetails, worldHistory: worldHistory.slice(0, 25), context: `يوم اللعبة ${gameDay}. اسم الاستوديو ${studio?.name ?? ""}.` }) })
           .then(async (response) => { if (!response.ok) throw new Error("negotiation unavailable"); return response.json(); })
@@ -192,11 +210,33 @@ export function GameShell() {
             addHistory({ year, kind: "business", text: `${contract.memberName}: ${decision === "accepted" ? "وافق على العرض" : "رفض العرض"} لـ ${project.title}. ${reason}` });
             setToast(`${contract.memberName} ${decision === "accepted" ? "وافق على الانضمام" : "رفض العرض"}: ${reason}`);
           }).catch(() => {
-            updateContract(project.id, contract.memberId, { response: "rejected", responseReason: "تعذر الحصول على رد من وكيل الأعمال؛ حاول إعادة إرسال العرض عند استقرار الاتصال." });
+            // A transport/API failure is not a business rejection. Keep the offer open
+            // and schedule one clean retry on the next in-game day.
+            updateContract(project.id, contract.memberId, { response: "pending", responseDay: gameDay + 1, responseReason: "تعذر الاتصال بمحرك التفاوض. العرض ما زال قائمًا، وسيُعاد طلب الرد في اليوم التالي." });
           }).finally(() => processingOffers.current.delete(`${project.id}:${contract.memberId}`));
       }
     }
   }, [gameDay, projects, db, studio, worldHistory, year, updateContract, addHistory]);
+  useEffect(() => {
+    if (!hydrated || !hasStudio) return;
+    for (const project of projects) {
+      if (project.status !== "draft" || project.leadSelectionDone) continue;
+      const leadOffers = (project.contracts ?? []).filter((contract) => contract.role === "lead_candidate");
+      const allLeadAnswered = leadOffers.length > 0 && leadOffers.every((contract) => contract.response !== "pending");
+      const acceptedLeads = leadOffers.filter((contract) => contract.response === "accepted");
+      if (allLeadAnswered && acceptedLeads.length >= 2 && !leadSelection) {
+        if (acceptedLeads.length === 2) {
+          const selectedIds = acceptedLeads.map((contract) => contract.memberId);
+          const contracts = project.contracts.filter((contract) => contract.role !== "lead_candidate" || selectedIds.includes(contract.memberId)).map((contract) => contract.role === "lead_candidate" ? { ...contract, role: "lead" } : contract);
+          updateProject(project.id, { leadCandidates: selectedIds, leadSelectionDone: true, cast: { ...project.cast, leads: selectedIds }, contracts });
+          addHistory({ year, kind: "business", text: `تم اعتماد بطلي ${project.title}: ${acceptedLeads.map((contract) => contract.memberName).join(" و")}.` });
+        } else {
+          setLeadSelection({ projectId: project.id, selected: acceptedLeads.slice(0, 2).map((contract) => contract.memberId) });
+        }
+      }
+    }
+  }, [hydrated, hasStudio, projects, leadSelection, updateProject, addHistory, year]);
+
   useEffect(() => {
     if (!hydrated || !hasStudio) {
       previousDayRef.current = gameDay;
@@ -225,28 +265,57 @@ export function GameShell() {
       if (completed) addHistory({ year, kind: "business", text: `اكتمل تصوير ${project.title} تلقائيًا في اليوم ${gameDay}، وانتقل إلى ما بعد الإنتاج.` });
     }
 
-    for (const project of projects.filter((item) => item.status === "released" && (item.revenueTarget ?? 0) > (item.boxOffice ?? 0))) {
-      const remaining = Math.max(0, (project.revenueTarget ?? 0) - (project.boxOffice ?? 0));
-      const daily = Math.min(remaining, Math.max(250_000, Math.round((project.revenueTarget ?? 0) * (project.dailyGross ?? 0.035) * elapsedDays * (0.82 + Math.random() * 0.36))));
-      if (daily <= 0) continue;
+    for (const project of projects.filter((item) => item.status === "released")) {
+      const own = advanceRevenueDays(project.boxOffice ?? 0, project.revenueTarget ?? project.boxOffice ?? 0, project.dailyGross ?? 0.048, elapsedDays);
       const rivals = (project.rivalReleases ?? []).map((rival) => {
-        const rivalRemaining = Math.max(0, (rival.revenueTarget ?? rival.boxOffice) - rival.boxOffice);
-        const rivalDaily = Math.min(rivalRemaining, Math.max(100_000, Math.round((rival.revenueTarget ?? rival.boxOffice) * (rival.dailyGross ?? 0.04) * elapsedDays * (0.8 + Math.random() * 0.4))));
-        return { ...rival, boxOffice: rival.boxOffice + rivalDaily, dailyGross: Math.max(.012, (rival.dailyGross ?? .04) * Math.pow(.94, elapsedDays)) };
+        const result = advanceRevenueDays(rival.boxOffice, rival.revenueTarget ?? rival.boxOffice, rival.dailyGross ?? 0.04, elapsedDays);
+        return { ...rival, boxOffice: rival.boxOffice + result.gross, dailyGross: result.nextRate };
       });
-      updateProject(project.id, { boxOffice: (project.boxOffice ?? 0) + daily, dailyGross: Math.max(0.012, (project.dailyGross ?? 0.035) * Math.pow(.94, elapsedDays)), rivalReleases: rivals });
-      addCash(Math.round(daily * (1 - Math.min(.28, (project.backendPayout ?? 0) / Math.max(1, project.revenueTarget ?? 1)))));
-      if (gameDay % 7 === 0) addHistory({ year, kind: "release", text: `تقرير أسبوعي: ${project.title} أضاف ${money(daily)} جنيه إلى شباك التذاكر خلال ${elapsedDays} يوم، والإجمالي ${money((project.boxOffice ?? 0) + daily)}.` });
+      if (own.gross > 0 || rivals.some((rival, index) => rival.boxOffice !== (project.rivalReleases?.[index]?.boxOffice ?? 0))) {
+        updateProject(project.id, { boxOffice: (project.boxOffice ?? 0) + own.gross, dailyGross: own.nextRate, rivalReleases: rivals });
+        if (own.gross > 0) {
+          const netShare = 1 - Math.min(.22, (project.backendPayout ?? 0) / Math.max(1, project.revenueTarget ?? 1));
+          addCash(Math.round(own.gross * netShare));
+          if (gameDay % 7 === 0) addHistory({ year, kind: "release", text: `تقرير أسبوعي: ${project.title} أضاف ${money(own.gross)} إلى ${project.format === "film" ? "شباك التذاكر" : "إيرادات العرض"} خلال ${elapsedDays} يوم. الإجمالي الحالي ${money((project.boxOffice ?? 0) + own.gross)}.` });
+        }
+      }
+    }
+
+    for (const project of projects.filter((item) => item.status === "production" && item.productionProgress + 14 * elapsedDays < 92 && item.crises.every((crisis) => crisis.resolved))) {
+      const crisisKey = `${project.id}:${gameDay}`;
+      if (gameDay % 5 === 0 && !crisisDayRef.current.has(crisisKey)) {
+        crisisDayRef.current.add(crisisKey);
+        void fetch("/api/generate-event", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "crisis", project, worldHistory: worldHistory.slice(0, 25), talentContext: `المخرج: ${db.crew.find((member) => member.id === project.crew.director)?.name ?? "غير معروف"}. الأبطال: ${project.cast.leads.map((id) => db.actors.find((actor) => actor.id === id)?.name).filter(Boolean).join("، ")}.`, context: `أزمة طارئة أثناء يوم التصوير ${gameDay}. ابتكر أزمة جديدة مرتبطة تحديدًا بملخص العمل وأسماء الطاقم والميزانية والمرحلة الحالية، ولا تكرر: ${project.crises.map((crisis) => crisis.title).join("، ")}.` }),
+        }).then(async (response) => response.ok ? response.json() : null).then((payload) => {
+          const data = payload?.data;
+          if (!data?.title || !Array.isArray(data.choices) || data.choices.length !== 3) return;
+          const liveCashLimit = Math.max(250_000, Math.min(35_000_000, estimateCost(project, db.actors, db.crew, studio) * 0.15));
+          const crisis = { id: `${project.id}-live-${gameDay}`, title: String(data.title).slice(0, 120), description: String(data.description ?? "حدث طارئ أثناء التصوير.").slice(0, 700), choices: data.choices.map((choice: { label?: unknown; cash?: unknown; hype?: unknown; quality?: unknown }) => {
+            const cash = Number(choice.cash ?? 0), hype = Number(choice.hype ?? 0), quality = Number(choice.quality ?? 0);
+            return { label: String(choice.label ?? "قرار إداري").slice(0, 100), cash: Math.round(Math.max(-liveCashLimit, Math.min(liveCashLimit, Number.isFinite(cash) ? cash : 0))), hype: Math.round(Math.max(-12, Math.min(12, Number.isFinite(hype) ? hype : 0))), quality: Math.round(Math.max(-10, Math.min(10, Number.isFinite(quality) ? quality : 0))) };
+          }), resolved: false };
+          const latest = useGameStore.getState().projects.find((entry) => entry.id === project.id);
+          if (latest?.status === "production" && !latest.crises.some((entry) => entry.id === crisis.id)) {
+            updateProject(project.id, { crises: [...latest.crises, crisis], plannedEndDay: Math.max(latest.plannedEndDay ?? gameDay, gameDay + Math.ceil((100 - latest.productionProgress) / 14) + 1) });
+            addHistory({ year, kind: "crisis", text: `${project.title}: ظهرت أزمة أثناء التصوير — ${crisis.title}.` });
+            setToast(`أزمة جديدة في تصوير ${project.title}: ${crisis.title}`);
+          }
+        }).catch(() => undefined);
+      }
     }
 
     if (gameDay % 3 === 0 && newsDayRef.current !== gameDay) {
       newsDayRef.current = gameDay;
-      const focus = projects.find((item) => item.status === "released" || item.status === "production" || item.status === "post" || item.status === "draft") ?? {
+      const focus = projects.find((item) => item.status === "released" || item.status === "production" || item.status === "post" || item.status === "marketing" || item.status === "draft") ?? {
         id: "world-market", title: "سوق صناعة السينما", summary: "تغطية عامة لحركة الإنتاج والتوزيع والمنصات والمنافسة بين شركات السينما والتلفزيون.",
       };
+      const focusProject = focus as Project;
+      const newsTalentContext = focusProject.id === "world-market" ? "لا يوجد مشروع نشط؛ ركّز على تحركات السوق العامة والمنافسين والمنصات الواردة في سجل العالم." : `المخرج: ${db.crew.find((member) => member.id === focusProject.crew?.director)?.name ?? "غير محدد"}. المؤلفون: ${(focusProject.crew?.writers ?? []).map((id) => db.crew.find((member) => member.id === id)?.name).filter(Boolean).join("، ")}. الأبطال: ${(focusProject.cast?.leads ?? []).map((id) => db.actors.find((actor) => actor.id === id)?.name).filter(Boolean).join("، ")}. بقية المتعاقدين: ${(focusProject.contracts ?? []).map((contract) => contract.memberName).join("، ")}. حالة المشروع: ${focusProject.status}. تقدم التصوير: ${focusProject.productionProgress ?? 0}%. شباك التذاكر الحالي: ${focusProject.boxOffice ?? 0}.`;
       fetch("/api/generate-event", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "daily_news", project: focus, worldHistory: worldHistory.slice(0, 30), context: `اليوم ${gameDay} في عالم Hyptrix. لا تكرر العناوين السابقة، وغطِّ السوق كله إذا لم يكن هناك مشروع نشط.` }),
+        body: JSON.stringify({ type: "daily_news", project: focus, talentContext: newsTalentContext, worldHistory: worldHistory.slice(0, 30), context: `اليوم ${gameDay} في عالم Hyptrix. اربط الخبر بتطور فعلي في المشروع المختار أو بمنافس/منصة موجودة في قاعدة البيانات. لا تكرر العناوين السابقة، ولا تختلق أرقام إيرادات أو أسماء أو وقائع غير موجودة.` }),
       }).then((response) => response.ok ? response.json() : null).then((payload) => {
         if (payload?.data?.headline) {
           addHistory({ year, kind: payload.data.kind ?? "business", text: `${payload.data.headline} — ${payload.data.story}` });
@@ -254,9 +323,9 @@ export function GameShell() {
         }
       }).catch(() => undefined);
     }
-  }, [hydrated, hasStudio, gameDay, projects, worldHistory, year, updateProject, addCash, addHistory]);
+  }, [hydrated, hasStudio, gameDay, projects, worldHistory, year, db, studio, updateProject, addCash, addHistory]);
 
-  const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects.find((project) => project.status === "production" || project.status === "post" || project.status === "released") ?? null;
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects.find((project) => project.status === "production" || project.status === "post" || project.status === "marketing" || project.status === "released") ?? null;
   const studioCash = studio?.cash ?? 0;
   const resolvedCrew = db.crew;
   const cloudPackage = (vipCloud as { package?: { status?: string; expires_at?: string } } | null)?.package;
@@ -364,7 +433,9 @@ export function GameShell() {
   const changeForm = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((old) => ({ ...old, [key]: value }));
   function createNewProject() {
     if (!form.title.trim() || form.summary.trim().length < 30) { setToast("اكتب اسم العمل وملخصًا من 30 حرفًا على الأقل."); return; }
-    const castIds = uniq([form.lead1, form.lead2, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2]);
+    const castIds = uniq([...formLeadCandidates, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2]);
+    if (formLeadCandidates.length < 2 || formLeadCandidates.length > 4) { setToast("اختار من 2 إلى 4 مرشحين للأدوار الرئيسية قبل إرسال العروض."); return; }
+    if (castIds.length < 5) { setToast("اختار مرشحين للبطولة، وخصمًا، وممثلين مساعدين حتى يكتمل الحد الأدنى للطاقم."); return; }
     const selectedActors = db.actors.filter((actor) => castIds.includes(actor.id));
     const selectedCrew = db.crew.filter((member) => formCrewIds.includes(member.id));
     const requiredRoles: CrewMember["role"][] = ["director", "screenwriter", "cinematographer", "composer", "editor_vfx"];
@@ -375,18 +446,19 @@ export function GameShell() {
       id: crypto.randomUUID(), title: form.title.trim(), summary: form.summary.trim(), format: form.format, episodes: form.format === "film" ? 0 : form.episodes,
       season: form.season, primaryGenre: form.primaryGenre, secondaryGenre: form.secondaryGenre, ageRating: form.ageRating,
       crew: { director: form.director, writers: uniq([form.writer1, form.writer2]), cinematographer: form.cinematographer, composer: form.composer, editor_vfx: form.editor },
-      cast: { leads: uniq([form.lead1, form.lead2]), antagonist: form.antagonist, supporting: uniq([form.support1, form.support2, form.support3, form.support4]), cameos: uniq([form.cameo1, form.cameo2]) },
+      cast: { leads: [], antagonist: form.antagonist, supporting: uniq([form.support1, form.support2, form.support3, form.support4]), cameos: uniq([form.cameo1, form.cameo2]) },
       budget: { ...form.budget }, marketingBudget: form.marketingBudget, releaseSeason: form.releaseSeason, screens: form.screens, platformId: form.platformId,
+      leadCandidates: formLeadCandidates, leadSelectionDone: false,
       status: "draft", productionProgress: 0, crises: [], hype: 0, qualityModifier: studio?.perk === "visionary" ? 10 : 0, negotiationDiscount: draftDiscount, negotiatedActorId: draftDiscount > 0 ? negotiationTarget : undefined, contracts: [], createdYear: year,
     };
     const founderSalaryFactor = studio?.perk === "negotiator" ? 0.85 : 1;
     const contractRows = [
       ...db.actors.filter((actor) => castIds.includes(actor.id)).map((actor) => ({
         memberId: actor.id, memberName: actor.name,
-        role: project.cast.leads.includes(actor.id) ? "lead" : project.cast.antagonist === actor.id ? "antagonist" : project.cast.cameos.includes(actor.id) ? "cameo" : "supporting",
+        role: formLeadCandidates.includes(actor.id) ? "lead_candidate" : project.cast.antagonist === actor.id ? "antagonist" : project.cast.cameos.includes(actor.id) ? "cameo" : "supporting",
         baseSalary: actor.base_salary,
         negotiatedSalary: Math.round(actor.base_salary * founderSalaryFactor * (actor.id === project.negotiatedActorId ? 1 - project.negotiationDiscount : 1)),
-        backendPoints: project.cast.leads.includes(actor.id) ? 4 : project.cast.antagonist === actor.id ? 2 : project.cast.cameos.includes(actor.id) ? 0.5 : 1,
+        backendPoints: formLeadCandidates.includes(actor.id) ? 4 : project.cast.antagonist === actor.id ? 2 : project.cast.cameos.includes(actor.id) ? 0.5 : 1,
         ego: actor.stats.ego ?? 0,
       })),
       ...db.crew.filter((member) => formCrewIds.includes(member.id)).map((member) => ({
@@ -412,13 +484,13 @@ export function GameShell() {
     setBusyAi(true);
     setToast("يجري تجهيز خطة التصوير وأزمات مرتبطة بظروف المشروع...");
     try {
-      const fallbackCrises = createCrises(project.id, 2 + (Math.random() > 0.55 ? 1 : 0));
+      const fallbackCrises = createCrises(project.id, 1);
       const crisisAngles = ["مشكلة موقع تصوير أو معدات أو جدول لوجستي", "خلاف إبداعي بين أفراد الطاقم أو إعادة كتابة", "تسريب أو اعتراض رقابي أو أزمة توزيع وتسويق"];
       const crises = await Promise.all(fallbackCrises.map(async (fallback, index) => {
         try {
           const response = await fetch("/api/generate-event", {
             method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(35_000),
-            body: JSON.stringify({ type: "crisis", project, worldHistory: worldHistory.slice(0, 35), context: `اليوم ${gameDay}. هذه الأزمة رقم ${index + 1} ويجب أن تختلف تمامًا عن باقي الأزمات. زاوية الأزمة المطلوبة: ${crisisAngles[index]}. اربطها بميزانية العمل وطاقمه ونوعه.` }),
+            body: JSON.stringify({ type: "crisis", project, worldHistory: worldHistory.slice(0, 35), talentContext: `المخرج: ${db.crew.find((member) => member.id === project.crew.director)?.name ?? "غير معروف"}. المؤلفون: ${project.crew.writers.map((id) => db.crew.find((member) => member.id === id)?.name).filter(Boolean).join("، ")}. الأبطال: ${project.cast.leads.map((id) => db.actors.find((actor) => actor.id === id)?.name).filter(Boolean).join("، ")}.`, context: `اليوم ${gameDay}. هذه الأزمة رقم ${index + 1} ويجب أن تختلف تمامًا عن باقي الأزمات. زاوية الأزمة المطلوبة: ${crisisAngles[index]}. اربطها حرفيًا بملخص السيناريو والميزانية والطاقم والمرحلة الحالية، ولا تستخدم أزمة عامة لا تخص المشروع.` }),
           });
           if (!response.ok) return fallback;
           const payload = await response.json();
@@ -430,9 +502,9 @@ export function GameShell() {
             description: String(data.description),
             choices: data.choices.map((choice: { label?: unknown; cash?: unknown; hype?: unknown; quality?: unknown }) => ({
               label: String(choice.label ?? "قرار إداري"),
-              cash: Number(choice.cash ?? 0),
-              hype: Number(choice.hype ?? 0),
-              quality: Number(choice.quality ?? 0),
+              cash: Math.round(Math.max(-Math.max(250_000, Math.min(35_000_000, cost * 0.15)), Math.min(Math.max(250_000, Math.min(35_000_000, cost * 0.15)), Number(choice.cash ?? 0)))),
+              hype: Math.round(Math.max(-12, Math.min(12, Number(choice.hype ?? 0)))),
+              quality: Math.round(Math.max(-10, Math.min(10, Number(choice.quality ?? 0)))),
             })),
             resolved: false,
           };
@@ -469,8 +541,35 @@ export function GameShell() {
     addHistory({ year, kind: "crisis", text: `${project.title}: ${crisis.title} — القرار: ${choice.label}.` });
     setToast(`تم اتخاذ القرار: ${choice.label}`);
   }
+  function approveMarketingPlan(project: Project) {
+    if (project.status !== "post" || !studio) return;
+    if (studio.cash < project.marketingBudget) {
+      setToast(`ميزانية التسويق أكبر من السيولة المتاحة. محتاج ${fullMoney(project.marketingBudget - studio.cash)} إضافية أو قلّل ميزانية الحملة.`);
+      return;
+    }
+    const strategy = project.marketingStrategy ?? "mixed";
+    addCash(-project.marketingBudget);
+    updateProject(project.id, { status: "marketing", marketingStartDay: gameDay, marketingStrategy: strategy });
+    addHistory({ year, kind: "business", text: `بدأت حملة تسويق ${project.title} باستراتيجية ${strategy === "digital" ? "رقمية" : strategy === "television" ? "تلفزيونية" : "متكاملة"}، وتم اعتماد وإنفاق ${money(project.marketingBudget)} على الحملة. الطرح بعد 3 أيام لعبة.` });
+    setToast("انطلقت الحملة وتم اعتماد ميزانيتها. توقيت الطرح هيتفتح بعد 3 أيام داخل اللعبة.");
+  }
+
+  async function checkGroqStatus() {
+    setGroqStatus((current) => ({ ...current, checking: true, detail: "بنختبر مفتاح Groq والنموذج من الخادم..." }));
+    try {
+      const response = await fetch("/api/generate-event", { method: "GET", cache: "no-store" });
+      const data = await response.json();
+      setGroqStatus({ checking: false, active: Boolean(response.ok && data.active), model: String(data.model ?? "openai/gpt-oss-120b"), detail: String(data.message ?? (response.ok ? "اتصال Groq متاح." : "فشل اختبار Groq.")) });
+    } catch {
+      setGroqStatus((current) => ({ ...current, checking: false, active: false, detail: "تعذر الوصول إلى فحص Groq. راجع نشر Vercel ثم أعد الاختبار." }));
+    }
+  }
+
   async function releaseProject(project: Project) {
-    if (!studio) return;
+    if (!studio || project.status !== "marketing" || gameDay - (project.marketingStartDay ?? gameDay) < 3) {
+      setToast("العمل لسه في مرحلة الحملة التسويقية. لازم تكمل 3 أيام لعبة قبل الطرح.");
+      return;
+    }
     setBusyAi(true); setResultToast("");
     try {
       const previousReviews = projects
@@ -483,6 +582,7 @@ export function GameShell() {
         project: { ...project, hype: project.hype, qualityModifier: project.qualityModifier },
         worldHistory: worldHistory.slice(0, 50),
         context: `معلومات إضافية: اسم الاستوديو ${studio.name}، السوق ${MARKET_LABELS[studio.market]}، ميزة المؤسس ${studio.perk}. مراجعات سابقة يجب تجنب تكرار تعبيراتها: ${previousReviews.join(" | ") || "لا توجد مراجعات سابقة"}.`,
+        talentContext: `المخرج: ${db.crew.find((member) => member.id === project.crew.director)?.name ?? "غير محدد"}. المؤلفون: ${project.crew.writers.map((id) => db.crew.find((member) => member.id === id)?.name).filter(Boolean).join("، ")}. مدير التصوير: ${db.crew.find((member) => member.id === project.crew.cinematographer)?.name ?? "غير محدد"}. الموسيقى: ${db.crew.find((member) => member.id === project.crew.composer)?.name ?? "غير محدد"}. المونتاج: ${db.crew.find((member) => member.id === project.crew.editor_vfx)?.name ?? "غير محدد"}. الأبطال: ${project.cast.leads.map((id) => db.actors.find((actor) => actor.id === id)?.name).filter(Boolean).join("، ")}. الخصم: ${db.actors.find((actor) => actor.id === project.cast.antagonist)?.name ?? "غير محدد"}. المساعدون: ${project.cast.supporting.map((id) => db.actors.find((actor) => actor.id === id)?.name).filter(Boolean).join("، ")}. إحصائيات الأبطال: ${project.cast.leads.map((id) => { const actor = db.actors.find((entry) => entry.id === id); return actor ? `${actor.name}: تمثيل ${actor.stats.acting}, كاريزما ${actor.stats.charisma}, سحب جماهيري ${actor.stats.box_office_pull}` : ""; }).filter(Boolean).join(" | ")}.` ,
       };
       let result: EvaluationResult;
       let provider = "local";
@@ -491,26 +591,28 @@ export function GameShell() {
         if (!response.ok) throw new Error("تعذر الاتصال بمحرك الذكاء الاصطناعي");
         const data = await response.json(); provider = data.provider ?? "local"; result = provider === "local" ? localEvaluation(project, db.actors, db.crew, project.hype) : data.data as EvaluationResult;
       } catch { result = localEvaluation(project, db.actors, db.crew, project.hype); provider = "local"; }
-      result = { ...result, critics_score: Math.max(0, Math.min(10, result.critics_score + project.qualityModifier * 0.06)), audience_score: Math.max(0, Math.min(10, result.audience_score + project.hype * 0.02)) };
-      const platformCapacity = db.streaming_platforms.find((p) => p.id === project.platformId)?.budget_capacity ?? 50;
-      const licensingRevenue = platformCapacity * (project.format === "series" ? 190000 : 85000);
-      const revenue = calculateRevenue(project, result, db.actors, studio) + licensingRevenue;
-      const backendRate = Math.min(0.28, project.contracts.reduce((sum, contract) => sum + contract.backendPoints, 0) / 240);
-      const backendPayout = Math.round(revenue * backendRate);
+      result = { ...result, critics_score: Math.max(0, Math.min(10, result.critics_score + project.qualityModifier * 0.02)), audience_score: Math.max(0, Math.min(10, result.audience_score + project.hype * 0.012)) };
+      const platform = db.streaming_platforms.find((p) => p.id === project.platformId);
+      const platformCapacity = platform?.budget_capacity ?? 50;
+      const licensingRevenue = Math.round(platformCapacity * (project.format === "series" ? 800_000 : 350_000) * (project.marketingStrategy === "digital" ? 1.03 : 1));
+      const boxOfficeTarget = calculateRevenue(project, result, db.actors, studio);
+      const backendRate = Math.min(0.22, project.contracts.reduce((sum, contract) => sum + contract.backendPoints, 0) / 300);
+      const backendPayout = Math.round(boxOfficeTarget * backendRate);
       const rivalCount = Math.min(db.competitor_studios.length, 2 + (Math.random() > 0.52 ? 1 : 0));
       const rivalReleases = [...db.competitor_studios].sort(() => Math.random() - 0.5).slice(0, rivalCount).map((rival) => {
-        const genreFactor = rival.preferred_genres.includes(project.primaryGenre) ? 1.16 : 0.88;
-        const marketStrength = 0.48 + rival.market_power / 165;
-        const seasonalSwing = 0.72 + Math.random() * 0.56;
-        return { studioName: rival.name, boxOffice: Math.round(revenue * marketStrength * genreFactor * seasonalSwing) };
+        const genreFactor = rival.preferred_genres.includes(project.primaryGenre) ? 1.08 : 0.91;
+        const marketStrength = 0.55 + rival.market_power / 210;
+        const seasonalSwing = 0.82 + Math.random() * 0.36;
+        const rivalTarget = Math.round(boxOfficeTarget * marketStrength * genreFactor * seasonalSwing);
+        return { studioName: rival.name, boxOffice: Math.round(rivalTarget * 0.1), revenueTarget: rivalTarget, dailyGross: 0.04 };
       });
-      const openingGross = Math.round(revenue * 0.12);
-      const released: Project = { ...project, status: "released", result, boxOffice: openingGross, revenueTarget: revenue, dailyGross: 0.055, releaseDay: gameDay, backendPayout, rivalReleases: rivalReleases.map((rival) => ({ ...rival, revenueTarget: rival.boxOffice, boxOffice: Math.round(rival.boxOffice * 0.12), dailyGross: 0.05 })) };
+      const openingGross = Math.round(boxOfficeTarget * 0.10);
+      const released: Project = { ...project, status: "released", result, boxOffice: openingGross, revenueTarget: boxOfficeTarget, licensingRevenue, dailyGross: 0.048, releaseDay: gameDay, backendPayout, rivalReleases };
       updateProject(project.id, released);
-      addCash(openingGross - Math.round(backendPayout * 0.12));
+      addCash(openingGross - Math.round(backendPayout * 0.10) + licensingRevenue);
       useGameStore.setState((state) => ({ studio: state.studio ? { ...state.studio, reputation: Math.min(100, state.studio.reputation + (result.critics_score >= 7.5 ? 5 : 2)) } : state.studio }));
-      addHistory({ year, kind: "release", text: `صدر ${project.format === "film" ? "فيلم" : "مسلسل"} ${project.title}: تقييم النقاد ${result.critics_score}/10، الجمهور ${result.audience_score}/10، وإيرادات افتتاحية ${money(openingGross)}، والهدف المتوقع ${money(revenue)}. يبدأ تتبع الشباك يومًا بيوم.` });
-      setResultToast(provider === "local" ? "استخدمنا محرك التقييم المحلي؛ أضف مفاتيح Groq أو Gemini لتفعيل التقييم التوليدي." : `تم التقييم بواسطة ${provider === "groq" ? "Groq" : "Gemini"}.`);
+      addHistory({ year, kind: "release", text: `صدر ${project.format === "film" ? "فيلم" : "مسلسل"} ${project.title}: تقييم النقاد ${result.critics_score}/10، الجمهور ${result.audience_score}/10، وإيرادات البداية ${money(openingGross)}، والهدف المتوقع ${money(boxOfficeTarget)}. يبدأ تتبع ${project.format === "film" ? "الشباك" : "إيرادات العرض"} يومًا بيوم.` });
+      setResultToast(provider === "local" ? "Groq غير متاح حاليًا؛ تم استخدام تقييم احتياطي متحفظ. راجع GROQ_API_KEY في إعدادات الاستضافة." : "تم تحليل العمل بواسطة Groq اعتمادًا على ملخص السيناريو والطاقم والسوق.");
       setScreen("results"); setActiveProject(project.id);
     } catch {
       setResultToast("حصلت مشكلة أثناء تجهيز تقرير الطرح. لم نغيّر حالة المشروع؛ أعد المحاولة.");
@@ -518,6 +620,45 @@ export function GameShell() {
       setBusyAi(false);
     }
   }
+  function terminateLeadContract(project: Project, memberId: string) {
+    if (project.status !== "draft" || !project.leadSelectionDone || !project.cast.leads.includes(memberId)) return;
+    const contracts = project.contracts
+      .filter((contract) => contract.memberId !== memberId)
+      .map((contract) => contract.role === "lead" ? { ...contract, role: "lead_candidate" } : contract);
+    const leads = project.cast.leads.filter((id) => id !== memberId);
+    updateProject(project.id, { contracts, cast: { ...project.cast, leads }, leadCandidates: leads, leadSelectionDone: false });
+    setReplacementLeadChoice("");
+    setToast("تم فسخ العقد. اختار مرشح بديل من السوق لإرسال عرض جديد.");
+  }
+
+  function offerReplacementLead(project: Project) {
+    const actor = db.actors.find((entry) => entry.id === replacementLeadChoice);
+    if (!actor || project.contracts.some((contract) => contract.memberId === actor.id)) { setToast("اختار ممثل متاح مش موجود في عقود المشروع."); return; }
+    if ((project.leadCandidates?.length ?? project.cast.leads.length) >= 4) { setToast("وصلت للحد الأقصى: 4 مرشحين بطولة. احسم الاختيار أو فسخ عقدًا قبل إضافة اسم جديد."); return; }
+    const founderFactor = studio?.perk === "negotiator" ? 0.85 : 1;
+    const contract = { memberId: actor.id, memberName: actor.name, role: "lead_candidate", baseSalary: actor.base_salary, negotiatedSalary: Math.round(actor.base_salary * founderFactor), backendPoints: 4, ego: actor.stats.ego ?? 0, response: "pending" as const, responseDay: gameDay + 1 };
+    updateProject(project.id, { contracts: [...project.contracts, contract], leadCandidates: [...(project.leadCandidates ?? project.cast.leads), actor.id], leadSelectionDone: false });
+    setReplacementLeadChoice("");
+    addHistory({ year, kind: "business", text: `أُرسل عرض بطولة بديل إلى ${actor.name} بعد فسخ عقد أحد أبطال ${project.title}.` });
+    setToast(`اترسل عرض البطولة إلى ${actor.name}. الرد خلال يوم لعبة.`);
+  }
+
+  function confirmLeadSelection() {
+    if (!leadSelection) return;
+    const project = useGameStore.getState().projects.find((entry) => entry.id === leadSelection.projectId);
+    if (!project) { setLeadSelection(null); return; }
+    const accepted = project.contracts.filter((contract) => contract.role === "lead_candidate" && contract.response === "accepted");
+    const selected = uniq(leadSelection.selected).filter((id) => accepted.some((contract) => contract.memberId === id));
+    if (selected.length !== 2) { setToast("لازم تختار بطلين بالضبط من المرشحين اللي وافقوا."); return; }
+    const contracts = project.contracts
+      .filter((contract) => contract.role !== "lead_candidate" || selected.includes(contract.memberId))
+      .map((contract) => contract.role === "lead_candidate" ? { ...contract, role: "lead", backendPoints: 4 } : contract);
+    updateProject(project.id, { leadCandidates: selected, leadSelectionDone: true, cast: { ...project.cast, leads: selected }, contracts });
+    addHistory({ year, kind: "business", text: `اختارت إدارة ${studio?.name ?? "الاستوديو"} بطلي ${project.title}: ${accepted.filter((contract) => selected.includes(contract.memberId)).map((contract) => contract.memberName).join(" و")}.` });
+    setLeadSelection(null);
+    setToast("تم تثبيت البطلين. باقي الترشيحات اتقفلت ومش هتتحسب ضمن العقود.");
+  }
+
   async function shareResult() {
     if (!shareRef.current) return;
     try {
@@ -535,7 +676,7 @@ export function GameShell() {
     setToast(`تم فتح ${MARKET_LABELS[target]}!`);
   }
   async function runAwards() {
-    if (week < 52) { setToast("حفل الجوائز السنوي يُقام في الأسبوع 52 من كل عام."); return; }
+    if (week < 52) { setToast("حفل الجوائز السنوي يُقام في الأسبوع الأخير من كل عام."); return; }
     if (worldHistory.some((entry) => entry.kind === "award" && entry.year === year)) { setToast("أُقيم حفل هذا العام بالفعل. نلتقي في الموسم القادم."); return; }
     const released = projects.filter((p) => p.status === "released" && p.result);
     if (!released.length) { setToast("لا توجد أعمال مطروحة لتدخل سباق الجوائز بعد."); return; }
@@ -584,11 +725,12 @@ export function GameShell() {
     { id: "leaderboard", label: "لوحة المتصدرين", icon: BarChart3 }, { id: "settings", label: "الإعدادات والبيانات", icon: Settings },
   ];
   const projectsReleased = projects.filter((p) => p.status === "released");
-  const totalRevenue = projectsReleased.reduce((sum, p) => sum + (p.boxOffice ?? 0), 0);
+  const totalRevenue = projectsReleased.reduce((sum, p) => sum + (p.boxOffice ?? 0) + (p.licensingRevenue ?? 0), 0);
     const rosterActors = db.actors;
   const actorOptions = rosterActors.map((actor) => ({ value: actor.id, label: `${actor.name} · ${actor.stats.overall} OVR` }));
   const crewOptions = (role: CrewMember["role"]) => db.crew.filter((member) => member.role === role).map((member) => ({ value: member.id, label: `${member.name} · ${member.stats.overall} OVR` }));
-  const formCastIds = uniq([form.lead1, form.lead2, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2]);
+  const formLeadCandidates = uniq([form.lead1, form.lead2, form.lead3, form.lead4]);
+  const formCastIds = uniq([...formLeadCandidates, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2]);
   const formCrewIds = uniq([form.director, form.writer1, form.writer2, form.cinematographer, form.composer, form.editor]);
   const founderSalaryFactor = studio?.perk === "negotiator" ? .85 : 1;
   const estimatedSalary = rosterActors.filter((actor) => formCastIds.includes(actor.id)).reduce((sum, actor) => sum + actor.base_salary * founderSalaryFactor * (actor.id === negotiationTarget ? 1 - draftDiscount : 1), 0)
@@ -640,24 +782,31 @@ export function GameShell() {
   // The outer setup gate above guarantees a studio for every in-game screen.
   // Capture the narrowed value so nested render functions retain the non-null type.
   const activeStudio = studio;
+  const elapsedSinceDayStart = Math.max(0, clockNow - (lastTickAt || clockNow));
+  const gameMinutesInDay = Math.floor((elapsedSinceDayStart / 60_000) * 1_440) % 1_440;
+  const gameClock = `${String(Math.floor(gameMinutesInDay / 60)).padStart(2, "0")}:${String(gameMinutesInDay % 60).padStart(2, "0")}`;
+  const gameCalendarDate = new Date(Date.UTC(2026, 0, 1) + (gameDay - 1) * 86_400_000);
+  const gameMonth = new Intl.DateTimeFormat("ar-EG", { month: "short", timeZone: "UTC" }).format(gameCalendarDate);
+  const gameDayOfMonth = gameCalendarDate.getUTCDate();
 
   function renderOverview() {
     return <>
-      <PageHeading kicker="EXECUTIVE CONTROL ROOM" title={`صباح السينما، ${activeStudio.ceo}`} desc={`أنت الآن تقود ${activeStudio.name}. كل أسبوع يفتح فرصة أو يصنع أزمة.`} action={<button className="btn btn-gold" onClick={() => { setForm(initialForm); setDraftDiscount(0); setCreateStep("concept"); setScreen("create"); }}><Plus size={16}/> إنتاج عمل جديد</button>}/>
+      <PageHeading kicker="EXECUTIVE CONTROL ROOM" title={`صباح السينما، ${activeStudio.ceo}`} desc={`أنت الآن تقود ${activeStudio.name}. كل يوم يغيّر السوق ويترك أثرًا على إمبراطوريتك.`} action={<button className="btn btn-gold" onClick={() => { setForm(initialForm); setDraftDiscount(0); setCreateStep("concept"); setLeadSelection(null); setScreen("create"); }}><Plus size={16}/> إنتاج عمل جديد</button>}/>
+      <section className="command-hero"><div className="command-hero-glow"/><div className="command-hero-top"><span><span className="command-live-dot"/> LIVE INDUSTRY SIMULATION</span><span>{MARKET_LABELS[activeStudio.market]}</span></div><div className="command-hero-main"><div><div className="command-hero-kicker">THE INDUSTRY NEVER STOPS</div><h2>السوق بيتحرك.<br/><span>وقراراتك بتصنع الفرق.</span></h2><p>كل دقيقة حقيقية بتعدّي بيوم كامل في عالم Hyptrix. التعاقدات، التصوير، الأزمات، المنافسة والإيرادات شغالة حتى وإنت بتتنقل بين الشاشات.</p></div><div className="command-clock-card"><div className="command-clock-label">WORLD STANDARD TIME</div><strong dir="ltr">{gameClock}</strong><div>اليوم {gameDay} · {gameDayOfMonth} {gameMonth} · الأسبوع {week}</div><small>السنة السينمائية {year}</small></div></div><div className="command-hero-bottom"><span><b>{projects.filter((project) => project.status === "production").length}</b> إنتاج شغال</span><span><b>{projects.filter((project) => project.status === "marketing").length}</b> حملات تسويق</span><span><b>{projects.filter((project) => project.status === "released").length}</b> أعمال في السوق</span></div></section>
       <div className="dashboard-metrics grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Metric label="السيولة المتاحة" value={money(activeStudio.cash)} foot="جنيه مصري · نقد متاح" icon={Wallet}/>
         <Metric label="إجمالي إيرادات الأعمال" value={money(totalRevenue)} foot={`${projectsReleased.length} إصدار مطروح`} icon={Banknote} tone="green"/>
         <Metric label="سمعة الشركة" value={`${activeStudio.reputation}/100`} foot="تفتح أسواقًا ومهرجانات" icon={Star}/>
-        <Metric label="الأسبوع / السنة" value={`${week} / ${year}`} foot={MARKET_LABELS[activeStudio.market]} icon={CalendarDays}/>
+        <Metric label="اليوم داخل العالم" value={`${gameDay}`} foot={`الأسبوع ${week} · سنة ${year}`} icon={CalendarDays}/>
       </div>
       <div className="grid lg:grid-cols-[1.35fr_.65fr] gap-4 mt-4">
         <div className="panel p-5">
           <div className="flex items-start justify-between"><div><div className="section-kicker">STUDIO PORTFOLIO</div><h3 className="section-title mt-1">أعمال الاستوديو</h3><p className="section-sub">ملفات الإنتاج، الحالة الحالية، والعوائد المحققة.</p></div><button className="btn btn-outline" onClick={() => setScreen("create")}><Plus size={14}/> عمل جديد</button></div>
-          {projects.length === 0 ? <div className="empty-state mt-5"><Clapperboard size={27} className="mx-auto gold-text"/><div className="text-sm font-black text-white mt-3">أول كرسي مخرج ينتظرك</div><p className="text-xs mt-2">ابدأ بأول فيلم أو مسلسل، وابنِ طاقمك بحساب.</p><button className="btn btn-gold mt-4" onClick={() => setScreen("create")}>إنشاء أول مشروع <ArrowIcon/></button></div> : <div className="mt-5 space-y-2">{projects.slice(0, 5).map((p) => <button key={p.id} onClick={() => { setActiveProject(p.id); setScreen(p.status === "released" ? "results" : "production"); }} className="w-full panel-soft p-3 flex items-center gap-3 text-right hover:border-amber-300/30 transition"><div className="w-10 h-10 rounded-xl bg-amber-300/10 grid place-items-center text-amber-300"><Film size={18}/></div><div className="flex-1 min-w-0"><div className="text-xs font-black truncate">{p.title}</div><div className="text-[9px] text-muted mt-1">{p.format === "film" ? "فيلم سينمائي" : `مسلسل · ${p.episodes} حلقة`} · {labelGenre(p.primaryGenre)}</div></div><span className={`tag ${p.status === "released" ? "tag-gold" : ""}`}>{p.status === "released" ? "مطروح" : p.status === "post" ? "ما بعد الإنتاج" : p.status === "production" ? "قيد التصوير" : "بانتظار الطاقم"}</span>{p.boxOffice ? <b className="text-xs gold-text">{money(p.boxOffice)}</b> : null}</button>)}</div>}
+          {projects.length === 0 ? <div className="empty-state mt-5"><Clapperboard size={27} className="mx-auto gold-text"/><div className="text-sm font-black text-white mt-3">أول كرسي مخرج ينتظرك</div><p className="text-xs mt-2">ابدأ بأول فيلم أو مسلسل، وابنِ طاقمك بحساب.</p><button className="btn btn-gold mt-4" onClick={() => setScreen("create")}>إنشاء أول مشروع <ArrowIcon/></button></div> : <div className="mt-5 space-y-2">{projects.slice(0, 5).map((p) => <button key={p.id} onClick={() => { setActiveProject(p.id); setScreen(p.status === "released" ? "results" : "production"); }} className="w-full panel-soft p-3 flex items-center gap-3 text-right hover:border-amber-300/30 transition"><div className="w-10 h-10 rounded-xl bg-amber-300/10 grid place-items-center text-amber-300"><Film size={18}/></div><div className="flex-1 min-w-0"><div className="text-xs font-black truncate">{p.title}</div><div className="text-[9px] text-muted mt-1">{p.format === "film" ? "فيلم سينمائي" : `مسلسل · ${p.episodes} حلقة`} · {labelGenre(p.primaryGenre)}</div></div><span className={`tag ${p.status === "released" ? "tag-gold" : ""}`}>{p.status === "released" ? "مطروح" : p.status === "marketing" ? "التسويق" : p.status === "post" ? "ما بعد الإنتاج" : p.status === "production" ? "قيد التصوير" : "بانتظار الطاقم"}</span>{p.boxOffice ? <b className="text-xs gold-text">{money(p.boxOffice)}</b> : null}</button>)}</div>}
         </div>
         <div className="space-y-4">
           <div className="panel p-5"><div className="flex items-center gap-3"><div className="logo-stage !min-h-0 w-16 h-16 shrink-0"><LogoMark {...activeStudio.logo} size={58}/></div><div className="min-w-0"><div className="text-[9px] text-muted">PRODUCTION HOUSE</div><div className="text-sm font-black truncate mt-1">{activeStudio.name}</div><div className="text-[10px] text-muted mt-1">الرئيس التنفيذي: {activeStudio.ceo}</div></div></div><div className="divider"/><div className="flex items-center justify-between"><span className="text-[10px] text-muted">السوق الحالي</span><span className="tag tag-gold">{MARKET_LABELS[activeStudio.market]}</span></div><div className="mt-4 space-y-3">{MARKET_REQUIREMENTS.map((m) => { const unlocked = activeStudio.cash >= m.cash && activeStudio.reputation >= m.rep; const already = ["egypt", "gulf", "europe", "hollywood"].indexOf(activeStudio.market) >= ["egypt", "gulf", "europe", "hollywood"].indexOf(m.key); return <div key={m.key} className="flex items-center gap-2"><div className="flex-1"><div className="flex justify-between text-[10px]"><span>{MARKET_LABELS[m.key]}</span><span className="text-muted">{m.tagline}</span></div><div className="progress-track mt-1.5"><span style={{ width: `${Math.min(100, Math.max(activeStudio.cash / m.cash * 65, activeStudio.reputation / m.rep * 35))}%` }}/></div></div>{already ? <CheckCircle2 size={15} className="green-text"/> : <button disabled={!unlocked} onClick={() => unlockMarket(m.key)} className="btn btn-outline !px-2 !min-h-7 !text-[9px]">فتح</button>}</div>; })}</div></div>
-          <div className="panel p-5"><div className="flex items-center gap-2"><Activity size={16} className="gold-text"/><h3 className="section-title">نبض السوق</h3></div><p className="section-sub">كل دقيقة حقيقية تساوي يومًا داخل عالم اللعبة.</p><div className="flex items-center justify-between mt-4"><div><div className="text-2xl font-black">اليوم {gameDay}<span className="text-sm text-muted"> · W{week} / 52</span></div><div className="text-[9px] text-muted">السنة {year}</div></div><span className="tag">دقيقة حقيقية = يوم</span></div><div className="progress-track mt-3"><span style={{ width: `${week / 52 * 100}%` }}/></div></div>
+          <div className="panel p-5"><div className="flex items-center gap-2"><Activity size={16} className="gold-text"/><h3 className="section-title">نبض السوق</h3></div><p className="section-sub">كل دقيقة حقيقية تساوي يومًا داخل عالم اللعبة.</p><div className="flex items-center justify-between mt-4"><div><div className="text-2xl font-black" dir="ltr">{gameClock}</div><div className="text-[9px] text-muted mt-1">اليوم {gameDay} · {gameDayOfMonth} {gameMonth} · الأسبوع {week} · السنة {year}</div></div><span className="tag">دقيقة حقيقية = يوم</span></div><div className="progress-track mt-3"><span style={{ width: `${Math.min(100, week / 52 * 100)}%` }}/></div></div>
         </div>
       </div>
       <div className="panel p-5 mt-4"><div className="flex items-center justify-between gap-3"><div><div className="section-kicker">WORLD HISTORY / MEMORY</div><h3 className="section-title mt-1">ذاكرة عالم السينما</h3><p className="section-sub">الأحداث السابقة تُرسل كسياق تراكمي إلى محرك التقييم.</p></div><span className="tag">{worldHistory.length} حدث مسجل</span></div>{worldHistory.length ? <div className="mt-4 space-y-2 max-h-48 overflow-auto">{worldHistory.slice(0, 5).map((entry, i) => <div key={`${entry.year}-${i}`} className="flex items-start gap-3 text-[11px]"><span className="text-[9px] gold-text font-black pt-0.5">{entry.year}</span><p className="text-muted leading-6">{entry.text}</p></div>)}</div> : <p className="text-xs text-muted mt-4">سجل التاريخ فارغ. أول قرار تجاري أو عرض سينمائي سيبدأ كتابة الحكاية.</p>}</div>
@@ -680,17 +829,21 @@ export function GameShell() {
           {createStep === "concept" && <section className="panel p-5"><div className="flex items-center gap-2"><Sparkles className="text-violet-500"/><h3 className="section-title">ملف الفكرة جاهز للعرض</h3></div><p className="section-sub">راجع العنوان والحبكة والتصنيف. الخطوة التالية تفتح لك كتالوج المخرجين والمؤلفين والممثلين.</p><button className="btn btn-gold w-full mt-4" disabled={!form.title.trim() || form.summary.trim().length < 30} onClick={() => setCreateStep("casting")}>اعتماد الفكرة واختيار الطاقم <ChevronDown size={16}/></button></section>}
           {createStep === "casting" && <><section className="panel p-5"><div className="flex items-center gap-2"><Users size={17} className="gold-text"/><h3 className="section-title">02 — تشكيل فريق العمل (FC Cards)</h3></div><p className="section-sub">كوّن ورشة فنية وطاقم تمثيل متوازن. الحد الأدنى خمسة ممثلين.</p>
             <div className="mt-4"><div className="text-xs font-black mb-2 gold-text">كتالوج المخرجين والمؤلفين والطاقم</div><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">{db.crew.map((member) => <CrewCard key={member.id} member={member} selected={formCrewIds.includes(member.id)} onClick={() => { if (member.role === "director") changeForm("director", member.id); else if (member.role === "screenwriter") { if (!form.writer1 || form.writer1 === member.id) changeForm("writer1", member.id); else changeForm("writer2", member.id); } else if (member.role === "cinematographer") changeForm("cinematographer", member.id); else if (member.role === "composer") changeForm("composer", member.id); else changeForm("editor", member.id); }}/>)}</div></div>
-            <div className="mt-5"><div className="text-xs font-black mb-2 gold-text">كتالوج الممثلين بالكامل</div><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">{db.actors.map((actor) => <ActorCard key={actor.id} actor={actor} selected={formCastIds.includes(actor.id)} onClick={() => { if (!form.lead1 || form.lead1 === actor.id) { changeForm("lead1", actor.id); setNegotiationTarget(actor.id); } else if (!form.lead2 || form.lead2 === actor.id) changeForm("lead2", actor.id); else if (!form.support1 || form.support1 === actor.id) changeForm("support1", actor.id); else if (!form.support2 || form.support2 === actor.id) changeForm("support2", actor.id); else if (!form.antagonist || form.antagonist === actor.id) changeForm("antagonist", actor.id); else setToast("اكتملت خانات التمثيل الأساسية. استخدم القوائم لتغيير الأدوار أو إضافة ضيوف الشرف."); }}/>)}</div><p className="text-[9px] text-muted mt-2">اضغط على بطاقة لتعيينها تلقائيًا في خانة الدور المتاحة التالية، ويمكنك ضبط الدور بدقة من القوائم بالأسفل.</p></div>
+            <div className="mt-5"><div className="text-xs font-black mb-2 gold-text">كتالوج الممثلين بالكامل</div><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">{db.actors.map((actor) => <ActorCard key={actor.id} actor={actor} selected={formCastIds.includes(actor.id)} onClick={() => {
+              if (formCastIds.includes(actor.id)) { setToast("الفنان موجود بالفعل في التشكيل. استخدم قوائم الأدوار لتبديله."); return; }
+              if (formLeadCandidates.length < 2) { const slot = (["lead1", "lead2"] as const).find((key) => !form[key]); if (slot) { changeForm(slot, actor.id); setNegotiationTarget(actor.id); return; } }
+              if (!form.antagonist) changeForm("antagonist", actor.id); else if (!form.support1) changeForm("support1", actor.id); else if (!form.support2) changeForm("support2", actor.id); else if (!form.support3) changeForm("support3", actor.id); else if (!form.support4) changeForm("support4", actor.id); else if (!form.cameo1) changeForm("cameo1", actor.id); else if (!form.cameo2) changeForm("cameo2", actor.id); else setToast("اكتملت خانات التمثيل. غيّر الأدوار من القوائم لو عايز تبدّل الاختيارات.");
+            }}/>)}</div><p className="text-[9px] text-muted mt-2">اختار بطلين أساسيين من البطاقات. لو عايز ترشح اسم ثالث أو رابع للمنافسة على البطولة، استخدم القائمتين الاختياريتين تحت. بعد الردود هتختار بطلين نهائيين فقط.</p></div>
             <div className="mt-4"><div className="text-xs font-black mb-2 gold-text">الطاقم الفني خلف الكاميرا</div><div className="grid sm:grid-cols-2 gap-3"><SelectField label="المخرج — إجباري" value={form.director} onChange={(v) => changeForm("director", v)} options={crewOptions("director")}/><SelectField label="المؤلف الأول — إجباري" value={form.writer1} onChange={(v) => changeForm("writer1", v)} options={crewOptions("screenwriter")}/><SelectField label="المؤلف الثاني — اختياري" value={form.writer2} onChange={(v) => changeForm("writer2", v)} options={crewOptions("screenwriter")}/><SelectField label="مدير التصوير" value={form.cinematographer} onChange={(v) => changeForm("cinematographer", v)} options={crewOptions("cinematographer")}/><SelectField label="الموسيقار" value={form.composer} onChange={(v) => changeForm("composer", v)} options={crewOptions("composer")}/><SelectField label="المونتير / مشرف VFX" value={form.editor} onChange={(v) => changeForm("editor", v)} options={crewOptions("editor_vfx")}/></div></div>
-            <div className="divider"/><div className="text-xs font-black mb-2 gold-text">التمثيل — الأدوار الرئيسية والمساندة</div><div className="grid sm:grid-cols-2 gap-3"><SelectField label="البطل / النجمة الأولى" value={form.lead1} onChange={(v) => { changeForm("lead1", v); setNegotiationTarget(v); }} options={actorOptions}/><SelectField label="البطل الثاني — اختياري" value={form.lead2} onChange={(v) => changeForm("lead2", v)} options={actorOptions}/><SelectField label="الشرير الرئيسي / الخصم" value={form.antagonist} onChange={(v) => changeForm("antagonist", v)} options={actorOptions}/><SelectField label="دور مساعد 1" value={form.support1} onChange={(v) => changeForm("support1", v)} options={actorOptions}/><SelectField label="دور مساعد 2" value={form.support2} onChange={(v) => changeForm("support2", v)} options={actorOptions}/><SelectField label="دور مساعد 3 — اختياري" value={form.support3} onChange={(v) => changeForm("support3", v)} options={actorOptions}/><SelectField label="دور مساعد 4 — اختياري" value={form.support4} onChange={(v) => changeForm("support4", v)} options={actorOptions}/><SelectField label="ضيف شرف 1 — اختياري" value={form.cameo1} onChange={(v) => changeForm("cameo1", v)} options={actorOptions}/><SelectField label="ضيف شرف 2 — اختياري" value={form.cameo2} onChange={(v) => changeForm("cameo2", v)} options={actorOptions}/></div>
+            <div className="divider"/><div className="text-xs font-black mb-2 gold-text">التمثيل — الأدوار الرئيسية والمساندة</div><div className="grid sm:grid-cols-2 gap-3"><SelectField label="مرشح بطولة 1" value={form.lead1} onChange={(v) => { changeForm("lead1", v); setNegotiationTarget(v); }} options={actorOptions.filter((o) => ![form.lead2, form.lead3, form.lead4, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2].includes(o.value))}/><SelectField label="مرشح بطولة 2" value={form.lead2} onChange={(v) => changeForm("lead2", v)} options={actorOptions.filter((o) => ![form.lead1, form.lead3, form.lead4, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2].includes(o.value))}/><SelectField label="مرشح بطولة 3 — اختياري" value={form.lead3} onChange={(v) => changeForm("lead3", v)} options={actorOptions.filter((o) => ![form.lead1, form.lead2, form.lead4, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2].includes(o.value))}/><SelectField label="مرشح بطولة 4 — اختياري" value={form.lead4} onChange={(v) => changeForm("lead4", v)} options={actorOptions.filter((o) => ![form.lead1, form.lead2, form.lead3, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2].includes(o.value))}/><SelectField label="الشرير الرئيسي / الخصم" value={form.antagonist} onChange={(v) => changeForm("antagonist", v)} options={actorOptions.filter((o) => !formLeadCandidates.includes(o.value) || o.value === form.antagonist)}/><SelectField label="دور مساعد 1" value={form.support1} onChange={(v) => changeForm("support1", v)} options={actorOptions.filter((o) => !formLeadCandidates.includes(o.value) || o.value === form.support1)}/><SelectField label="دور مساعد 2" value={form.support2} onChange={(v) => changeForm("support2", v)} options={actorOptions.filter((o) => !formLeadCandidates.includes(o.value) || o.value === form.support2)}/><SelectField label="دور مساعد 3 — اختياري" value={form.support3} onChange={(v) => changeForm("support3", v)} options={actorOptions.filter((o) => !formLeadCandidates.includes(o.value) || o.value === form.support3)}/><SelectField label="دور مساعد 4 — اختياري" value={form.support4} onChange={(v) => changeForm("support4", v)} options={actorOptions.filter((o) => !formLeadCandidates.includes(o.value) || o.value === form.support4)}/><SelectField label="ضيف شرف 1 — اختياري" value={form.cameo1} onChange={(v) => changeForm("cameo1", v)} options={actorOptions.filter((o) => !formLeadCandidates.includes(o.value) || o.value === form.cameo1)}/><SelectField label="ضيف شرف 2 — اختياري" value={form.cameo2} onChange={(v) => changeForm("cameo2", v)} options={actorOptions.filter((o) => !formLeadCandidates.includes(o.value) || o.value === form.cameo2)}/></div>
             <div className="grid sm:grid-cols-[1fr_auto] gap-3 items-end mt-4"><SelectField label="النجم المستهدف بالتفاوض" value={negotiationTarget} onChange={setNegotiationTarget} options={actorOptions.filter((option) => formCastIds.includes(option.value))}/><button className="btn btn-outline" onClick={() => triggerContextReward("vip_dinner", () => { setDraftDiscount(.2); setToast("تم تخفيض أجر النجم المختار 20% عبر عزومة VIP."); })}><HeartHandshake size={15}/> عزومة عشاء VIP لتخفيض الأجر 20%</button></div><div className="mt-2"><span className="tag">{formCastIds.length} ممثل في التشكيل</span></div>
-            {draftDiscount > 0 && <div className="notice notice-success mt-3"><CheckCircle2 size={15}/><p>خصم تفاوضي مُفعّل: 20% من أجر الممثلين في تقدير المشروع.</p></div>}
+            {draftDiscount > 0 && <div className="notice notice-success mt-3"><CheckCircle2 size={15}/><p>خصم تفاوضي مُفعّل: 20% من أجر النجم المختار فقط.</p></div>}
             {detectEgoRisk({ id: "preview", title: "", summary: "", format: "film", episodes: 0, season: "off_season", primaryGenre: form.primaryGenre, secondaryGenre: form.secondaryGenre, ageRating: "16+", crew: { director: form.director, writers: [form.writer1], cinematographer: form.cinematographer, composer: form.composer, editor_vfx: form.editor }, cast: { leads: [form.lead1, form.lead2], antagonist: form.antagonist, supporting: [form.support1, form.support2, form.support3, form.support4], cameos: [form.cameo1, form.cameo2] }, budget: form.budget, marketingBudget: form.marketingBudget, releaseSeason: form.releaseSeason, screens: form.screens, platformId: form.platformId, status: "draft", productionProgress: 0, crises: [], hype: 0, qualityModifier: 0, negotiationDiscount: draftDiscount, contracts: [], createdYear: year }, db.actors) && <div className="notice notice-error mt-3"><Shield size={15}/><p>خطر غرور مرتفع: يوجد نجمان من أصحاب Ego أعلى من 90 في الأدوار الرئيسية. خلاف محتمل على ترتيب الأسماء والبوستر.</p></div>}
             <div className="mt-4"><div className="text-[10px] text-muted mb-2">معاينة بطاقات الطاقم الفني</div><div className="grid grid-cols-2 md:grid-cols-3 gap-2">{db.crew.filter((member) => formCrewIds.includes(member.id)).map((member) => <CrewCard key={member.id} member={member}/>)}</div><div className="text-[10px] text-muted mb-2 mt-4">معاينة بطاقات الأبطال</div><div className="grid grid-cols-2 md:grid-cols-4 gap-2">{db.actors.filter((actor) => formCastIds.includes(actor.id)).slice(0, 4).map((actor) => <ActorCard key={actor.id} actor={actor}/>)}</div></div>
           </section>
           </>}
         </div>
-        <aside className="create-summary space-y-4 xl:sticky xl:top-24"><div className="panel p-5"><div className="section-kicker">GREENLIGHT SUMMARY</div><h3 className="section-title mt-1">ملف القرار</h3><div className="poster-card mt-4 !min-h-[190px]"><LogoMark {...activeStudio.logo} size={58}/><div className="text-[9px] tracking-[.25em] gold-text mt-3">A {activeStudio.name.toUpperCase()} PRODUCTION</div><div className="poster-title mt-3">{form.title || "عنوان العمل"}</div><div className="text-[9px] text-muted mt-3">{labelGenre(form.primaryGenre)} / {labelGenre(form.secondaryGenre)}</div></div><div className="divider"/><div className="flex justify-between text-[11px]"><span className="text-muted">الأجور التعاقدية التقديرية</span><b className="gold-text">{money(estimatedSalary)}</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">الميزانية</span><b>بعد موافقة الطاقم</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">عدد الممثلين</span><b>{formCastIds.length} / 9</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">ملاءمة الأنواع</span><b className={synergy.score > 0 ? "green-text" : "red-text"}>{synergy.label}</b></div><div className="divider"/><div className="flex justify-between text-[11px]"><span className="text-muted">السيولة قبل الميزانية</span><b className={activeStudio.cash >= estimatedSalary ? "green-text" : "red-text"}>{money(activeStudio.cash - estimatedSalary)}</b></div>{createStep === "concept" ? <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={!form.title.trim() || form.summary.trim().length < 30} onClick={() => setCreateStep("casting")}>اعتماد الفكرة واختيار الطاقم <ChevronDown size={16}/></button> : <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={!form.title.trim() || formCastIds.length < 5} onClick={createNewProject}>عرض فكرة الفيلم والتفاوض مع الطاقم <HeartHandshake size={16}/></button>}<p className="text-[9px] text-muted mt-3 leading-5">ستحدد ميزانية الإنتاج والتسويق بعد موافقة جميع أفراد الطاقم، ولن تُخصم أي أموال عند إرسال العروض.</p></div>
+        <aside className="create-summary space-y-4 xl:sticky xl:top-24"><div className="panel p-5"><div className="section-kicker">GREENLIGHT SUMMARY</div><h3 className="section-title mt-1">ملف القرار</h3><div className="poster-card mt-4 !min-h-[190px]"><LogoMark {...activeStudio.logo} size={58}/><div className="text-[9px] tracking-[.25em] gold-text mt-3">A {activeStudio.name.toUpperCase()} PRODUCTION</div><div className="poster-title mt-3">{form.title || "عنوان العمل"}</div><div className="text-[9px] text-muted mt-3">{labelGenre(form.primaryGenre)} / {labelGenre(form.secondaryGenre)}</div></div><div className="divider"/><div className="flex justify-between text-[11px]"><span className="text-muted">الأجور التعاقدية التقديرية</span><b className="gold-text">{money(estimatedSalary)}</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">الميزانية</span><b>بعد موافقة الطاقم</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">عدد الممثلين</span><b>{formLeadCandidates.length} مرشحين بطولة · {formCastIds.length} ممثل</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">ملاءمة الأنواع</span><b className={synergy.score > 0 ? "green-text" : "red-text"}>{synergy.label}</b></div><div className="divider"/><div className="flex justify-between text-[11px]"><span className="text-muted">السيولة قبل الميزانية</span><b className={activeStudio.cash >= estimatedSalary ? "green-text" : "red-text"}>{money(activeStudio.cash - estimatedSalary)}</b></div>{createStep === "concept" ? <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={!form.title.trim() || form.summary.trim().length < 30} onClick={() => setCreateStep("casting")}>اعتماد الفكرة واختيار الطاقم <ChevronDown size={16}/></button> : <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={!form.title.trim() || formCastIds.length < 5 || formLeadCandidates.length < 2 || formLeadCandidates.length > 4} onClick={createNewProject}>عرض فكرة الفيلم والتفاوض مع الطاقم <HeartHandshake size={16}/></button>}<p className="text-[9px] text-muted mt-3 leading-5">ستحدد ميزانية الإنتاج والتسويق بعد موافقة جميع أفراد الطاقم، ولن تُخصم أي أموال عند إرسال العروض.</p></div>
           <div className="panel p-4"><div className="flex items-center gap-2"><Info size={15} className="gold-text"/><span className="text-xs font-black">نصائح مدير الاستوديو</span></div><ul className="text-[10px] text-muted leading-7 mt-2 list-disc pr-4"><li>التوافق بين النوع والمخرج والمؤلف يؤثر في سقف النقاد.</li><li>سحب النجم الجماهيري مؤثر بقوة في افتتاحية الشباك.</li><li>المسلسلات تتطلب بيع الحقوق إلى منصة بميزانية مناسبة.</li></ul></div>
         </aside>
       </div>
@@ -703,7 +856,7 @@ export function GameShell() {
     const cost = estimateCost(project, db.actors, db.crew, studio);
     const openCrisis = project.crises.find((crisis) => !crisis.resolved);
     return <>
-      <PageHeading kicker="PRODUCTION & CRISIS MANAGEMENT" title="غرفة الإنتاج" desc={`متابعة مراحل تنفيذ «${project.title}» والتحكم في الأزمات.`} action={<span className="tag tag-gold">{project.status === "draft" ? "بانتظار موافقات الطاقم" : project.status === "production" ? "التصوير جارٍ" : project.status === "post" ? "ما بعد الإنتاج" : "تم الطرح"}</span>}/>
+      <PageHeading kicker="PRODUCTION & CRISIS MANAGEMENT" title="غرفة الإنتاج" desc={`متابعة مراحل تنفيذ «${project.title}» والتحكم في الأزمات.`} action={<span className="tag tag-gold">{project.status === "draft" ? "بانتظار موافقات الطاقم" : project.status === "production" ? "التصوير جارٍ" : project.status === "post" ? "ما بعد الإنتاج" : project.status === "marketing" ? "الحملة التسويقية" : "تم الطرح"}</span>}/>
       <div className="grid lg:grid-cols-[1fr_300px] gap-4 items-start">
         <div className="space-y-4">
           <section className="panel p-5"><div className="flex items-center gap-3"><div className="logo-stage !min-h-0 w-16 h-16 shrink-0"><LogoMark {...activeStudio.logo} size={57}/></div><div className="min-w-0"><div className="section-kicker">PROJECT FILE / {project.format === "film" ? "FEATURE FILM" : "SERIES"}</div><h2 className="text-xl font-black mt-1 truncate">{project.title}</h2><div className="text-[10px] text-muted mt-1">{labelGenre(project.primaryGenre)} · {labelGenre(project.secondaryGenre)} · {project.ageRating}</div></div></div><div className="divider"/><div className="grid grid-cols-3 gap-2"><div className="panel-soft p-3"><div className="text-[9px] text-muted">تقدم التصوير</div><div className="text-lg font-black gold-text mt-1">{project.productionProgress}%</div></div><div className="panel-soft p-3"><div className="text-[9px] text-muted">الأزمات المتبقية</div><div className="text-lg font-black mt-1">{project.crises.filter((c) => !c.resolved).length}</div></div><div className="panel-soft p-3"><div className="text-[9px] text-muted">ضجة إعلامية</div><div className="text-lg font-black mt-1">{project.hype}</div></div></div><div className="progress-track mt-4 !h-3"><span style={{ width: `${project.productionProgress}%` }}/></div><div className="flex justify-between text-[9px] text-muted mt-2"><span>تجهيز اللوكيشن</span><span>التصوير</span><span>المونتاج والتسليم</span></div>{project.productionStartDay !== undefined && <div className="panel-soft p-3 mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px]"><span className="text-muted">بداية التصوير: اليوم {project.productionStartDay}</span><span className="text-muted">{project.productionEndDay !== undefined ? `انتهى فعليًا في اليوم ${project.productionEndDay}` : `الموعد المخطط: اليوم ${project.plannedEndDay ?? "—"} · متبقي ${Math.max(0, (project.plannedEndDay ?? gameDay) - gameDay)} يوم`}</span></div>}</section>
@@ -715,17 +868,20 @@ export function GameShell() {
               <div className="panel-soft p-3"><div className="text-[9px] text-muted">بانتظار الرد</div><b className="text-xl">{project.contracts.filter((c) => c.response === "pending").length}</b></div>
               <div className="panel-soft p-3"><div className="text-[9px] text-muted">رفضوا</div><b className="text-xl red-text">{project.contracts.filter((c) => c.response === "rejected").length}</b></div>
             </div>
+            <div className="notice notice-info mt-3"><Info size={15}/><p>سوق البطولة يضم {project.leadCandidates?.length ?? 0} مرشحين. الحد النهائي بطلان فقط؛ المرشحون الآخرون لن يُحسبوا في الميزانية بعد الاختيار.</p></div>
             <div className="space-y-2 mt-4">{project.contracts.map((contract) => <div key={contract.memberId} className="panel-soft p-3">
-              <div className="flex items-center justify-between gap-2"><b className="text-xs">{contract.memberName}</b><span className={`tag ${contract.response === "accepted" ? "tag-gold" : ""}`}>{contract.response === "accepted" ? "وافق" : contract.response === "rejected" ? "رفض" : `يرد في اليوم ${contract.responseDay}`}</span></div>
-              <div className="text-[10px] text-muted mt-1">عرض {money(contract.negotiatedSalary)} · {contract.role}</div>
-              {contract.responseReason && <p className="text-xs leading-6 mt-2">{contract.responseReason}</p>}
+              <div className="flex items-center justify-between gap-2"><b className="text-xs">{contract.memberName}</b><div className="flex items-center gap-2"><span className={`tag ${contract.response === "accepted" ? "tag-gold" : ""}`}>{contract.response === "accepted" ? "وافق" : contract.response === "rejected" ? "رفض" : `يرد في اليوم ${contract.responseDay ?? "القادم"}`}</span>{contract.role === "lead_candidate" && contract.response === "rejected" && <button className="text-[9px] text-red-500 font-bold" onClick={() => { const contracts = project.contracts.filter((item) => item.memberId !== contract.memberId); updateProject(project.id, { contracts, leadCandidates: (project.leadCandidates ?? []).filter((id) => id !== contract.memberId), leadSelectionDone: false }); setToast(`اتلغى ترشيح ${contract.memberName}. تقدر تضيف اسم جديد من السوق.`); }}>إلغاء الترشيح</button>}</div></div>
+              <div className="text-[10px] text-muted mt-1">عرض {money(contract.negotiatedSalary)} · {contractRoleLabel(contract.role)}</div>
+              {contract.role === "lead_candidate" && <div className="text-[9px] gold-text mt-1">مرشح بطولة — الاختيار النهائي بعد ردود الوكلاء</div>}{contract.responseReason && <p className="text-xs leading-6 mt-2">{contract.responseReason}</p>}
             </div>)}</div>
             {project.contracts.some((c) => c.response === "rejected") && <button className="btn btn-outline w-full mt-3" onClick={() => {
               const contracts = project.contracts.map((c) => c.response === "rejected" ? { ...c, response: "pending" as const, responseDay: gameDay + 1, responseReason: undefined } : c);
-              updateProject(project.id, { contracts });
+              updateProject(project.id, { contracts, leadSelectionDone: contracts.some((contract) => contract.role === "lead_candidate") ? false : project.leadSelectionDone });
               setToast("أعدنا إرسال العروض المرفوضة. انتظر يومًا داخل اللعبة.");
             }}>إعادة التفاوض مع الرافضين</button>}
-            {project.contracts.length > 0 && project.contracts.every((c) => c.response === "accepted") && <>
+            {project.leadSelectionDone && <section className="panel-soft p-4 mt-4"><div className="flex items-center gap-2"><Star size={16} className="gold-text"/><h4 className="text-sm font-black">بطلا المشروع — العقود النهائية</h4></div><div className="mt-3 space-y-2">{project.cast.leads.map((id) => { const actor = db.actors.find((entry) => entry.id === id); return <div key={id} className="flex items-center justify-between gap-3 panel p-3"><div><b className="text-xs">{actor?.name ?? id}</b><div className="text-[9px] text-muted mt-1">عقد بطولة نشط</div></div><button className="btn btn-ghost !text-red-500 !min-h-8" onClick={() => terminateLeadContract(project, id)}>فسخ العقد</button></div>; })}</div><p className="text-[9px] text-muted mt-2">فسخ العقد متاح قبل بدء التصوير. لو محتاج تبدّل بطل، سوق الترشيحات هيفتح تاني وتقدر تبعت عرض لبديل.</p></section>}
+            {!project.leadSelectionDone && <section className="panel-soft p-4 mt-4"><div className="flex items-center gap-2"><Users size={16} className="gold-text"/><h4 className="text-sm font-black">سوق ترشيحات البطولة مفتوح</h4></div><p className="text-[10px] text-muted mt-2">تقدر تضيف مرشح جديد أو تبعت عرض بديل بعد فسخ عقد. الحد الأقصى 4 مرشحين في دورة التفاوض الواحدة.</p><div className="grid sm:grid-cols-[1fr_auto] gap-2 mt-3"><SelectField label="اختيار ممثل متاح من السوق" value={replacementLeadChoice} onChange={setReplacementLeadChoice} options={db.actors.filter((actor) => !project.contracts.some((contract) => contract.memberId === actor.id)).map((actor) => ({ value: actor.id, label: `${actor.name} · ${actor.stats.overall} OVR` }))}/><button className="btn btn-outline self-end" disabled={!replacementLeadChoice || (project.leadCandidates?.length ?? 0) >= 4} onClick={() => offerReplacementLead(project)}>إرسال عرض بطولة <HeartHandshake size={14}/></button></div><div className="text-[9px] text-muted mt-2">المرشحون الحاليون: {project.leadCandidates?.length ?? 0} / 4</div></section>}
+            {project.leadSelectionDone && project.contracts.length > 0 && project.contracts.every((c) => c.response === "accepted") && <>
               <div className="notice notice-success mt-3"><CheckCircle2 size={16}/><p>اكتمل الطاقم بالكامل. الآن حدد ميزانية الإنتاج والتسويق قبل بدء التصوير.</p></div>
               <section className="panel-soft p-4 mt-4">
                 <div className="flex items-center gap-2"><Banknote size={17} className="gold-text"/><h4 className="text-sm font-black">تحديد ميزانية المشروع</h4></div>
@@ -754,7 +910,8 @@ export function GameShell() {
               : <section className="panel p-5"><div className="flex items-center gap-2"><CheckCircle2 size={18} className="green-text"/><h3 className="section-title">اللوكيشن جاهز — لا توجد أزمة معلّقة</h3></div><p className="section-sub">التصوير يتقدم تلقائيًا بنسبة 14% مع كل يوم داخل اللعبة. لا حاجة لأي قفز يدوي في الجدول.</p><div className="progress-track mt-4"><span style={{ width: `${project.productionProgress}%` }}/></div><div className="text-[10px] text-muted mt-2">المتبقي حتى التسليم: {Math.max(0, Math.ceil((100 - project.productionProgress) / 14))} أيام لعبة تقريبًا.</div></section>}
             <section className="panel p-5"><h3 className="section-title">سجل الأزمات</h3><div className="mt-3 space-y-2">{project.crises.map((crisis) => <div key={crisis.id} className="flex items-center justify-between gap-3 panel-soft p-3"><div className="text-[11px] font-bold">{crisis.title}</div><span className={`tag ${crisis.resolved ? "tag-gold" : ""}`}>{crisis.resolved ? "تم الحسم" : "مفتوحة"}</span></div>)}</div></section>
           </>}
-          {project.status === "post" && <section className="panel p-5"><div className="flex items-center gap-2"><Sparkles size={18} className="gold-text"/><h3 className="section-title">مرحلة ما بعد الإنتاج جاهزة</h3></div><p className="section-sub">انتهى التصوير. حان الآن وقت التقييم النقدي والجماهيري ومحاكاة المنافسين في موسم الطرح.</p><div className="grid sm:grid-cols-2 gap-3 mt-4"><div className="panel-soft p-3"><div className="text-[10px] text-muted">ميزانية التسويق</div><div className="text-lg font-black mt-1">{money(project.marketingBudget)}</div></div><div className="panel-soft p-3"><div className="text-[10px] text-muted">شاشات العرض</div><div className="text-lg font-black mt-1">{project.screens.toLocaleString("en-US")}</div></div></div><button className="btn btn-gold w-full mt-4 !min-h-12" disabled={busyAi} onClick={() => releaseProject(project)}>{busyAi ? "النقاد يشاهدون العرض الخاص..." : "إطلاق العمل ومحاكاة السوق"} <Sparkles size={16}/></button><p className="text-[9px] text-muted mt-2">سيُرسل ملخص السيناريو وبيانات العمل وذاكرة العالم إلى محرك AI عند توفر المفاتيح.</p></section>}
+          {project.status === "post" && <section className="panel p-5"><div className="flex items-center gap-2"><Sparkles size={18} className="gold-text"/><h3 className="section-title">النسخة النهائية جاهزة — جهّز الحملة</h3></div><p className="section-sub">انتهى التصوير. دلوقتي اختار طريقة التسويق والمنصة وخطة الطرح قبل فتح شباك التذاكر.</p><div className="grid sm:grid-cols-2 gap-3 mt-4"><label className="panel-soft p-3 block"><div className="flex items-center justify-between gap-2"><span className="text-[10px] text-muted">ميزانية الحملة الإعلانية</span><b className="text-lg font-black mt-1 gold-text">{money(project.marketingBudget)}</b></div><input className="range mt-3" type="range" min={500000} max={40000000} step={500000} value={project.marketingBudget} onChange={(event) => updateProject(project.id, { marketingBudget: Number(event.target.value) })}/></label><div className="panel-soft p-3"><div className="text-[10px] text-muted">شاشات العرض المستهدفة</div><div className="text-lg font-black mt-1">{project.screens.toLocaleString("en-US")}</div></div></div><div className="grid sm:grid-cols-2 gap-3 mt-4"><SelectField label="منصة البث / مشتري الحقوق" value={project.platformId} onChange={(value) => updateProject(project.id, { platformId: value })} options={db.streaming_platforms.map((platform) => ({ value: platform.id, label: `${platform.name} · قدرة شراء ${platform.budget_capacity}` }))}/><SelectField label="استراتيجية الحملة" value={project.marketingStrategy ?? "mixed"} onChange={(value) => updateProject(project.id, { marketingStrategy: value as Project["marketingStrategy"] })} options={[{ value: "digital", label: "حملة رقمية ومؤثرين" }, { value: "television", label: "تلفزيون وإعلانات تقليدية" }, { value: "mixed", label: "حملة متكاملة" }]}/></div><div className="text-[10px] text-muted mt-3">السيولة المتاحة: {money(activeStudio.cash)} · المطلوب للحملة: {money(project.marketingBudget)}. تكلفة التسويق هتتخصم عند بدء الحملة، مش وقت التصوير.</div><button className="btn btn-gold w-full mt-4 !min-h-12" disabled={activeStudio.cash < project.marketingBudget} onClick={() => approveMarketingPlan(project)}>اعتماد خطة التسويق وبدء الحملة <Megaphone size={16}/></button></section>}
+          {project.status === "marketing" && <section className="panel p-5"><div className="flex items-center gap-2"><Megaphone size={18} className="gold-text"/><h3 className="section-title">الحملة التسويقية شغالة</h3></div><p className="section-sub">الحملة بدأت في اليوم {project.marketingStartDay}. سيُفتح الطرح بعد 3 أيام لعبة عشان الأخبار والتفاعل ياخدوا وقتهم.</p><div className="panel-soft p-4 mt-4"><div className="flex items-center justify-between"><span className="text-[10px] text-muted">تقدم فترة التهيئة للطرح</span><b className="gold-text">{Math.min(3, gameDay - (project.marketingStartDay ?? gameDay))} / 3 أيام</b></div><div className="progress-track mt-3"><span style={{ width: `${Math.min(100, ((gameDay - (project.marketingStartDay ?? gameDay)) / 3) * 100)}%` }}/></div><div className="text-[10px] text-muted mt-3">المنصة: {db.streaming_platforms.find((platform) => platform.id === project.platformId)?.name ?? "غير محددة"} · الاستراتيجية: {project.marketingStrategy === "digital" ? "رقمية" : project.marketingStrategy === "television" ? "تلفزيونية" : "متكاملة"}</div></div><button className="btn btn-gold w-full mt-4 !min-h-12" disabled={busyAi || gameDay - (project.marketingStartDay ?? gameDay) < 3} onClick={() => releaseProject(project)}>{busyAi ? "Groq بيحلل رد فعل السوق..." : "إطلاق العمل ومحاكاة السوق"} <Sparkles size={16}/></button></section>}
           {project.status === "released" && <section className="panel p-5"><div className="flex items-center gap-2"><Trophy size={18} className="gold-text"/><h3 className="section-title">العمل مطروح في السوق</h3></div><p className="section-sub">الإيرادات الحالية: <b className="gold-text">{fullMoney(project.boxOffice ?? 0)}</b> · اليوم {gameDay - (project.releaseDay ?? gameDay)} من العرض</p><div className="progress-track mt-3"><span style={{ width: `${Math.min(100, ((project.boxOffice ?? 0) / Math.max(1, project.revenueTarget ?? 1)) * 100)}%` }}/></div><button className="btn btn-gold w-full mt-4" onClick={() => setScreen("results")}>فتح تقرير النتائج والمراجعات <Newspaper size={16}/></button></section>}
         </div>
         <aside className="space-y-4"><div className="panel p-5"><div className="section-kicker">PRODUCTION CREW</div><h3 className="section-title mt-1">الطاقم الفني</h3><div className="mt-3 space-y-3">{[["المخرج", project.crew.director], ["المؤلف", project.crew.writers.join(" + ")], ["التصوير", project.crew.cinematographer], ["الموسيقى", project.crew.composer], ["المونتاج", project.crew.editor_vfx]].map(([label, id]) => { const members = String(id).split(" + ").map((item) => db.crew.find((member) => member.id === item)?.name).filter(Boolean); return <div key={String(label)} className="flex items-center justify-between gap-2 text-[10px]"><span className="text-muted">{label}</span><b>{members.join("، ") || "—"}</b></div>; })}</div><div className="divider"/><div className="text-[10px] text-muted mb-2">أبطال العمل</div><div className="space-y-2">{[...project.cast.leads, project.cast.antagonist, ...project.cast.supporting, ...project.cast.cameos].map((id) => db.actors.find((actor) => actor.id === id)).filter(Boolean).map((actor) => <div key={actor!.id} className="flex justify-between text-[10px]"><span>{actor!.name}</span><span className="gold-text">{actor!.stats.overall}</span></div>)}</div></div><div className="panel p-5"><div className="flex items-center gap-2"><Gauge size={16} className="gold-text"/><h3 className="section-title">تحكم إنتاجي</h3></div><div className="flex justify-between text-[10px] mt-4"><span className="text-muted">ضجة العمل</span><b>{project.hype}</b></div><div className="progress-track mt-2"><span style={{ width: `${Math.min(100, Math.max(0, project.hype * 4))}%` }}/></div><div className="flex justify-between text-[10px] mt-4"><span className="text-muted">تعديل الجودة</span><b>{project.qualityModifier > 0 ? "+" : ""}{project.qualityModifier}</b></div><div className="progress-track mt-2"><span style={{ width: `${Math.min(100, Math.max(0, 50 + project.qualityModifier * 3))}%` }}/></div><div className="divider"/><div className="text-[10px] text-muted mb-2">العقود والأجور ونقاط الأرباح</div><div className="space-y-2">{project.contracts.slice(0, 10).map((contract) => <div key={contract.memberId} className="panel-soft p-2.5"><div className="flex justify-between gap-2 text-[10px]"><b>{contract.memberName}</b><span className="gold-text">{money(contract.negotiatedSalary)}</span></div><div className="flex justify-between gap-2 text-[8px] text-muted mt-1"><span>{contract.role} · {contract.backendPoints} Backend pts</span><span className={contract.ego > 90 ? "red-text" : ""}>Ego {contract.ego}</span></div></div>)}</div></div></aside>
@@ -773,8 +930,8 @@ export function GameShell() {
     const playerRank = marketBoard.findIndex((entry) => entry.player) + 1;
     return <>
       <PageHeading kicker="RELEASE PERFORMANCE REPORT" title="تقرير شباك التذاكر والنقاد" desc={`قراءة السوق بعد إطلاق «${project.title}».`} action={<button className="btn btn-outline" onClick={shareResult}><Upload size={15}/> تصدير بطاقة PNG</button>}/>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3"><Metric label="إجمالي الإيرادات حتى اليوم" value={money(project.boxOffice ?? 0)} foot={`من أصل متوقع ${money(project.revenueTarget ?? project.boxOffice ?? 0)}`} icon={Banknote} tone="green"/><Metric label="تقييم النقاد" value={`${result.critics_score.toFixed(1)} / 10`} foot="جودة فنية وسيناريو" icon={Star}/><Metric label="تقييم الجمهور" value={`${result.audience_score.toFixed(1)} / 10`} foot="التفاعل والرضا الجماهيري" icon={Users} tone="green"/><Metric label="معامل شباك التذاكر" value={`${result.box_office_multiplier.toFixed(2)}×`} foot="المضاعف الأسبوعي" icon={BarChart3}/></div>
-      <div className="panel-soft p-3 mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px]"><span className="text-muted">صافي السيولة بعد توزيع نقاط الأرباح التعاقدية</span><b className="green-text">{money((project.boxOffice ?? 0) - (project.backendPayout ?? 0))}</b><span className="text-muted">مستحقات Backend</span><b>{money(project.backendPayout ?? 0)}</b></div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3"><Metric label={project.format === "film" ? "شباك التذاكر حتى اليوم" : "إيراد العرض حتى اليوم"} value={money(project.boxOffice ?? 0)} foot={`من أصل مستهدف ${money(project.revenueTarget ?? project.boxOffice ?? 0)}`} icon={Banknote} tone="green"/><Metric label="حقوق المنصة" value={money(project.licensingRevenue ?? 0)} foot={db.streaming_platforms.find((platform) => platform.id === project.platformId)?.name ?? "حقوق العرض"} icon={Tv}/><Metric label="إجمالي الإيراد" value={money((project.boxOffice ?? 0) + (project.licensingRevenue ?? 0))} foot={project.format === "film" ? "الشباك + الحقوق" : "العرض + الحقوق"} icon={Coins} tone="green"/><Metric label="تقييم النقاد" value={`${result.critics_score.toFixed(1)} / 10`} foot="جودة فنية وسيناريو" icon={Star}/><Metric label="تقييم الجمهور" value={`${result.audience_score.toFixed(1)} / 10`} foot="التفاعل والرضا الجماهيري" icon={Users} tone="green"/><Metric label={project.format === "film" ? "معامل شباك التذاكر" : "معامل إيرادات العرض"} value={`${result.box_office_multiplier.toFixed(2)}×`} foot="مؤشر الأداء التجاري" icon={BarChart3}/></div>
+      <div className="panel-soft p-3 mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px]"><span className="text-muted">{project.format === "film" ? "إيرادات الشباك + حقوق المنصة" : "إيرادات العرض + حقوق المنصة"}</span><b className="green-text">{money((project.boxOffice ?? 0) + (project.licensingRevenue ?? 0))}</b><span className="text-muted">مستحقات Backend</span><b>{money(project.backendPayout ?? 0)}</b></div>
       <div className="grid lg:grid-cols-[.8fr_1.2fr] gap-4 mt-4">
         <div className="panel p-5"><div className="section-kicker">OFFICIAL RELEASE POSTER</div><div ref={shareRef} className="poster-card mt-3"><div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(135deg,transparent 45%,rgba(212,175,55,.13) 46%,transparent 48%),linear-gradient(45deg,transparent 45%,rgba(229,9,20,.1) 46%,transparent 48%)", backgroundSize: "40px 40px" }}/><div className="relative z-10 flex flex-col items-center"><LogoMark {...activeStudio.logo} size={83}/><div className="text-[9px] tracking-[.24em] gold-text mt-3">{activeStudio.name.toUpperCase()}</div><div className="poster-title mt-7">{project.title}</div><div className="text-[10px] text-white/65 mt-3">{labelGenre(project.primaryGenre)} · {labelGenre(project.secondaryGenre)}</div><div className="flex flex-wrap items-center justify-center gap-2 mt-5">{project.cast.leads.map((id) => db.actors.find((a) => a.id === id)?.name).filter(Boolean).map((name) => <span key={name} className="tag !text-white !border-white/20">{name}</span>)}</div><div className="mt-7 border-t border-amber-300/30 pt-4 w-full"><div className="text-[8px] tracking-[.25em] text-amber-200/70">WORLDWIDE BOX OFFICE + RIGHTS</div><div className="text-2xl font-black gold-text mt-1">{money(project.boxOffice ?? 0)} EGP</div><div className="text-[10px] text-white/70 mt-1">CRITICS {result.critics_score.toFixed(1)} · AUDIENCE {result.audience_score.toFixed(1)}</div><p className="text-[9px] leading-5 text-white/75 italic mt-4">“{result.reviews[0] ?? result.summary}”</p></div><div className="mt-6 text-[10px] tracking-[.3em] font-black">HYPTRIX</div></div></div><button className="btn btn-gold w-full mt-3" onClick={shareResult}><Upload size={15}/> إنشاء صورة عالية الجودة</button><p className="text-[9px] text-muted mt-2 text-center">1080px+ · مناسبة لمشاركتها على منصات التواصل</p></div>
         <div className="space-y-4"><section className="panel p-5"><div className="flex items-center justify-between gap-2"><div><div className="section-kicker">CRITICS & AUDIENCE</div><h3 className="section-title mt-1">قراءة المراجعات النقدية</h3></div><span className="tag tag-gold">{result.critics_score >= 8 ? "إشادة واسعة" : result.critics_score >= 6.5 ? "استقبال إيجابي" : "انقسام نقدي"}</span></div><p className="text-xs text-muted leading-7 mt-3">{result.summary}</p><div className="space-y-3 mt-4">{result.reviews.map((review, i) => <div key={i} className="panel-soft p-3 flex gap-3"><div className="shrink-0"><div className="text-lg gold-text font-black">0{i + 1}</div><div className="text-[8px] text-muted mt-1">{["ناقد السيناريو", "صحافة الجمهور", "الناقد الفني"][i] ?? "قراءة نقدية"}</div></div><p className="text-xs leading-7">{review}</p></div>)}</div></section>
@@ -795,7 +952,7 @@ export function GameShell() {
       <PageHeading kicker="FESTIVAL SEASON / ANNUAL GALA" title="المهرجانات وحفلات الجوائز" desc="تُبنى الترشيحات على أداء الأعمال، ويحفظ العالم سجل الفائزين ليتذكرهم في السنوات القادمة." action={<button className="btn btn-gold" onClick={runAwards} disabled={week < 52 || worldHistory.some((entry) => entry.kind === "award" && entry.year === year)}><Trophy size={15}/> إقامة حفل نهاية السنة</button>}/>
       <div className="grid lg:grid-cols-[1fr_310px] gap-4 items-start"><div className="space-y-4"><section className="panel p-5"><div className="flex items-center justify-between gap-3"><div><div className="section-kicker">FEATURED FESTIVAL</div><h3 className="section-title mt-1">{festival?.name ?? "مهرجان العالم"}</h3><p className="section-sub">هيبة المهرجان: {festival?.prestige ?? 50}/100</p></div><div className="icon-tile !w-12 !h-12"><Award size={23}/></div></div><div className="divider"/><div className="grid grid-cols-3 gap-2">{db.festivals.map((f) => <div key={f.id} className="panel-soft p-3 text-center"><div className="text-[10px] font-black leading-5">{f.name}</div><div className="text-lg font-black gold-text mt-1">{f.prestige}</div><div className="text-[8px] text-muted">Prestige</div></div>)}</div><button className="btn btn-outline w-full mt-4" onClick={() => triggerContextReward("festival_pr", () => { const target = nominees[0]; if (target?.result) updateProject(target.id, { result: { ...target.result, critics_score: Math.min(10, target.result.critics_score + .25), award_nominations: uniq([...target.result.award_nominations, "أفضل حملة علاقات عامة"]) } }); })}><Megaphone size={15}/> حملة علاقات عامة للمهرجان قبل إعلان الجوائز</button></section>
         <section className="panel p-5"><div className="flex items-center justify-between"><div><div className="section-kicker">OFFICIAL NOMINEES</div><h3 className="section-title mt-1">قائمة الترشيحات</h3></div><span className="tag">{nominees.length} عمل</span></div>{nominees.length ? <div className="mt-4 space-y-3">{nominees.map((project, index) => <div key={project.id} className="panel-soft p-4"><div className="flex items-center gap-3"><div className="text-2xl font-black gold-text">{String(index + 1).padStart(2, "0")}</div><div className="flex-1"><div className="text-sm font-black">{project.title}</div><div className="text-[9px] text-muted mt-1">{project.format === "film" ? "أفضل فيلم" : "أفضل مسلسل"} · {labelGenre(project.primaryGenre)}</div></div><div className="text-lg font-black">{project.result?.critics_score.toFixed(1)}</div></div><div className="flex flex-wrap gap-1.5 mt-3">{(project.result?.award_nominations ?? []).map((nomination) => <span key={nomination} className="tag">{nomination}</span>)}</div></div>)}</div> : <div className="empty-state mt-4"><Trophy size={24} className="mx-auto gold-text"/><p className="text-xs mt-2">لا توجد ترشيحات بعد. اطرح عملاً واحدًا على الأقل لتدخل موسم الجوائز.</p></div>}</section>
-        </div><aside className="space-y-4"><div className="panel p-5"><div className="flex items-center gap-2"><Crown size={16} className="gold-text"/><h3 className="section-title">سجل الأساطير</h3></div><p className="section-sub">عدد الجوائز المتراكمة لكل ممثل.</p>{awardLeaders.length ? <div className="mt-3 space-y-3">{awardLeaders.map(({ actor, count }, i) => <div key={actor!.id} className="flex items-center gap-2"><div className="w-7 h-7 rounded-full bg-amber-300/10 grid place-items-center text-[10px] gold-text font-black">{i + 1}</div><div className="flex-1"><div className="text-[11px] font-bold">{actor!.name}</div><div className="text-[8px] text-muted">{tierName(actor!)}</div></div><b className="gold-text text-sm">{count}×</b></div>)}</div> : <p className="text-xs text-muted mt-4">سجل الجوائز سيبدأ بعد أول حفل سنوي.</p>}</div><div className="panel p-5"><div className="flex items-center gap-2"><CalendarDays size={16} className="gold-text"/><h3 className="section-title">التقويم السنوي</h3></div><div className="text-3xl font-black mt-4">{year}</div><div className="text-[10px] text-muted mt-1">الأسبوع {week} من 52</div><div className="progress-track mt-3"><span style={{ width: `${week / 52 * 100}%` }}/></div><div className="panel-soft p-3 mt-4 text-[10px] text-muted leading-6">التقويم يتقدم تلقائيًا مع مرور الوقت الحقيقي: كل دقيقة تساوي يومًا واحدًا داخل اللعبة.</div></div></aside></div>
+        </div><aside className="space-y-4"><div className="panel p-5"><div className="flex items-center gap-2"><Crown size={16} className="gold-text"/><h3 className="section-title">سجل الأساطير</h3></div><p className="section-sub">عدد الجوائز المتراكمة لكل ممثل.</p>{awardLeaders.length ? <div className="mt-3 space-y-3">{awardLeaders.map(({ actor, count }, i) => <div key={actor!.id} className="flex items-center gap-2"><div className="w-7 h-7 rounded-full bg-amber-300/10 grid place-items-center text-[10px] gold-text font-black">{i + 1}</div><div className="flex-1"><div className="text-[11px] font-bold">{actor!.name}</div><div className="text-[8px] text-muted">{tierName(actor!)}</div></div><b className="gold-text text-sm">{count}×</b></div>)}</div> : <p className="text-xs text-muted mt-4">سجل الجوائز سيبدأ بعد أول حفل سنوي.</p>}</div><div className="panel p-5"><div className="flex items-center gap-2"><CalendarDays size={16} className="gold-text"/><h3 className="section-title">التقويم السنوي</h3></div><div className="text-3xl font-black mt-4">{year}</div><div className="text-[10px] text-muted mt-1">الأسبوع {week} من 52</div><div className="progress-track mt-3"><span style={{ width: `${Math.min(100, week / 52 * 100)}%` }}/></div><div className="panel-soft p-3 mt-4 text-[10px] text-muted leading-6">التقويم يتقدم تلقائيًا مع مرور الوقت الحقيقي: كل دقيقة تساوي يومًا واحدًا داخل اللعبة.</div></div></aside></div>
     </>;
   }
 
@@ -814,8 +971,8 @@ export function GameShell() {
     return <>
       <PageHeading kicker="SYSTEM CONFIGURATION" title="الإعدادات ومركز البيانات" desc="إدارة الحزم الخارجية، الحساب، والاتصالات السحابية. تقدم اللعبة نفسه يظل على جهازك."/>
       <div className="grid xl:grid-cols-[1fr_1fr] gap-4 items-start"><div className="space-y-4"><DatabaseManager/><section className="panel p-5"><div className="flex items-center justify-between gap-2"><div><div className="section-kicker">PLAYER ACCOUNT</div><h3 className="section-title mt-1">تسجيل الدخول والمزامنة</h3><p className="section-sub">الحساب مطلوب فقط للوحة المتصدرين ورصيد VIP وحالة الباقة.</p></div><div className="icon-tile"><LogIn size={18}/></div></div>{userEmail ? <div className="notice notice-success mt-4"><CheckCircle2 size={15}/><p>مسجل الدخول: {userEmail}</p></div> : <div className="mt-4 grid sm:grid-cols-[1fr_auto] gap-2"><input className="field" type="email" dir="ltr" placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)}/><button className="btn btn-gold" onClick={signIn} disabled={authLoading}>{authLoading ? "جارٍ الإرسال..." : "إرسال رابط الدخول"}</button></div>}{authMessage && <p className="text-[10px] text-muted mt-3">{authMessage}</p>}{userEmail && <button className="btn btn-ghost mt-3" onClick={signOut}><LogOut size={14}/> تسجيل الخروج</button>}{vipCloud && <div className="panel-soft p-3 mt-4"><div className="flex justify-between text-[10px]"><span className="text-muted">رصيد VIP السحابي</span><b className="gold-text">{vipCloud.vipBalance === null ? "—" : vipCloud.vipBalance.toLocaleString("en-US")}</b></div><div className="flex justify-between text-[10px] mt-2"><span className="text-muted">حالة الباقة</span><b>{vipCloud.package?.status ?? vipCloud.packageStatus ?? "غير متاح"}</b></div></div>}</section>
-        <section className="panel p-5"><div className="flex items-center gap-2"><Shield size={16} className="gold-text"/><h3 className="section-title">خصوصية وتخزين البيانات</h3></div><div className="space-y-3 mt-4 text-[10px] leading-6 text-muted"><p>• كل تقدم اللاعب، المشاريع، العقود، التاريخ التراكمي، وقاعدة البيانات الخارجية محفوظة محليًا في IndexedDB عبر idb-keyval.</p><p>• Supabase لا يستقبل ملفات المشاريع أو نصوص القصص؛ يقتصر على Auth ورصيد VIP وحالة الباقة ولوحة المتصدرين.</p><p>• النص الذي تكتبه في ملخص العمل يُرسل إلى مزود AI عند طلب التقييم، لذلك لا تضع فيه معلومات شخصية أو حساسة.</p></div></section></div>
-        <div className="space-y-4"><section className="panel p-5"><div className="flex items-center gap-2"><Zap size={16} className="gold-text"/><h3 className="section-title">حالة الخدمات</h3></div><div className="space-y-2 mt-4">{[{ label: "الحفظ المحلي IndexedDB", state: "نشط" }, { label: "القاعدة الافتراضية الخيالية", state: "نشطة" }, { label: "حزمة بيانات خارجية", state: customDb ? "مفعلة" : "غير مفعلة" }, { label: "Supabase", state: supabase ? "مُعدّ بالمفاتيح" : "يحتاج إعداد" }, { label: "Groq / Gemini", state: "يتطلب مفاتيح الخادم" }, { label: "شبكات Rewarded Ads", state: "تحتاج SDK Adapter" }].map((item) => <div key={item.label} className="flex items-center justify-between gap-3 panel-soft p-3"><span className="text-[10px]">{item.label}</span><span className="tag">{item.state}</span></div>)}</div></section>
+        <section className="panel p-5"><div className="flex items-center gap-2"><Shield size={16} className="gold-text"/><h3 className="section-title">خصوصية وتخزين البيانات</h3></div><div className="space-y-3 mt-4 text-[10px] leading-6 text-muted"><p>• كل تقدم اللاعب، المشاريع، العقود، التاريخ التراكمي، وقاعدة البيانات الخارجية محفوظة محليًا في IndexedDB عبر idb-keyval.</p><p>• Supabase لا يستقبل ملفات المشاريع أو نصوص القصص؛ يقتصر على Auth ورصيد VIP وحالة الباقة ولوحة المتصدرين.</p><p>• النص الذي تكتبه في ملخص العمل يُرسل إلى Groq فقط عند طلب التقييم أو التفاوض أو توليد خبر/أزمة، لذلك لا تضع فيه معلومات شخصية أو حساسة.</p></div></section></div>
+        <div className="space-y-4"><section className="panel p-5"><div className="flex items-center gap-2"><Zap size={16} className="gold-text"/><h3 className="section-title">حالة الخدمات</h3></div><div className="space-y-2 mt-4">{[{ label: "الحفظ المحلي IndexedDB", state: "نشط" }, { label: "القاعدة الافتراضية الخيالية", state: "نشطة" }, { label: "حزمة بيانات خارجية", state: customDb ? "مفعلة" : "غير مفعلة" }, { label: "Supabase", state: supabase ? "مُعدّ بالمفاتيح" : "يحتاج إعداد" }, { label: "Groq AI", state: groqStatus.active === true ? "متصل" : groqStatus.active === false ? "غير متصل" : "لم يتم الفحص" }, { label: "شبكات Rewarded Ads", state: "تحتاج SDK Adapter" }].map((item) => <div key={item.label} className="flex items-center justify-between gap-3 panel-soft p-3"><span className="text-[10px]">{item.label}</span><span className="tag">{item.state}</span></div>)}<div className="panel-soft p-3 mt-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><b className="text-[11px]">اختبار Groq من الخادم</b><div className="text-[9px] text-muted mt-1" dir="ltr">{groqStatus.model}</div></div><button className="btn btn-outline !min-h-9" disabled={groqStatus.checking} onClick={() => { void checkGroqStatus(); }}>{groqStatus.checking ? "جارٍ الاختبار..." : "اختبار الاتصال"} <Zap size={13}/></button></div><p className="text-[10px] text-muted leading-6 mt-2">{groqStatus.detail}</p></div></div></section>
           <section className="panel p-5"><div className="flex items-center gap-2"><Crown size={17} className="gold-text"/><h3 className="section-title">العرق مقابل الـ VIP</h3></div><p className="section-sub">خمس مشاهدات Rewarded متتالية تمنح وضع رئيس الاستوديو VIP لمدة 24 ساعة بعد تأكيد الشبكة لكل مشاهدة.</p><div className="flex items-center gap-1 mt-4">{Array.from({ length: 5 }).map((_, i) => <div key={i} className={`h-2 flex-1 rounded-full ${i < vipProgress ? "bg-amber-300" : "bg-white/10"}`}/>)}</div><button className="btn btn-outline w-full mt-4" onClick={() => { setShowVip(true); setScreen("overview"); }}><Crown size={15}/> فتح نافذة VIP</button><p className="text-[9px] text-muted mt-2">المكافأة لا تُمنح في وضع الإنتاج إلا بعد تأكيد SDK للإعلان.</p></section>
           <section className="panel p-5 border border-red-500/20"><div className="flex items-center gap-2"><Shield size={16} className="red-text"/><h3 className="section-title">إعادة ضبط اللعبة</h3></div><p className="section-sub">يمسح التقدم المحلي من هذا الجهاز. لا يمكن التراجع عن العملية.</p><button className="btn btn-red w-full mt-4" onClick={() => { if (window.confirm("هل أنت متأكد من حذف تقدم Hyptrix المحلي من هذا الجهاز؟")) { resetGame(); setScreen("overview"); } }}>حذف الأرشيف المحلي وإعادة البدء</button></section></div></div>
     </>;
@@ -830,11 +987,27 @@ export function GameShell() {
     : renderSettings();
 
   return <div className="app-shell">
-    <header className="topbar app-topbar"><div className="brand"><LogoMark {...activeStudio.logo} size={44}/><div><div className="brand-word">HYP<span>TRIX</span></div><div className="brand-sub">CINEMA EMPIRE SIMULATOR</div></div></div><div className="top-stats"><div className="stat-pill"><Wallet size={14}/><span>{money(activeStudio.cash)}</span></div><div className="stat-pill"><Star size={14}/><span>{activeStudio.reputation} REP</span></div><div className="stat-pill"><CalendarDays size={14}/><span>يوم {gameDay} · {year}</span></div></div><div className="top-actions"><button className={`btn ${isVip ? "btn-gold" : "btn-outline"}`} onClick={() => setShowVip(true)}><Crown size={14}/>{isVip ? "VIP ACTIVE" : "GET VIP"}</button><button className="btn btn-ghost !px-2" title="الإعدادات" onClick={() => setScreen("settings")}><Settings size={16}/></button></div></header>
+    <header className="topbar app-topbar"><div className="brand"><LogoMark {...activeStudio.logo} size={44}/><div><div className="brand-word">HYP<span>TRIX</span></div><div className="brand-sub">CINEMA EMPIRE SIMULATOR</div></div></div><div className="top-stats"><div className="stat-pill"><Wallet size={14}/><span>{money(activeStudio.cash)}</span></div><div className="stat-pill"><Star size={14}/><span>{activeStudio.reputation} REP</span></div><div className="stat-pill game-calendar-pill"><CalendarDays size={14}/><span>يوم {gameDay} · {gameDayOfMonth} {gameMonth} · {year}</span></div><div className="stat-pill game-clock-pill"><Activity size={14}/><span dir="ltr" className="game-clock-digits">{gameClock}</span><small>ساعة اللعبة</small></div></div><div className="top-actions"><button className={`btn ${isVip ? "btn-gold" : "btn-outline"}`} onClick={() => setShowVip(true)}><Crown size={14}/>{isVip ? "VIP ACTIVE" : "GET VIP"}</button><button className="btn btn-ghost !px-2" title="الإعدادات" onClick={() => setScreen("settings")}><Settings size={16}/></button></div></header>
     <div className="main-layout"><aside className="sidebar"><div className="sidebar-brandline"><span className="sidebar-brand-dot"/><div><b>مساحة الاستوديو</b><small>STUDIO WORKSPACE</small></div></div>{navItems.map((item) => <button key={item.id} className={`nav-button ${screen === item.id ? "active" : ""}`} onClick={() => { setScreen(item.id); setMobileMenuOpen(false); }}><item.icon/><span>{item.label}</span>{item.id === "production" && projects.some((p) => p.status === "production" || p.status === "post") && <span className="mr-auto w-1.5 h-1.5 rounded-full bg-red-500"/>}</button>)}<div className="nav-footer"><div className="flex items-center gap-2"><LogoMark {...activeStudio.logo} size={31}/><div><b>{activeStudio.name}</b><div>تأسست {activeStudio.foundedYear}</div></div></div><div className="mt-3">نسخة تشغيل محلية · Build 1.0.0</div></div></aside>
       <main className="content"><AnimatePresence mode="wait"><motion.div key={screen} initial={{ opacity: 0, y: 14, scale: .994 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -7, scale: .997 }} transition={{ duration: .3, ease: [0.22, 1, 0.36, 1] }}>{screenContent}</motion.div></AnimatePresence><div className="bottom-legal"><span>HYPTRIX</span> · عالم سينمائي من صنعك · تقدمك محفوظ على جهازك</div></main></div>
     <nav className="mobile-nav" aria-label="التنقل الرئيسي">{navItems.map((item) => <button key={item.id} className={screen === item.id ? "active" : ""} onClick={() => setScreen(item.id)}><span className="mobile-nav-icon"><item.icon/></span><span>{item.id === "overview" ? "الرئيسية" : item.id === "create" ? "مشروع" : item.id === "production" ? "الإنتاج" : item.id === "awards" ? "الجوائز" : item.id === "leaderboard" ? "الترتيب" : "المزيد"}</span></button>)}</nav>
     <AnimatePresence>{showVip && <motion.div className="fixed inset-0 z-50 vip-backdrop flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div initial={{ opacity: 0, scale: .94, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .96 }} className="panel w-full max-w-md p-5 sm:p-6 relative"><button className="absolute left-4 top-4 text-muted hover:text-white" onClick={() => setShowVip(false)}><X size={19}/></button><div className="text-center"><div className="w-14 h-14 rounded-2xl mx-auto grid place-items-center bg-amber-300/10 border border-amber-300/20 text-amber-300"><Crown size={27}/></div><div className="eyebrow mt-4">PRESIDENT ACCESS / 24 HOURS</div><h2 className="text-2xl font-black mt-2">العرق مقابل الـ VIP</h2><p className="text-xs text-muted leading-7 mt-2">شاهد 5 إعلانات Rewarded متتالية لفتح ميزانية طوارئ، وإحصائيات توافق متقدمة، وأولوية توليد AI لمدة 24 ساعة.</p></div><div className="flex gap-2 mt-6">{Array.from({ length: 5 }).map((_, i) => <div key={i} className={`flex-1 rounded-lg border p-2 text-center ${i < vipProgress ? "bg-amber-300/10 border-amber-300/40 text-amber-300" : "border-white/10 text-muted"}`}><div className="text-xs font-black">{i + 1}</div><div className="text-[8px] mt-1">{i < vipProgress ? "تم" : "إعلان"}</div></div>)}</div><div className="progress-track mt-4 !h-2"><span style={{ width: `${vipProgress * 20}%` }}/></div><div className="flex items-center justify-between mt-2 text-[9px] text-muted"><span>التقدم</span><span>{vipProgress} / 5</span></div>{adDemoNotice && <div className="notice notice-error mt-3"><Info size={14}/><p>{adDemoNotice}</p></div>}<button className="btn btn-gold w-full mt-5 !min-h-12" disabled={busyAd || vipProgress >= 5} onClick={nextVipAd}>{busyAd ? "جارٍ طلب الإعلان..." : `مشاهدة الإعلان ${Math.min(vipProgress + 1, 5)} / 5`} <Play size={15}/></button><p className="text-[9px] text-muted text-center leading-5 mt-3">في نسخة التطوير يمكن تفعيل المحاكاة عبر NEXT_PUBLIC_ENABLE_AD_DEMO=true. لا يتم احتساب مشاهدة حقيقية دون SDK معتمد.</p></motion.div></motion.div>}</AnimatePresence>
+    <AnimatePresence>{leadSelection && (() => {
+      const project = projects.find((entry) => entry.id === leadSelection.projectId);
+      const accepted = project?.contracts.filter((contract) => contract.role === "lead_candidate" && contract.response === "accepted") ?? [];
+      return project ? <motion.div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-5 lead-pick-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="lead-pick-modal w-full max-w-2xl" initial={{ opacity: 0, y: 24, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: .98 }}>
+        <div className="lead-pick-head"><div className="lead-pick-orb"><Star size={24}/></div><div className="section-kicker">FINAL CASTING DECISION</div><h2>اختار نجمي العمل</h2><p>أكتر من مرشح وافق على العرض. اختار بطلين بس؛ باقي الترشيحات هتتقفل ومش هتتحسب ضمن عقود المشروع.</p></div>
+        <div className="grid sm:grid-cols-2 gap-3 p-4 sm:p-5">{accepted.map((contract) => {
+          const actor = db.actors.find((entry) => entry.id === contract.memberId);
+          const selected = leadSelection.selected.includes(contract.memberId);
+          return <button type="button" key={contract.memberId} onClick={() => setLeadSelection((current) => current ? { ...current, selected: selected ? current.selected.filter((id) => id !== contract.memberId) : current.selected.length < 2 ? [...current.selected, contract.memberId] : current.selected } : current)} className={`lead-pick-card ${selected ? "selected" : ""}`}>
+            <div className="flex items-center gap-3">{actor?.image_url ? <img src={actor.image_url} alt={contract.memberName}/> : <div className="lead-pick-avatar"><Users size={22}/></div>}<div className="min-w-0 flex-1 text-right"><b>{contract.memberName}</b><small>{actor ? tierName(actor) : "فنان"} · {actor?.stats.overall ?? "—"} OVR</small></div><span className={`lead-pick-check ${selected ? "on" : ""}`}>{selected ? <Check size={16}/> : null}</span></div>
+            <div className="mt-3 text-[10px] text-muted">الأجر المتفاوض عليه: {money(contract.negotiatedSalary)}</div>
+          </button>;
+        })}</div>
+        <div className="lead-pick-footer"><span>{leadSelection.selected.length} / 2 تم اختيارهم</span><button className="btn btn-gold" disabled={leadSelection.selected.length !== 2} onClick={confirmLeadSelection}>اعتماد البطلين <CheckCircle2 size={16}/></button></div>
+      </motion.div></motion.div> : null;
+    })()}</AnimatePresence>
     {toast && <div className="fixed bottom-20 lg:bottom-6 left-4 right-4 lg:left-auto lg:right-8 z-[60] max-w-md mx-auto lg:mx-0"><motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="panel p-3 flex items-start gap-3 border-amber-300/25"><Bell size={16} className="gold-text mt-0.5 shrink-0"/><p className="text-xs leading-6 flex-1">{toast}</p><button onClick={() => { setToast(""); setNotification(null); }} className="text-muted"><X size={15}/></button></motion.div></div>}
     <div className="hidden">{mobileMenuOpen ? "menu" : ""}</div>
   </div>;

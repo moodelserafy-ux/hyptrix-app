@@ -34,8 +34,9 @@ export function calculateCastScore(project: Project, actors: Actor[]) {
 
 export function estimateCost(project: Project, actors: Actor[], crew: CrewMember[], studio?: Studio | null) {
   const budget = Object.values(project.budget).reduce((a, b) => a + b, 0);
-  const contractedSalaries = project.contracts?.length
-    ? project.contracts.reduce((sum, contract) => sum + contract.negotiatedSalary, 0)
+  const activeContracts = project.contracts?.filter((contract) => contract.response === "accepted" || contract.response === undefined) ?? [];
+  const contractedSalaries = activeContracts.length
+    ? activeContracts.reduce((sum, contract) => sum + contract.negotiatedSalary, 0)
     : (() => {
         const actorIds = [...project.cast.leads, project.cast.antagonist, ...project.cast.supporting, ...project.cast.cameos];
         const castCost = actors.filter((x) => actorIds.includes(x.id)).reduce((sum, x) => sum + x.base_salary * (x.id === project.negotiatedActorId ? 1 - project.negotiationDiscount : 1), 0);
@@ -43,7 +44,8 @@ export function estimateCost(project: Project, actors: Actor[], crew: CrewMember
         const crewCost = crew.filter((x) => crewIds.includes(x.id)).reduce((sum, x) => sum + x.base_salary, 0);
         return (castCost + crewCost) * (studio?.perk === "negotiator" ? 0.85 : 1);
       })();
-  return Math.round(contractedSalaries + budget + project.marketingBudget);
+  // Marketing cash is committed when the campaign begins, not on day one of filming.
+  return Math.round(contractedSalaries + budget);
 }
 
 export function detectEgoRisk(project: Project, actors: Actor[]) {
@@ -89,40 +91,78 @@ export function localEvaluation(project: Project, actors: Actor[], crew: CrewMem
   const crewScore = calculateCrewScore(project, crew);
   const castScore = calculateCastScore(project, actors);
   const avgBudget = Object.values(project.budget).reduce((a, b) => a + b, 0);
-  const productionValue = Math.min(12, Math.log10(Math.max(avgBudget, 100000)) * 1.25);
-  const scriptQuality = Math.min(100, 48 + Math.min(project.summary.length / 20, 18) + (project.summary.includes("لكن") ? 3 : 0));
-  const ageCritic = project.ageRating === "18+" ? 0.22 : project.ageRating === "G" ? -0.18 : 0;
-  const ageAudience = project.ageRating === "18+" ? -0.42 : project.ageRating === "G" ? 0.32 : 0;
-  const critic = clamp(4.8 + crewScore * 0.035 + scriptQuality * 0.025 + synergy * 0.09 + ageCritic, 1, 9.8);
-  const audience = clamp(4.2 + castScore * 0.042 + hype * 0.08 + productionValue * 0.09 + ageAudience, 1, 9.9);
-  const multiplier = clamp(0.42 + audience * 0.13 + (project.marketingBudget / 10000000) * 0.08 + synergy * 0.012, 0.35, 2.4);
+  const marketingRatio = project.marketingBudget / Math.max(1, avgBudget + project.marketingBudget);
+  const scriptLength = project.summary.trim().length;
+  const scriptQuality = clamp(42 + Math.min(scriptLength / 34, 17) + (/[؟?!]/.test(project.summary) ? 1 : 0) + (project.summary.split(/[.!؟]/).filter((part) => part.trim().length > 0).length >= 4 ? 4 : 0), 38, 72);
+  const crewFit = clamp((crewScore - 60) * 0.025, -0.7, 0.9);
+  const castFit = clamp((castScore - 60) * 0.025, -0.7, 0.9);
+  const ageCritic = project.ageRating === "18+" ? 0.12 : project.ageRating === "G" ? -0.12 : 0;
+  const ageAudience = project.ageRating === "18+" ? -0.28 : project.ageRating === "G" ? 0.18 : 0;
+  const critic = clamp(4.4 + crewFit + (scriptQuality - 55) * 0.055 + synergy * 0.035 + (project.qualityModifier ?? 0) * 0.025 + ageCritic, 2.2, 8.8);
+  const audience = clamp(4.2 + castFit + (scriptQuality - 55) * 0.035 + Math.min(1.0, hype * 0.025) + marketingRatio * 0.8 + ageAudience, 2.0, 9.0);
+  const multiplier = clamp(0.52 + (audience - 5) * 0.16 + (critic - 5) * 0.06 + marketingRatio * 0.24 + synergy * 0.008, 0.42, 1.85);
   const topActor = actors.find((a) => a.id === project.cast.leads[0]);
+  const secondActor = actors.find((a) => a.id === project.cast.leads[1]);
   const director = crew.find((c) => c.id === project.crew.director);
+  const writerNames = project.crew.writers.map((id) => crew.find((member) => member.id === id)?.name).filter(Boolean);
+  const plotExcerpt = project.summary.trim().replace(/\s+/g, " ").slice(0, 125);
+  const variance = (Math.random() - 0.5) * 1.1;
+  const audienceVoice = audience >= critic + 0.8 ? "فيه قبول جماهيري أوسع من الإشادة النقدية" : critic >= audience + 0.8 ? "العمل أقرب لتقدير النقاد من الجمهور العام" : "الانطباعات متقاربة مع اختلافات في التفاصيل";
   return {
-    critics_score: Number(critic.toFixed(1)), audience_score: Number(audience.toFixed(1)), box_office_multiplier: Number(multiplier.toFixed(2)),
+    critics_score: Number(critic.toFixed(1)), audience_score: Number(clamp(audience + variance, 1.8, 9.2).toFixed(1)), box_office_multiplier: Number(multiplier.toFixed(2)),
     reviews: [
-      `قراءة سيناريو: ${project.summary.trim().slice(0, 105)}${project.summary.length > 105 ? "…" : ""} — الفكرة تملك مدخلًا واضحًا، لكن تماسك التحولات الدرامية هو ما سيحدد قيمتها بعد المشاهدة الثانية.`,
-      `من مقعد الجمهور: حضور ${topActor?.name ?? "البطل الرئيسي"} يمنح الحكاية نقطة جذب سهلة، والإيقاع يخدم ${project.format === "series" ? "متابعة الحلقات" : "المشاهدة السينمائية"}، حتى لو احتاجت بعض اللحظات إلى اختصار.`,
-      `مراجعة للصنعة: اختيارات ${director?.name ?? "المخرج"} في مزج ${project.primaryGenre.replaceAll("_", " ")} مع ${project.secondaryGenre.replaceAll("_", " ")} تمنح العمل شخصية، بينما يظل التوازن بين الصورة والحكاية موضع نقاش.`,
+      `ناقد السيناريو: «${plotExcerpt}${project.summary.length > 125 ? "…" : ""}». نقطة القوة هي وضوح الفكرة، لكن الملخص وحده لا يثبت أن التحولات الدرامية متماسكة؛ لذلك التقييم هنا متحفظ بانتظار تنفيذ فعلي أقوى.`,
+      `قراءة جماهيرية: ${topActor?.name ?? "البطل الرئيسي"}${secondActor ? ` و${secondActor.name}` : ""} يقدمان نقطة جذب واضحة، لكن الإيقاع والانسجام بين الشخصيات هما ما سيحسمان تجربة الجمهور. ${audienceVoice}.`,
+      `الجانب الفني: إدارة ${director?.name ?? "المخرج"} للصورة مع كتابة ${writerNames.join(" و") || "فريق الكتابة"} تضع أساسًا للعمل، لكن لا توجد بيانات إنتاج فعلية كافية لتبرير إشادة استثنائية قبل مشاهدة النسخة النهائية.`,
     ],
-    headlines: [`${project.title} يشعل النقاش: رهان جريء أم مغامرة أكبر من ميزانيتها؟`, `الجمهور يمنح ${project.title} دفعة قوية في أسبوعه الأول`],
-    social_posts: [`"المشهد الأخير في ${project.title} محتاج نقاش طويل!"`, `"أداء يستحق التصفيق.. والإيقاع كان محتاج شوية شد."`],
-    summary: "تقييم تجريبي محلي مبني على قوة الطاقم والتصنيف والميزانية. اربط مزود الذكاء الاصطناعي لإنتاج مراجعات أكثر تخصيصاً.",
-    award_nominations: critic >= 7.8 ? ["أفضل عمل", "أفضل مخرج", "أفضل أداء رئيسي", "أفضل سيناريو"] : ["أفضل أداء رئيسي"],
+    headlines: [`${project.title}: الرهان الحقيقي في قوة الحكاية لا في حجم الأسماء`, `انطباعات أولية منقسمة حول ${project.title} بين الأداء والإيقاع`],
+    social_posts: [`«الفكرة شدتني، بس محتاج أشوف التنفيذ قبل ما أحكم» — نقاش متداول حول ${project.title}.`, `«أداء ${topActor?.name ?? "البطل"} لافت، لكن في مشاهد كان ممكن تتقص» — رأي من جمهور العرض.`],
+    summary: `تقييم احتياطي مبني على بيانات السيناريو والطاقم والميزانية المتاحة، وليس مراجعة مشاهدة فعلية. ${audienceVoice}.`,
+    award_nominations: critic >= 8.1 ? ["أفضل سيناريو", "أفضل إخراج"] : critic >= 7.1 ? ["أفضل أداء رئيسي"] : [],
   };
 }
 function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }
 
 export function calculateRevenue(project: Project, result: EvaluationResult, actors: Actor[], studio: Studio) {
-  const leads = actors.filter((a) => project.cast.leads.includes(a.id));
-  const pull = leads.reduce((sum, actor, index) => sum + (actor.stats.box_office_pull ?? 55) * (index === 0 ? 0.6 : 0.4 / Math.max(1, leads.length - 1)), 0);
-  const marketFactor = ({ egypt: 1, gulf: 1.25, europe: 1.5, hollywood: 2 } as const)[studio.market];
-  const screensFactor = Math.max(0.5, Math.min(project.screens / 500, 2.2));
-  const seasonFactor = project.format === "series" ? (project.season === "ramadan" ? 1.18 : 0.96) : 1;
-  const releaseWindowFactor = ({ "عيد الفطر": 1.16, "عيد الأضحى": 1.14, "الصيف": 1.12, "إجازة نصف العام": 1.05 } as Record<string, number>)[project.releaseSeason] ?? 1;
-  const base = project.format === "film" ? 18000000 : 12000000 + project.episodes * 650000;
-  const openingBonus = studio.perk === "marketer" ? 1.15 : 1;
-  return Math.round(base * result.box_office_multiplier * (0.55 + pull / 100) * screensFactor * marketFactor * seasonFactor * releaseWindowFactor * openingBonus);
+  const leads = actors.filter((actor) => project.cast.leads.includes(actor.id));
+  const pull = leads.length
+    ? leads.reduce((sum, actor, index) => sum + (actor.stats.box_office_pull ?? 50) * (index === 0 ? 0.6 : 0.4 / Math.max(1, leads.length - 1)), 0)
+    : 50;
+  const marketFactor = ({ egypt: 1, gulf: 1.12, europe: 1.22, hollywood: 1.35 } as const)[studio.market];
+  // Reach is tied to the actual booked screen count, not an arbitrary fixed baseline.
+  const screensFactor = clamp(project.screens / 300, 0.45, 1.45);
+  const seasonFactor = project.format === "series" ? (project.season === "ramadan" ? 1.08 : 0.94) : 1;
+  const releaseWindowFactor = ({ "عيد الفطر": 1.08, "عيد الأضحى": 1.06, "الصيف": 1.04, "إجازة نصف العام": 1.01 } as Record<string, number>)[project.releaseSeason] ?? 1;
+  const productionBudget = Object.values(project.budget).reduce((sum, amount) => sum + amount, 0);
+  const talentBudget = (project.contracts ?? [])
+    .filter((contract) => contract.response === "accepted" || contract.response === undefined)
+    .reduce((sum, contract) => sum + contract.negotiatedSalary, 0);
+  const campaignBudget = Math.max(0, project.marketingBudget ?? 0);
+  const investedCapital = Math.max(5_000_000, productionBudget + talentBudget + campaignBudget);
+  const episodeScale = project.format === "series" ? clamp(Math.max(1, project.episodes) / 10, 0.75, 2.2) : 1;
+  // A normal title aims around break-even against its full spend; exceptional titles
+  // can outperform, while weak scripts, low reach, or poor casting can lose money.
+  const qualityFactor = clamp(0.66 + (result.box_office_multiplier - 0.85) * 0.48, 0.42, 1.28);
+  const audiencePullFactor = clamp(0.62 + pull / 145, 0.85, 1.35);
+  const marketingFactor = clamp(0.90 + campaignBudget / investedCapital * 0.60, 0.88, 1.10);
+  const openingBonus = studio.perk === "marketer" ? 1.04 : 1;
+  const formatFactor = project.format === "series" ? 0.88 : 1;
+  return Math.round(investedCapital * episodeScale * formatFactor * qualityFactor * audiencePullFactor * screensFactor * marketFactor * seasonFactor * releaseWindowFactor * marketingFactor * openingBonus);
+}
+
+export function advanceRevenueDays(current: number, target: number, dailyRate: number, days: number) {
+  let gross = 0;
+  let rate = Math.max(0.004, dailyRate);
+  const remainingTarget = Math.max(0, target - current);
+  const daysToProcess = Math.max(0, Math.min(120, Math.floor(days)));
+  for (let day = 0; day < daysToProcess && gross < remainingTarget; day += 1) {
+    const remaining = remainingTarget - gross;
+    const volatility = 0.72 + Math.random() * 0.56;
+    const daily = Math.min(remaining, Math.max(0, Math.round(target * rate * volatility)));
+    gross += daily;
+    rate = Math.max(0.003, rate * 0.96);
+  }
+  return { gross, nextRate: rate };
 }
 
 export function randomCompetitorNames(names: string[]) {
