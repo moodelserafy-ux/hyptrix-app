@@ -19,13 +19,14 @@ type GameActions = {
   addCash: (amount: number) => void;
   addHistory: (entry: WorldHistoryEntry) => void;
   advanceWeek: () => void;
+  advanceDay: () => void;
   setVip: (expiresAt: number) => void;
   setNotification: (message: string | null) => void;
   resetGame: () => void;
 };
 
 const initialState: GameState = {
-  hydrated: false, hasStudio: false, studio: null, year: 2026, week: 1,
+  hydrated: false, hasStudio: false, studio: null, year: 2026, week: 1, gameDay: 1, lastTickAt: 0,
   customDb: null, projects: [], activeProjectId: null, worldHistory: [],
   careerAwards: {}, vipExpiresAt: null, notification: null,
 };
@@ -34,10 +35,20 @@ export const useGameStore = create<GameState & GameActions>()(persist((setState,
   ...initialState,
   hydrate: async () => {
     const importedDatabase = await get<GameDatabase>("hyptrix_custom_db");
-    if (importedDatabase) setState({ customDb: importedDatabase });
-    setState({ hydrated: true });
+    const current = getState();
+    const now = Date.now();
+    const offlineDays = current.lastTickAt ? Math.min(90, Math.floor((now - current.lastTickAt) / 60_000)) : 0;
+    const resumedDay = (current.gameDay ?? 1) + offlineDays;
+    const resumedWeek = Math.floor((resumedDay - 1) / 7) + 1;
+    const resumedYear = 2026 + Math.floor((resumedDay - 1) / 364);
+    const migratedProjects = current.projects.map((project) => project.status === "draft" ? ({
+      ...project,
+      contracts: project.contracts.map((contract) => contract.response ? contract : { ...contract, response: "pending" as const, responseDay: current.gameDay + 1 }),
+      proposalDay: project.proposalDay ?? current.gameDay,
+    }) : project);
+    setState({ ...(importedDatabase ? { customDb: importedDatabase } : {}), projects: migratedProjects, gameDay: resumedDay, week: ((resumedWeek - 1) % 52) + 1, year: resumedYear, lastTickAt: now, hydrated: true });
   },
-  createStudio: (studio) => setState({ studio, hasStudio: true, notification: `أهلاً بك في ${studio.name}. يبدأ المشوار الآن.` }),
+  createStudio: (studio) => setState({ studio, hasStudio: true, lastTickAt: Date.now(), notification: `أهلاً بك في ${studio.name}. يبدأ المشوار الآن.` }),
   setCustomDb: (db) => {
     if (db) void set("hyptrix_custom_db", db);
     else void del("hyptrix_custom_db");
@@ -48,9 +59,8 @@ export const useGameStore = create<GameState & GameActions>()(persist((setState,
   setActiveProject: (id) => setState({ activeProjectId: id }),
   addCash: (amount) => setState((state) => state.studio ? ({ studio: { ...state.studio, cash: Math.max(0, state.studio.cash + amount) } }) : {}),
   addHistory: (entry) => setState((state) => ({ worldHistory: [entry, ...state.worldHistory].slice(0, 160) })),
-  advanceWeek: () => setState((state) => state.week >= 52
-    ? { week: 1, year: state.year + 1, notification: `بدأ عام ${state.year + 1}. موسم جديد وفرص جديدة.` }
-    : { week: state.week + 1 }),
+  advanceDay: () => setState((state) => { const gameDay = state.gameDay + 1; const week = Math.floor((gameDay - 1) / 7) + 1; const year = 2026 + Math.floor((gameDay - 1) / 364); return { gameDay, week: ((week - 1) % 52) + 1, year, lastTickAt: Date.now() }; }),
+  advanceWeek: () => setState((state) => { const gameDay = state.gameDay + 7; const week = Math.floor((gameDay - 1) / 7) + 1; const year = 2026 + Math.floor((gameDay - 1) / 364); return { gameDay, week: ((week - 1) % 52) + 1, year, lastTickAt: Date.now(), notification: `مر أسبوع داخل عالم Hyptrix. اليوم ${gameDay}.` }; }),
   setVip: (expiresAt) => setState({ vipExpiresAt: expiresAt }),
   setNotification: (message) => setState({ notification: message }),
   resetGame: () => {
@@ -62,7 +72,7 @@ export const useGameStore = create<GameState & GameActions>()(persist((setState,
   storage: createJSONStorage(() => indexedDbStorage),
   skipHydration: true,
   partialize: (state) => ({
-    hasStudio: state.hasStudio, studio: state.studio, year: state.year, week: state.week,
+    hasStudio: state.hasStudio, studio: state.studio, year: state.year, week: state.week, gameDay: state.gameDay, lastTickAt: state.lastTickAt,
     customDb: state.customDb, projects: state.projects, activeProjectId: state.activeProjectId,
     worldHistory: state.worldHistory, careerAwards: state.careerAwards,
   }) as GameState & GameActions,

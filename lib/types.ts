@@ -30,10 +30,10 @@ export interface Studio {
   foundedYear: number;
 }
 export interface CastSelection { leads: string[]; antagonist: string; supporting: string[]; cameos: string[] }
-export interface ContractTerms { memberId: string; memberName: string; role: string; baseSalary: number; negotiatedSalary: number; backendPoints: number; ego: number }
+export interface ContractTerms { memberId: string; memberName: string; role: string; baseSalary: number; negotiatedSalary: number; backendPoints: number; ego: number; response?: "pending" | "accepted" | "rejected"; responseReason?: string; responseDay?: number }
 export interface CrewSelection { director: string; writers: string[]; cinematographer: string; composer: string; editor_vfx: string }
 export type ProjectStatus = "draft" | "production" | "post" | "released";
-export interface RivalRelease { studioName: string; boxOffice: number }
+export interface RivalRelease { studioName: string; boxOffice: number; revenueTarget?: number; dailyGross?: number }
 export interface Project {
   id: string; title: string; summary: string; format: "film" | "series"; episodes: number;
   season: "ramadan" | "off_season"; primaryGenre: Genre; secondaryGenre: Genre;
@@ -41,7 +41,7 @@ export interface Project {
   budget: { sets: number; costumes: number; vfx: number; extras: number };
   marketingBudget: number; releaseSeason: string; screens: number; platformId: string;
   status: ProjectStatus; productionProgress: number; crises: Crisis[]; hype: number; qualityModifier: number; negotiationDiscount: number; negotiatedActorId?: string; contracts: ContractTerms[];
-  result?: EvaluationResult; boxOffice?: number; backendPayout?: number; rivalReleases?: RivalRelease[]; createdYear: number;
+  result?: EvaluationResult; boxOffice?: number; backendPayout?: number; rivalReleases?: RivalRelease[]; createdYear: number; proposalDay?: number; productionStartDay?: number; releaseDay?: number; revenueTarget?: number; dailyGross?: number;
 }
 export interface Crisis {
   id: string; title: string; description: string; choices: { label: string; cash: number; hype: number; quality: number }[];
@@ -54,7 +54,7 @@ export interface EvaluationResult {
 }
 export interface WorldHistoryEntry { year: number; text: string; kind: "release" | "award" | "crisis" | "business" }
 export interface GameState {
-  hydrated: boolean; hasStudio: boolean; studio: Studio | null; year: number; week: number;
+  hydrated: boolean; hasStudio: boolean; studio: Studio | null; year: number; week: number; gameDay: number; lastTickAt: number;
   customDb: GameDatabase | null; projects: Project[]; activeProjectId: string | null;
   worldHistory: WorldHistoryEntry[]; careerAwards: Record<string, number>;
   vipExpiresAt: number | null; notification: string | null;

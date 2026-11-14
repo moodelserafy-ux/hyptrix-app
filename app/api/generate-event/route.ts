@@ -6,7 +6,8 @@ import type { Project } from "@/lib/types";
 
 export const runtime = "nodejs";
 const requestSchema = z.object({
-  type: z.enum(["evaluate", "crisis"]),
+  type: z.enum(["evaluate", "crisis", "negotiation", "daily_news"]),
+  candidate: z.record(z.string(), z.unknown()).optional(),
   project: z.record(z.string(), z.unknown()),
   worldHistory: z.array(z.object({ year: z.number(), text: z.string(), kind: z.string() })).max(60).default([]),
   context: z.string().max(12000).optional().default(""),
@@ -19,6 +20,8 @@ const evaluationSchema = z.object({
   summary: z.string(), award_nominations: z.array(z.string()).max(8),
 });
 const crisisSchema = z.object({ title: z.string(), description: z.string(), choices: z.array(z.object({ label: z.string(), cash: z.number(), hype: z.number(), quality: z.number() })).length(3) });
+const negotiationSchema = z.object({ decision: z.enum(["accepted", "rejected"]), reason: z.string().min(12).max(500) });
+const newsSchema = z.object({ headline: z.string().min(8).max(180), story: z.string().min(20).max(700), kind: z.enum(["business", "crisis", "release"]) });
 
 async function callGroq(prompt: string) {
   const key = process.env.GROQ_API_KEY;
@@ -67,6 +70,28 @@ export async function POST(request: Request) {
     const project = body.project as unknown as Project;
     const memory = body.worldHistory.slice(0, 35).map((entry) => `[${entry.year}] ${entry.text}`).join("\n") || "لا يوجد تاريخ سابق بعد.";
     const base = `سياق العالم التراكمي:\n${memory}\n\nبيانات المشروع (JSON):\n${JSON.stringify(project)}\n\nنص إضافي من اللاعب:\n${body.context}`;
+    if (body.type === "negotiation") {
+      const candidate = body.candidate ?? {};
+      const prompt = `${base}\n\nأنت وكيل أعمال محترف. قيّم العرض المقدم إلى ${String(candidate.memberName ?? "عضو الطاقم")} لدور ${String(candidate.role ?? "")}. الراتب المعروض ${String(candidate.negotiatedSalary ?? "غير محدد")} مقابل الأجر الأساسي ${String(candidate.baseSalary ?? "غير محدد")}. ضع في الاعتبار مستوى النجم والغرور والتوافق مع النوع وسمعة الاستوديو وملخص القصة. أجب بقرار واقعي غير مضمون القبول؛ الرفض يجب أن يكون له سبب محدد وقابل للتفاوض، والقبول يذكر ما أقنعه. JSON فقط: decision accepted أو rejected، وreason باللهجة المصرية، لا تقل عن 12 حرفًا.`;
+      const result = await generateWithFallback(prompt);
+      if (!result.data) {
+        const overall = Number((candidate.stats as Record<string, unknown> | undefined)?.overall ?? 70);
+        const ego = Number(candidate.ego ?? 50);
+        const accepted = Math.random() < Math.max(.22, Math.min(.88, .72 + (overall - 75) / 180 - Math.max(0, ego - 85) / 150));
+        return NextResponse.json({ data: { decision: accepted ? "accepted" : "rejected", reason: accepted ? "الفكرة شدتني والدور مناسب لمساري، والعرض المالي مقبول مبدئيًا." : "السيناريو واعد، لكن المقابل المالي أو تفاصيل الدور لا تعكس حجم الالتزام المطلوب." }, provider: "local", fallback: true });
+      }
+      const parsed = negotiationSchema.safeParse(result.data);
+      if (!parsed.success) throw new Error("AI response failed negotiation schema");
+      return NextResponse.json({ data: parsed.data, provider: result.provider, fallback: false });
+    }
+    if (body.type === "daily_news") {
+      const prompt = `${base}\n\nاكتب خبرًا واحدًا جديدًا وغير مكرر يناسب اليوم الحالي في عالم اللعبة. استند إلى أحداث المشروع وحالته وأرقامه فقط. لا تختلق أسماء كيانات جديدة. JSON فقط: headline عنوان صحفي، story خبر من 2-4 جمل فيه تفاصيل ملموسة، kind واحدة من business أو crisis أو release.`;
+      const result = await generateWithFallback(prompt);
+      if (!result.data) return NextResponse.json({ data: { headline: "حركة جديدة في سوق الإنتاج", story: `تتابع الأوساط الفنية تطورات مشروع ${project.title} مع تغيرات جدول العمل ومؤشرات السوق.`, kind: "business" }, provider: "local", fallback: true });
+      const parsed = newsSchema.safeParse(result.data);
+      if (!parsed.success) throw new Error("AI response failed daily news schema");
+      return NextResponse.json({ data: parsed.data, provider: result.provider, fallback: false });
+    }
     if (body.type === "evaluate") {
       const prompt = `${base}\n\nقيّم العمل كما لو أنك لجنة نقاد وجمهور في سوق ترفيهي خيالي. أرسل JSON بالحقول التالية فقط: critics_score رقم 0-10، audience_score رقم 0-10، box_office_multiplier رقم 0.2-3.5، reviews مصفوفة 3 مراجعات نقدية قصيرة تذكر عناصر ملموسة من القصة والطاقم، headlines مصفوفة 2 مانشيت، social_posts مصفوفة 2 منشور، summary فقرة، award_nominations مصفوفة ترشيحات. اجعل الإيرادات منطقية قياساً بالجودة والميزانية والتسويق. لا تخترع أسماء أشخاص أو شركات غير موجودة في بيانات العمل.`;
       const result = await generateWithFallback(prompt);

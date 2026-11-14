@@ -125,3 +125,18 @@ AD_REWARD_VERIFY_SECRET=...
 ## Visual refresh — Neo-Lumen (November 2026)
 
 The interface has been restyled around a vivid midnight palette: ultraviolet, electric cyan, soft orchid, neon pink, and lime accents. The redesign includes glass-like surfaces, more spacious cards, refined typography, touch-sized controls, a floating mobile tab bar with safe-area padding, responsive desktop navigation, animated screen transitions, subtle hover/press feedback, and reduced-motion accessibility support. Game logic, storage, API routes, and the external database schema are unchanged.
+
+
+## Hyptrix — Studio Workflow & Living World Update
+
+تم تحديث دورة اللعب لتصبح قائمة على مراحل واضحة بدل اعتماد المشروع والطاقم والميزانية دفعة واحدة:
+
+1. **تطوير الفكرة:** اكتب اسم العمل، الصيغة، التصنيفات، التقييم العمري، وملخص القصة والنهاية.
+2. **اختيار الطاقم:** انتقل إلى كتالوج بصري كامل للممثلين والطاقم الفني. يمكن اختيار مؤلف أو ورشة من مؤلفين اثنين.
+3. **عرض الفكرة والتفاوض:** يرسل الاستوديو عروضًا مستقلة لكل عضو في الطاقم. تظهر الموافقة أو الرفض مع سبب مخصص. يستخدم المسار `/api/generate-event` نوع `negotiation` مع Groq ثم Gemini، ويعمل بقرار محلي احتياطي عند تعذر مزودي AI.
+4. **انتظار الردود:** يوم اللعبة يساوي دقيقة حقيقية أثناء فتح اللعبة. يتم حفظ وقت آخر تحديث، وعند العودة تُحتسب الأيام المنقضية (بحد أقصى 90 يومًا لكل استئناف) لتحديث مواعيد الردود.
+5. **الميزانية والتصوير:** لا يبدأ التصوير حتى يقبل كل أفراد الطاقم. بعد اعتماد الميزانية يبدأ تقدم التصوير تلقائيًا مع مرور الأيام، ويتوقف التقدم عند وجود أزمة غير محسومة.
+6. **الطرح وتتبع الشباك:** لا تُسجل الإيرادات المتوقعة كلها فور الإطلاق. يبدأ العمل بإيراد افتتاحي ثم يتراكم الشباك يومًا بعد يوم، مع تحديث إيرادات المنافسين بالتوازي.
+7. **أخبار العالم:** كل ثلاثة أيام داخل اللعبة يطلب النظام خبرًا سياقيًا من AI، ويضيفه إلى ذاكرة العالم. مراجعات النقاد تطلب أصواتًا مختلفة وتفاصيل ملموسة من السيناريو والطاقم.
+
+**ملاحظة تشغيلية:** الساعة الافتراضية تعمل من خلال جلسة المتصفح، وتُستكمل الأيام التي انقضت عند إعادة فتح اللعبة. إذا لم تُضف مفاتيح Groq/Gemini، تستخدم اللعبة قرارات محلية احتياطية؛ لذلك يجب ضبط مفاتيح AI في Vercel للحصول على أسباب تفاوض وأخبار ومراجعات مولدة فعليًا.
