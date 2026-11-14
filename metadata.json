@@ -1,0 +1,6 @@
+{
+  "name": "Hyptrix — Cinema & TV Tycoon",
+  "description": "محاكاة وإدارة شركات إنتاج سينمائي وتلفزيوني عميقة مدعومة بالذكاء الاصطناعي التوليدي",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
