@@ -101,9 +101,9 @@ export function localEvaluation(project: Project, actors: Actor[], crew: CrewMem
   return {
     critics_score: Number(critic.toFixed(1)), audience_score: Number(audience.toFixed(1)), box_office_multiplier: Number(multiplier.toFixed(2)),
     reviews: [
-      `الحبكة في «${project.title}» تملك فكرة واضحة، لكن التنفيذ يحتاج إلى إيقاع أكثر إحكاماً في المنتصف.`,
-      `أداء ${topActor?.name ?? "البطل"} يمنح العمل ثقله الجماهيري، بينما يترك ${director?.name ?? "المخرج"} بصمة بصرية واعدة.`,
-      `التوليفة بين ${project.primaryGenre.replaceAll("_", " ")} و${project.secondaryGenre.replaceAll("_", " ")} صنعت هوية مختلفة، وإن لم تكن كل اختياراتها محسوبة.`,
+      `قراءة سيناريو: ${project.summary.trim().slice(0, 105)}${project.summary.length > 105 ? "…" : ""} — الفكرة تملك مدخلًا واضحًا، لكن تماسك التحولات الدرامية هو ما سيحدد قيمتها بعد المشاهدة الثانية.`,
+      `من مقعد الجمهور: حضور ${topActor?.name ?? "البطل الرئيسي"} يمنح الحكاية نقطة جذب سهلة، والإيقاع يخدم ${project.format === "series" ? "متابعة الحلقات" : "المشاهدة السينمائية"}، حتى لو احتاجت بعض اللحظات إلى اختصار.`,
+      `مراجعة للصنعة: اختيارات ${director?.name ?? "المخرج"} في مزج ${project.primaryGenre.replaceAll("_", " ")} مع ${project.secondaryGenre.replaceAll("_", " ")} تمنح العمل شخصية، بينما يظل التوازن بين الصورة والحكاية موضع نقاش.`,
     ],
     headlines: [`${project.title} يشعل النقاش: رهان جريء أم مغامرة أكبر من ميزانيتها؟`, `الجمهور يمنح ${project.title} دفعة قوية في أسبوعه الأول`],
     social_posts: [`"المشهد الأخير في ${project.title} محتاج نقاش طويل!"`, `"أداء يستحق التصفيق.. والإيقاع كان محتاج شوية شد."`],

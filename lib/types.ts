@@ -41,7 +41,7 @@ export interface Project {
   budget: { sets: number; costumes: number; vfx: number; extras: number };
   marketingBudget: number; releaseSeason: string; screens: number; platformId: string;
   status: ProjectStatus; productionProgress: number; crises: Crisis[]; hype: number; qualityModifier: number; negotiationDiscount: number; negotiatedActorId?: string; contracts: ContractTerms[];
-  result?: EvaluationResult; boxOffice?: number; backendPayout?: number; rivalReleases?: RivalRelease[]; createdYear: number; proposalDay?: number; productionStartDay?: number; releaseDay?: number; revenueTarget?: number; dailyGross?: number;
+  result?: EvaluationResult; boxOffice?: number; backendPayout?: number; rivalReleases?: RivalRelease[]; createdYear: number; proposalDay?: number; productionStartDay?: number; plannedEndDay?: number; productionEndDay?: number; releaseDay?: number; revenueTarget?: number; dailyGross?: number;
 }
 export interface Crisis {
   id: string; title: string; description: string; choices: { label: string; cash: number; hype: number; quality: number }[];

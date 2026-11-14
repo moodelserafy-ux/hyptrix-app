@@ -15,7 +15,7 @@ const requestSchema = z.object({
 
 const evaluationSchema = z.object({
   critics_score: z.number().min(0).max(10), audience_score: z.number().min(0).max(10),
-  box_office_multiplier: z.number().min(0.2).max(3.5), reviews: z.array(z.string()).min(2).max(5),
+  box_office_multiplier: z.number().min(0.2).max(3.5), reviews: z.array(z.string().min(20).max(700)).length(3),
   headlines: z.array(z.string()).min(1).max(5), social_posts: z.array(z.string()).min(1).max(5),
   summary: z.string(), award_nominations: z.array(z.string()).max(8),
 });
@@ -74,26 +74,43 @@ export async function POST(request: Request) {
       const candidate = body.candidate ?? {};
       const prompt = `${base}\n\nأنت وكيل أعمال محترف. قيّم العرض المقدم إلى ${String(candidate.memberName ?? "عضو الطاقم")} لدور ${String(candidate.role ?? "")}. الراتب المعروض ${String(candidate.negotiatedSalary ?? "غير محدد")} مقابل الأجر الأساسي ${String(candidate.baseSalary ?? "غير محدد")}. ضع في الاعتبار مستوى النجم والغرور والتوافق مع النوع وسمعة الاستوديو وملخص القصة. أجب بقرار واقعي غير مضمون القبول؛ الرفض يجب أن يكون له سبب محدد وقابل للتفاوض، والقبول يذكر ما أقنعه. JSON فقط: decision accepted أو rejected، وreason باللهجة المصرية، لا تقل عن 12 حرفًا.`;
       const result = await generateWithFallback(prompt);
-      if (!result.data) {
-        const overall = Number((candidate.stats as Record<string, unknown> | undefined)?.overall ?? 70);
-        const ego = Number(candidate.ego ?? 50);
-        const accepted = Math.random() < Math.max(.22, Math.min(.88, .72 + (overall - 75) / 180 - Math.max(0, ego - 85) / 150));
-        return NextResponse.json({ data: { decision: accepted ? "accepted" : "rejected", reason: accepted ? "الفكرة شدتني والدور مناسب لمساري، والعرض المالي مقبول مبدئيًا." : "السيناريو واعد، لكن المقابل المالي أو تفاصيل الدور لا تعكس حجم الالتزام المطلوب." }, provider: "local", fallback: true });
-      }
+      const overall = Number((candidate.stats as Record<string, unknown> | undefined)?.overall ?? 70);
+      const ego = Number(candidate.ego ?? 50);
+      const offeredSalary = Number(candidate.negotiatedSalary ?? 0);
+      const baseSalary = Number(candidate.baseSalary ?? 0);
+      const compensationRatio = baseSalary > 0 && offeredSalary > 0 ? offeredSalary / baseSalary : 1;
+      const acceptanceChance = Math.max(.18, Math.min(.9, .58 + (overall - 75) / 180 - Math.max(0, ego - 85) / 150 + (compensationRatio - 1) * .3));
+      const accepted = Math.random() < acceptanceChance;
+      const memberName = String(candidate.memberName ?? "عضو الطاقم");
+      const role = String(candidate.role ?? "الدور المعروض");
+      const localDecision = {
+        decision: accepted ? "accepted" as const : "rejected" as const,
+        reason: accepted
+          ? `${memberName} شايف إن ${role} مناسب لخبرته وإن المقابل المعروض مقبول مبدئيًا، فوافق على الدخول في المشروع.`
+          : `${memberName} مهتم بالفكرة، لكنه شايف إن ${role} محتاج تفاصيل أو مقابل مالي أفضل قبل ما يلتزم بالتصوير.`,
+      };
+      if (!result.data) return NextResponse.json({ data: localDecision, provider: "local", fallback: true });
       const parsed = negotiationSchema.safeParse(result.data);
-      if (!parsed.success) throw new Error("AI response failed negotiation schema");
+      if (!parsed.success) return NextResponse.json({ data: localDecision, provider: "local", fallback: true, notice: "تم استخدام قرار محلي لأن رد مزود AI لم يطابق التنسيق المطلوب." });
       return NextResponse.json({ data: parsed.data, provider: result.provider, fallback: false });
     }
     if (body.type === "daily_news") {
       const prompt = `${base}\n\nاكتب خبرًا واحدًا جديدًا وغير مكرر يناسب اليوم الحالي في عالم اللعبة. استند إلى أحداث المشروع وحالته وأرقامه فقط. لا تختلق أسماء كيانات جديدة. JSON فقط: headline عنوان صحفي، story خبر من 2-4 جمل فيه تفاصيل ملموسة، kind واحدة من business أو crisis أو release.`;
       const result = await generateWithFallback(prompt);
-      if (!result.data) return NextResponse.json({ data: { headline: "حركة جديدة في سوق الإنتاج", story: `تتابع الأوساط الفنية تطورات مشروع ${project.title} مع تغيرات جدول العمل ومؤشرات السوق.`, kind: "business" }, provider: "local", fallback: true });
+      const dayNumber = Number(body.context.match(/اليوم\s+(\d+)/)?.[1] ?? 0);
+      const newsAngles = ["سباق جديد على مواعيد العرض", "تحركات لافتة في سوق الإنتاج", "مفاوضات تغيّر خريطة الموسم", "ضغوط متزايدة على ميزانيات الأعمال", "منصات تراقب عناوين الموسم"];
+      const localNews = {
+        headline: `${newsAngles[dayNumber % newsAngles.length]} · اليوم ${dayNumber}`,
+        story: `تتابع الأوساط الفنية تطورات ${project.title} بالتزامن مع تغيرات جدول العمل ومؤشرات السوق، وسط ترقب لخطوات الاستوديوهات والمنصات خلال الأيام المقبلة.`,
+        kind: "business" as const,
+      };
+      if (!result.data) return NextResponse.json({ data: localNews, provider: "local", fallback: true });
       const parsed = newsSchema.safeParse(result.data);
-      if (!parsed.success) throw new Error("AI response failed daily news schema");
+      if (!parsed.success) return NextResponse.json({ data: localNews, provider: "local", fallback: true, notice: "تم استخدام خبر محلي لأن رد مزود AI لم يطابق التنسيق المطلوب." });
       return NextResponse.json({ data: parsed.data, provider: result.provider, fallback: false });
     }
     if (body.type === "evaluate") {
-      const prompt = `${base}\n\nقيّم العمل كما لو أنك لجنة نقاد وجمهور في سوق ترفيهي خيالي. أرسل JSON بالحقول التالية فقط: critics_score رقم 0-10، audience_score رقم 0-10، box_office_multiplier رقم 0.2-3.5، reviews مصفوفة 3 مراجعات نقدية قصيرة تذكر عناصر ملموسة من القصة والطاقم، headlines مصفوفة 2 مانشيت، social_posts مصفوفة 2 منشور، summary فقرة، award_nominations مصفوفة ترشيحات. اجعل الإيرادات منطقية قياساً بالجودة والميزانية والتسويق. لا تخترع أسماء أشخاص أو شركات غير موجودة في بيانات العمل.`;
+      const prompt = `${base}\n\nقيّم العمل كما لو أنك لجنة مستقلة تضم ثلاثة أصوات نقدية مختلفة فعلًا في سوق ترفيهي خيالي. أرسل JSON بالحقول التالية فقط: critics_score رقم 0-10، audience_score رقم 0-10، box_office_multiplier رقم 0.2-3.5، reviews مصفوفة من 3 مراجعات (كل مراجعة 2-4 جمل، مختلفة في اللغة والزوايا والاستنتاج). المراجع الأول ناقد سيناريو يهتم ببناء الحبكة والشخصيات والإيقاع؛ الثاني صحفي جماهيري يركز على التمثيل والتفاعل والمتعة؛ الثالث ناقد فني يراجع الإخراج والتصوير والموسيقى والمونتاج. لا تجعل الأصوات الثلاثة تتفق تلقائيًا، ومن الطبيعي أن يعجب أحدهم بعنصر وينتقده الآخر. تجنب الجمل الجاهزة والتكرار بين المراجعات أو مع الأخبار السابقة، واستشهد بتفاصيل محددة من ملخص القصة وأسماء الطاقم المتاحة فقط. headlines مصفوفة 2 مانشيت، social_posts مصفوفة 2 منشور، summary فقرة، award_nominations مصفوفة ترشيحات. اجعل الإيرادات منطقية قياساً بالجودة والميزانية والتسويق. لا تخترع أسماء أشخاص أو شركات غير موجودة في بيانات العمل.`;
       const result = await generateWithFallback(prompt);
       if (!result.data) {
         const fallback = localEvaluation(project, DEFAULT_DATABASE.actors, DEFAULT_DATABASE.crew);

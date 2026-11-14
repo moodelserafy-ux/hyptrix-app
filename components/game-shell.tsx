@@ -96,11 +96,11 @@ export function GameShell() {
   const createStudio = useGameStore((s) => s.createStudio);
   const createProject = useGameStore((s) => s.createProject);
   const updateProject = useGameStore((s) => s.updateProject);
+  const updateContract = useGameStore((s) => s.updateContract);
   const setActiveProject = useGameStore((s) => s.setActiveProject);
   const addCash = useGameStore((s) => s.addCash);
   const addHistory = useGameStore((s) => s.addHistory);
-  const advanceWeek = useGameStore((s) => s.advanceWeek);
-  const advanceDay = useGameStore((s) => s.advanceDay);
+  const syncClock = useGameStore((s) => s.syncClock);
   const setVip = useGameStore((s) => s.setVip);
   const setNotification = useGameStore((s) => s.setNotification);
   const resetGame = useGameStore((s) => s.resetGame);
@@ -124,8 +124,10 @@ export function GameShell() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [createStep, setCreateStep] = useState<"concept" | "casting">("concept");
   const processingOffers = useRef<Set<string>>(new Set());
+  const hydrationStartedRef = useRef(false);
   const newsDayRef = useRef(0);
   const previousDayRef = useRef(gameDay);
+  const simulationInitializedRef = useRef(false);
   const [draftDiscount, setDraftDiscount] = useState(0);
   const [negotiationTarget, setNegotiationTarget] = useState("act_1");
   const [resultToast, setResultToast] = useState("");
@@ -134,14 +136,24 @@ export function GameShell() {
   const supabase = useMemo(() => getSupabaseBrowser(), []);
 
   useEffect(() => {
-    Promise.resolve(useGameStore.persist.rehydrate()).then(() => hydrate());
+    if (hydrationStartedRef.current) return;
+    hydrationStartedRef.current = true;
+    void Promise.resolve(useGameStore.persist.rehydrate())
+      .catch(() => undefined)
+      .then(() => hydrate())
+      .catch(() => {
+        useGameStore.setState({ hydrated: true });
+        setToast("تعذر استعادة بعض بيانات الحفظ. تم فتح اللعبة بالبيانات المتاحة على الجهاز.");
+      });
+  }, [hydrate]);
+  useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     if (supabase) {
       supabase.auth.getSession().then(({ data }) => { setUserEmail(data.session?.user.email ?? ""); });
       const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUserEmail(session?.user.email ?? ""));
       return () => listener.subscription.unsubscribe();
     }
-  }, [hydrate, supabase]);
+  }, [supabase]);
   useEffect(() => {
     if (notification) { setToast(notification); const timer = window.setTimeout(() => { setToast(""); setNotification(null); }, 3800); return () => window.clearTimeout(timer); }
   }, [notification, setNotification]);
@@ -149,39 +161,70 @@ export function GameShell() {
     if (userEmail) refreshVip();
   }, [userEmail]);
   useEffect(() => { if (screen === "leaderboard") loadLeaderboard("all"); }, [screen]);
-  // One real minute equals one in-game day. The timer is local and resumes while the game is open.
-  useEffect(() => { const timer = window.setInterval(() => advanceDay(), 60_000); return () => window.clearInterval(timer); }, [advanceDay]);
+  // One real minute equals one in-game day. Reconcile elapsed time so background-tab throttling cannot lose days.
+  useEffect(() => {
+    if (!hydrated || !hasStudio) return;
+    syncClock();
+    const timer = window.setInterval(syncClock, 10_000);
+    return () => window.clearInterval(timer);
+  }, [hydrated, hasStudio, syncClock]);
   useEffect(() => {
     for (const project of projects) {
       const due = project.contracts.filter((contract) => contract.response === "pending" && (contract.responseDay ?? Number.MAX_SAFE_INTEGER) <= gameDay);
       for (const contract of due) {
         if (processingOffers.current.has(`${project.id}:${contract.memberId}`)) continue;
         processingOffers.current.add(`${project.id}:${contract.memberId}`);
-        const candidate = contract.memberId.startsWith("act_") ? db.actors.find((a) => a.id === contract.memberId) : db.crew.find((c) => c.id === contract.memberId);
-        fetch("/api/generate-event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "negotiation", project, candidate: { ...contract, stats: candidate?.stats, best_genres: candidate && "best_genres" in candidate ? candidate.best_genres : undefined, genre_mastery: candidate && "genre_mastery" in candidate ? candidate.genre_mastery : undefined }, worldHistory: worldHistory.slice(0, 25), context: `يوم اللعبة ${gameDay}. اسم الاستوديو ${studio?.name ?? ""}.` }) })
+        const actorCandidate = db.actors.find((actor) => actor.id === contract.memberId);
+        const crewCandidate = db.crew.find((member) => member.id === contract.memberId);
+        const candidate = actorCandidate ?? crewCandidate;
+        const candidateDetails = {
+          ...contract,
+          stats: candidate?.stats,
+          ...(actorCandidate ? { genre_mastery: actorCandidate.genre_mastery } : {}),
+          ...(crewCandidate ? { best_genres: crewCandidate.best_genres } : {}),
+        };
+        fetch("/api/generate-event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "negotiation", project, candidate: candidateDetails, worldHistory: worldHistory.slice(0, 25), context: `يوم اللعبة ${gameDay}. اسم الاستوديو ${studio?.name ?? ""}.` }) })
           .then(async (response) => { if (!response.ok) throw new Error("negotiation unavailable"); return response.json(); })
           .then((payload) => {
-            const decision = payload.data?.decision === "accepted" ? "accepted" : "rejected";
-            const contracts = project.contracts.map((item) => item.memberId === contract.memberId ? { ...item, response: decision, responseReason: String(payload.data?.reason ?? "لم يصل رد واضح من ممثل الأعمال.") } : item);
-            updateProject(project.id, { contracts });
-            addHistory({ year, kind: "business", text: `${contract.memberName}: ${decision === "accepted" ? "وافق على العرض" : "رفض العرض"} لـ ${project.title}. ${String(payload.data?.reason ?? "")}` });
-            setToast(`${contract.memberName} ${decision === "accepted" ? "وافق على الانضمام" : "رفض العرض"}: ${String(payload.data?.reason ?? "")}`);
+            const decision: "accepted" | "rejected" = payload.data?.decision === "accepted" ? "accepted" : "rejected";
+            const reason = String(payload.data?.reason ?? "لم يصل رد واضح من ممثل الأعمال.");
+            updateContract(project.id, contract.memberId, { response: decision, responseReason: reason });
+            addHistory({ year, kind: "business", text: `${contract.memberName}: ${decision === "accepted" ? "وافق على العرض" : "رفض العرض"} لـ ${project.title}. ${reason}` });
+            setToast(`${contract.memberName} ${decision === "accepted" ? "وافق على الانضمام" : "رفض العرض"}: ${reason}`);
           }).catch(() => {
-            const contracts = project.contracts.map((item) => item.memberId === contract.memberId ? { ...item, response: "rejected" as const, responseReason: "تعذر الحصول على رد من وكيل الأعمال؛ حاول إعادة إرسال العرض عند استقرار الاتصال." } : item);
-            updateProject(project.id, { contracts });
+            updateContract(project.id, contract.memberId, { response: "rejected", responseReason: "تعذر الحصول على رد من وكيل الأعمال؛ حاول إعادة إرسال العرض عند استقرار الاتصال." });
           }).finally(() => processingOffers.current.delete(`${project.id}:${contract.memberId}`));
       }
     }
-  }, [gameDay, projects, db, studio, worldHistory, year, updateProject, addHistory]);
+  }, [gameDay, projects, db, studio, worldHistory, year, updateContract, addHistory]);
   useEffect(() => {
-    const elapsedDays = Math.max(1, gameDay - previousDayRef.current);
+    if (!hydrated || !hasStudio) {
+      previousDayRef.current = gameDay;
+      simulationInitializedRef.current = false;
+      return;
+    }
+    // Establish the cursor from the persisted day first. The clock effect above
+    // may then advance it by only the real offline minutes since lastTickAt.
+    if (!simulationInitializedRef.current) {
+      previousDayRef.current = gameDay;
+      simulationInitializedRef.current = true;
+      return;
+    }
+    const elapsedDays = gameDay - previousDayRef.current;
+    if (elapsedDays <= 0) return;
     previousDayRef.current = gameDay;
-    if (gameDay <= 1) return;
+
     for (const project of projects.filter((item) => item.status === "production" && item.crises.every((crisis) => crisis.resolved))) {
       const progress = Math.min(100, project.productionProgress + 14 * elapsedDays);
-      updateProject(project.id, { productionProgress: progress, status: progress >= 100 ? "post" : "production" });
-      if (progress >= 100) addHistory({ year, kind: "business", text: `اكتمل تصوير ${project.title} تلقائيًا في اليوم ${gameDay}، وانتقل إلى ما بعد الإنتاج.` });
+      const completed = progress >= 100;
+      updateProject(project.id, {
+        productionProgress: progress,
+        status: completed ? "post" : "production",
+        ...(completed ? { productionEndDay: gameDay } : {}),
+      });
+      if (completed) addHistory({ year, kind: "business", text: `اكتمل تصوير ${project.title} تلقائيًا في اليوم ${gameDay}، وانتقل إلى ما بعد الإنتاج.` });
     }
+
     for (const project of projects.filter((item) => item.status === "released" && (item.revenueTarget ?? 0) > (item.boxOffice ?? 0))) {
       const remaining = Math.max(0, (project.revenueTarget ?? 0) - (project.boxOffice ?? 0));
       const daily = Math.min(remaining, Math.max(250_000, Math.round((project.revenueTarget ?? 0) * (project.dailyGross ?? 0.035) * elapsedDays * (0.82 + Math.random() * 0.36))));
@@ -189,18 +232,29 @@ export function GameShell() {
       const rivals = (project.rivalReleases ?? []).map((rival) => {
         const rivalRemaining = Math.max(0, (rival.revenueTarget ?? rival.boxOffice) - rival.boxOffice);
         const rivalDaily = Math.min(rivalRemaining, Math.max(100_000, Math.round((rival.revenueTarget ?? rival.boxOffice) * (rival.dailyGross ?? 0.04) * elapsedDays * (0.8 + Math.random() * 0.4))));
-        return { ...rival, boxOffice: rival.boxOffice + rivalDaily, dailyGross: Math.max(.012, (rival.dailyGross ?? .04) * .94) };
+        return { ...rival, boxOffice: rival.boxOffice + rivalDaily, dailyGross: Math.max(.012, (rival.dailyGross ?? .04) * Math.pow(.94, elapsedDays)) };
       });
-      updateProject(project.id, { boxOffice: (project.boxOffice ?? 0) + daily, dailyGross: Math.max(0.012, (project.dailyGross ?? 0.035) * 0.94), rivalReleases: rivals });
+      updateProject(project.id, { boxOffice: (project.boxOffice ?? 0) + daily, dailyGross: Math.max(0.012, (project.dailyGross ?? 0.035) * Math.pow(.94, elapsedDays)), rivalReleases: rivals });
       addCash(Math.round(daily * (1 - Math.min(.28, (project.backendPayout ?? 0) / Math.max(1, project.revenueTarget ?? 1)))));
-      if (gameDay % 7 === 0) addHistory({ year, kind: "release", text: `تقرير أسبوعي: ${project.title} أضاف ${money(daily)} جنيه إلى شباك التذاكر، والإجمالي ${money((project.boxOffice ?? 0) + daily)}.` });
+      if (gameDay % 7 === 0) addHistory({ year, kind: "release", text: `تقرير أسبوعي: ${project.title} أضاف ${money(daily)} جنيه إلى شباك التذاكر خلال ${elapsedDays} يوم، والإجمالي ${money((project.boxOffice ?? 0) + daily)}.` });
     }
+
     if (gameDay % 3 === 0 && newsDayRef.current !== gameDay) {
       newsDayRef.current = gameDay;
-      const focus = projects.find((item) => item.status === "released" || item.status === "production" || item.status === "draft");
-      if (focus) fetch("/api/generate-event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "daily_news", project: focus, worldHistory: worldHistory.slice(0, 30), context: `اليوم ${gameDay} في عالم Hyptrix. لا تكرر العناوين السابقة.` }) }).then((r) => r.ok ? r.json() : null).then((payload) => { if (payload?.data?.headline) { addHistory({ year, kind: payload.data.kind ?? "business", text: `${payload.data.headline} — ${payload.data.story}` }); setToast(payload.data.headline); } }).catch(() => undefined);
+      const focus = projects.find((item) => item.status === "released" || item.status === "production" || item.status === "post" || item.status === "draft") ?? {
+        id: "world-market", title: "سوق صناعة السينما", summary: "تغطية عامة لحركة الإنتاج والتوزيع والمنصات والمنافسة بين شركات السينما والتلفزيون.",
+      };
+      fetch("/api/generate-event", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "daily_news", project: focus, worldHistory: worldHistory.slice(0, 30), context: `اليوم ${gameDay} في عالم Hyptrix. لا تكرر العناوين السابقة، وغطِّ السوق كله إذا لم يكن هناك مشروع نشط.` }),
+      }).then((response) => response.ok ? response.json() : null).then((payload) => {
+        if (payload?.data?.headline) {
+          addHistory({ year, kind: payload.data.kind ?? "business", text: `${payload.data.headline} — ${payload.data.story}` });
+          setToast(payload.data.headline);
+        }
+      }).catch(() => undefined);
     }
-  }, [gameDay]);
+  }, [hydrated, hasStudio, gameDay, projects, worldHistory, year, updateProject, addCash, addHistory]);
 
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects.find((project) => project.status === "production" || project.status === "post" || project.status === "released") ?? null;
   const studioCash = studio?.cash ?? 0;
@@ -311,7 +365,12 @@ export function GameShell() {
   function createNewProject() {
     if (!form.title.trim() || form.summary.trim().length < 30) { setToast("اكتب اسم العمل وملخصًا من 30 حرفًا على الأقل."); return; }
     const castIds = uniq([form.lead1, form.lead2, form.antagonist, form.support1, form.support2, form.support3, form.support4, form.cameo1, form.cameo2]);
-    if (castIds.length < 5 || !form.director || !form.writer1 || !form.cinematographer || !form.composer || !form.editor) { setToast("التشكيل يحتاج 5 ممثلين على الأقل وخانات الطاقم الفني الأساسية."); return; }
+    const selectedActors = db.actors.filter((actor) => castIds.includes(actor.id));
+    const selectedCrew = db.crew.filter((member) => formCrewIds.includes(member.id));
+    const requiredRoles: CrewMember["role"][] = ["director", "screenwriter", "cinematographer", "composer", "editor_vfx"];
+    if (selectedActors.length < 5 || requiredRoles.some((role) => !selectedCrew.some((member) => member.role === role))) {
+      setToast("التشكيل يحتاج 5 ممثلين على الأقل، ومخرجًا ومؤلفًا ومدير تصوير وموسيقارًا ومونتيرًا من الكتالوج الحالي."); return;
+    }
     const project: Project = {
       id: crypto.randomUUID(), title: form.title.trim(), summary: form.summary.trim(), format: form.format, episodes: form.format === "film" ? 0 : form.episodes,
       season: form.season, primaryGenre: form.primaryGenre, secondaryGenre: form.secondaryGenre, ageRating: form.ageRating,
@@ -340,16 +399,61 @@ export function GameShell() {
     createProject(project); setScreen("production");
     setToast("تم إرسال ملف الفكرة والعروض. ستصل ردود الوكلاء بعد يوم داخل اللعبة.");
   }
-  function startProduction(project: Project) {
-    const rawCost = estimateCost(project, db.actors, db.crew, studio);
-    const cost = rawCost;
-    if (project.contracts.some((contract) => contract.response !== "accepted")) { setToast("لا يمكن بدء التصوير قبل اكتمال موافقات كل أفراد الطاقم."); return; }
+  async function startProduction(project: Project) {
+    if (!project.contracts.length || project.contracts.some((contract) => contract.response !== "accepted")) {
+      setToast("لا يمكن بدء التصوير قبل اكتمال موافقات كل أفراد الطاقم."); return;
+    }
+    if (Object.values(project.budget).some((amount) => amount <= 0) || project.marketingBudget <= 0) {
+      setToast("حدد ميزانية موجبة لكل بند، وميزانية تسويق، قبل اعتماد التصوير."); return;
+    }
+    const cost = estimateCost(project, db.actors, db.crew, studio);
     if (studioCash < cost) { setToast(`السيولة غير كافية. تحتاج ${fullMoney(cost - studioCash)} إضافية.`); return; }
-    const crises = createCrises(project.id, 2 + (Math.random() > 0.55 ? 1 : 0));
-    updateProject(project.id, { status: "production", productionProgress: 5, crises, productionStartDay: gameDay });
-    addCash(-cost);
-    addHistory({ year, kind: "business", text: `بدأ تصوير ${project.title} بميزانية إجمالية تقديرية ${money(cost)}.` });
-    setToast(`بدأ التصوير. ${crises.length} أزمات محتملة تنتظر قراراتك.`);
+
+    setBusyAi(true);
+    setToast("يجري تجهيز خطة التصوير وأزمات مرتبطة بظروف المشروع...");
+    try {
+      const fallbackCrises = createCrises(project.id, 2 + (Math.random() > 0.55 ? 1 : 0));
+      const crisisAngles = ["مشكلة موقع تصوير أو معدات أو جدول لوجستي", "خلاف إبداعي بين أفراد الطاقم أو إعادة كتابة", "تسريب أو اعتراض رقابي أو أزمة توزيع وتسويق"];
+      const crises = await Promise.all(fallbackCrises.map(async (fallback, index) => {
+        try {
+          const response = await fetch("/api/generate-event", {
+            method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(35_000),
+            body: JSON.stringify({ type: "crisis", project, worldHistory: worldHistory.slice(0, 35), context: `اليوم ${gameDay}. هذه الأزمة رقم ${index + 1} ويجب أن تختلف تمامًا عن باقي الأزمات. زاوية الأزمة المطلوبة: ${crisisAngles[index]}. اربطها بميزانية العمل وطاقمه ونوعه.` }),
+          });
+          if (!response.ok) return fallback;
+          const payload = await response.json();
+          const data = payload?.data;
+          if (!data?.title || !data?.description || !Array.isArray(data?.choices) || data.choices.length !== 3) return fallback;
+          return {
+            id: fallback.id,
+            title: String(data.title),
+            description: String(data.description),
+            choices: data.choices.map((choice: { label?: unknown; cash?: unknown; hype?: unknown; quality?: unknown }) => ({
+              label: String(choice.label ?? "قرار إداري"),
+              cash: Number(choice.cash ?? 0),
+              hype: Number(choice.hype ?? 0),
+              quality: Number(choice.quality ?? 0),
+            })),
+            resolved: false,
+          };
+        } catch {
+          return fallback;
+        }
+      }));
+
+      const plannedDays = Math.ceil((100 - 5) / 14);
+      updateProject(project.id, {
+        status: "production", productionProgress: 5, crises,
+        productionStartDay: gameDay, plannedEndDay: gameDay + plannedDays, productionEndDay: undefined,
+      });
+      addCash(-cost);
+      addHistory({ year, kind: "business", text: `بدأ تصوير ${project.title} بميزانية إجمالية ${money(cost)}. الموعد المخطط لانتهاء التصوير: اليوم ${gameDay + plannedDays}.` });
+      setToast(`بدأ التصوير. الموعد المخطط لانتهائه اليوم ${gameDay + plannedDays}، وتوجد ${crises.length} أزمات مرتبطة بالإنتاج.`);
+    } catch {
+      setToast("تعذر تجهيز التصوير الآن. لم يتم خصم الميزانية؛ جرّب مرة أخرى.");
+    } finally {
+      setBusyAi(false);
+    }
   }
   function resolveCrisis(project: Project, crisisId: string, choiceIndex: number) {
     const crisis = project.crises.find((item) => item.id === crisisId);
@@ -357,48 +461,62 @@ export function GameShell() {
     const choice = crisis.choices[choiceIndex];
     addCash(choice.cash);
     const crises = project.crises.map((item) => item.id === crisisId ? { ...item, resolved: true } : item);
-    updateProject(project.id, { crises, hype: project.hype + choice.hype, qualityModifier: project.qualityModifier + choice.quality });
+    const allResolved = crises.every((item) => item.resolved);
+    updateProject(project.id, {
+      crises, hype: project.hype + choice.hype, qualityModifier: project.qualityModifier + choice.quality,
+      ...(allResolved ? { plannedEndDay: gameDay + Math.ceil((100 - project.productionProgress) / 14) } : {}),
+    });
     addHistory({ year, kind: "crisis", text: `${project.title}: ${crisis.title} — القرار: ${choice.label}.` });
     setToast(`تم اتخاذ القرار: ${choice.label}`);
-  }
-  function advanceProduction(project: Project) {
-    if (project.crises.some((crisis) => !crisis.resolved)) { setToast("حل كل أزمات التصوير قبل دفع الجدول إلى الأمام."); return; }
-    const progress = Math.min(100, project.productionProgress + 32);
-    updateProject(project.id, { productionProgress: progress, status: progress >= 100 ? "post" : "production" });
-    if (progress >= 100) { addHistory({ year, kind: "business", text: `انتهى التصوير الرئيسي لـ ${project.title} وانتقل إلى مرحلة ما بعد الإنتاج.` }); setToast("اكتمل التصوير! حان وقت تقييم العمل وإطلاقه."); }
   }
   async function releaseProject(project: Project) {
     if (!studio) return;
     setBusyAi(true); setResultToast("");
-    const payload = { type: "evaluate", project: { ...project, hype: project.hype, qualityModifier: project.qualityModifier }, worldHistory: worldHistory.slice(0, 50), context: `معلومات إضافية: اسم الاستوديو ${studio.name}، السوق ${MARKET_LABELS[studio.market]}، ميزة المؤسس ${studio.perk}.` };
-    let result: EvaluationResult;
-    let provider = "local";
     try {
-      const response = await fetch("/api/generate-event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (!response.ok) throw new Error("تعذر الاتصال بمحرك الذكاء الاصطناعي");
-      const data = await response.json(); provider = data.provider ?? "local"; result = provider === "local" ? localEvaluation(project, db.actors, db.crew, project.hype) : data.data as EvaluationResult;
-    } catch { result = localEvaluation(project, db.actors, db.crew, project.hype); provider = "local"; }
-    result = { ...result, critics_score: Math.max(0, Math.min(10, result.critics_score + project.qualityModifier * 0.06)), audience_score: Math.max(0, Math.min(10, result.audience_score + project.hype * 0.02)) };
-    const platformCapacity = db.streaming_platforms.find((p) => p.id === project.platformId)?.budget_capacity ?? 50;
-    const licensingRevenue = platformCapacity * (project.format === "series" ? 190000 : 85000);
-    const revenue = calculateRevenue(project, result, db.actors, studio) + licensingRevenue;
-    const backendRate = Math.min(0.28, project.contracts.reduce((sum, contract) => sum + contract.backendPoints, 0) / 240);
-    const backendPayout = Math.round(revenue * backendRate);
-    const rivalCount = Math.min(db.competitor_studios.length, 2 + (Math.random() > 0.52 ? 1 : 0));
-    const rivalReleases = [...db.competitor_studios].sort(() => Math.random() - 0.5).slice(0, rivalCount).map((rival) => {
-      const genreFactor = rival.preferred_genres.includes(project.primaryGenre) ? 1.16 : 0.88;
-      const marketStrength = 0.48 + rival.market_power / 165;
-      const seasonalSwing = 0.72 + Math.random() * 0.56;
-      return { studioName: rival.name, boxOffice: Math.round(revenue * marketStrength * genreFactor * seasonalSwing) };
-    });
-    const openingGross = Math.round(revenue * 0.12);
-    const released: Project = { ...project, status: "released", result, boxOffice: openingGross, revenueTarget: revenue, dailyGross: 0.055, releaseDay: gameDay, backendPayout, rivalReleases: rivalReleases.map((rival) => ({ ...rival, revenueTarget: rival.boxOffice, boxOffice: Math.round(rival.boxOffice * 0.12), dailyGross: 0.05 })) };
-    updateProject(project.id, released);
-    addCash(openingGross - Math.round(backendPayout * 0.12));
-    useGameStore.setState((state) => ({ studio: state.studio ? { ...state.studio, reputation: Math.min(100, state.studio.reputation + (result.critics_score >= 7.5 ? 5 : 2)) } : state.studio }));
-    addHistory({ year, kind: "release", text: `صدر ${project.format === "film" ? "فيلم" : "مسلسل"} ${project.title}: تقييم النقاد ${result.critics_score}/10، الجمهور ${result.audience_score}/10، وإيرادات افتتاحية ${money(openingGross)}، والهدف المتوقع ${money(revenue)}. يبدأ تتبع الشباك يومًا بيوم.` });
-    setResultToast(provider === "local" ? "استخدمنا محرك التقييم المحلي؛ أضف مفاتيح Groq أو Gemini لتفعيل التقييم التوليدي." : `تم التقييم بواسطة ${provider === "groq" ? "Groq" : "Gemini"}.`);
-    setBusyAi(false); setScreen("results"); setActiveProject(project.id);
+      const previousReviews = projects
+        .filter((item) => item.id !== project.id && item.result)
+        .flatMap((item) => item.result?.reviews ?? [])
+        .map((review) => review.slice(0, 240))
+        .slice(0, 12);
+      const payload = {
+        type: "evaluate",
+        project: { ...project, hype: project.hype, qualityModifier: project.qualityModifier },
+        worldHistory: worldHistory.slice(0, 50),
+        context: `معلومات إضافية: اسم الاستوديو ${studio.name}، السوق ${MARKET_LABELS[studio.market]}، ميزة المؤسس ${studio.perk}. مراجعات سابقة يجب تجنب تكرار تعبيراتها: ${previousReviews.join(" | ") || "لا توجد مراجعات سابقة"}.`,
+      };
+      let result: EvaluationResult;
+      let provider = "local";
+      try {
+        const response = await fetch("/api/generate-event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!response.ok) throw new Error("تعذر الاتصال بمحرك الذكاء الاصطناعي");
+        const data = await response.json(); provider = data.provider ?? "local"; result = provider === "local" ? localEvaluation(project, db.actors, db.crew, project.hype) : data.data as EvaluationResult;
+      } catch { result = localEvaluation(project, db.actors, db.crew, project.hype); provider = "local"; }
+      result = { ...result, critics_score: Math.max(0, Math.min(10, result.critics_score + project.qualityModifier * 0.06)), audience_score: Math.max(0, Math.min(10, result.audience_score + project.hype * 0.02)) };
+      const platformCapacity = db.streaming_platforms.find((p) => p.id === project.platformId)?.budget_capacity ?? 50;
+      const licensingRevenue = platformCapacity * (project.format === "series" ? 190000 : 85000);
+      const revenue = calculateRevenue(project, result, db.actors, studio) + licensingRevenue;
+      const backendRate = Math.min(0.28, project.contracts.reduce((sum, contract) => sum + contract.backendPoints, 0) / 240);
+      const backendPayout = Math.round(revenue * backendRate);
+      const rivalCount = Math.min(db.competitor_studios.length, 2 + (Math.random() > 0.52 ? 1 : 0));
+      const rivalReleases = [...db.competitor_studios].sort(() => Math.random() - 0.5).slice(0, rivalCount).map((rival) => {
+        const genreFactor = rival.preferred_genres.includes(project.primaryGenre) ? 1.16 : 0.88;
+        const marketStrength = 0.48 + rival.market_power / 165;
+        const seasonalSwing = 0.72 + Math.random() * 0.56;
+        return { studioName: rival.name, boxOffice: Math.round(revenue * marketStrength * genreFactor * seasonalSwing) };
+      });
+      const openingGross = Math.round(revenue * 0.12);
+      const released: Project = { ...project, status: "released", result, boxOffice: openingGross, revenueTarget: revenue, dailyGross: 0.055, releaseDay: gameDay, backendPayout, rivalReleases: rivalReleases.map((rival) => ({ ...rival, revenueTarget: rival.boxOffice, boxOffice: Math.round(rival.boxOffice * 0.12), dailyGross: 0.05 })) };
+      updateProject(project.id, released);
+      addCash(openingGross - Math.round(backendPayout * 0.12));
+      useGameStore.setState((state) => ({ studio: state.studio ? { ...state.studio, reputation: Math.min(100, state.studio.reputation + (result.critics_score >= 7.5 ? 5 : 2)) } : state.studio }));
+      addHistory({ year, kind: "release", text: `صدر ${project.format === "film" ? "فيلم" : "مسلسل"} ${project.title}: تقييم النقاد ${result.critics_score}/10، الجمهور ${result.audience_score}/10، وإيرادات افتتاحية ${money(openingGross)}، والهدف المتوقع ${money(revenue)}. يبدأ تتبع الشباك يومًا بيوم.` });
+      setResultToast(provider === "local" ? "استخدمنا محرك التقييم المحلي؛ أضف مفاتيح Groq أو Gemini لتفعيل التقييم التوليدي." : `تم التقييم بواسطة ${provider === "groq" ? "Groq" : "Gemini"}.`);
+      setScreen("results"); setActiveProject(project.id);
+    } catch {
+      setResultToast("حصلت مشكلة أثناء تجهيز تقرير الطرح. لم نغيّر حالة المشروع؛ أعد المحاولة.");
+    } finally {
+      setBusyAi(false);
+    }
   }
   async function shareResult() {
     if (!shareRef.current) return;
@@ -475,7 +593,6 @@ export function GameShell() {
   const founderSalaryFactor = studio?.perk === "negotiator" ? .85 : 1;
   const estimatedSalary = rosterActors.filter((actor) => formCastIds.includes(actor.id)).reduce((sum, actor) => sum + actor.base_salary * founderSalaryFactor * (actor.id === negotiationTarget ? 1 - draftDiscount : 1), 0)
     + db.crew.filter((member) => formCrewIds.includes(member.id)).reduce((sum, member) => sum + member.base_salary * founderSalaryFactor, 0);
-  const estimatedProductionSpend = Math.round(estimatedSalary + Object.values(form.budget).reduce((a, b) => a + b, 0));
   const synergy = getGenreSynergy(form.primaryGenre, form.secondaryGenre);
 
   if (!hydrated) {
@@ -540,7 +657,7 @@ export function GameShell() {
         </div>
         <div className="space-y-4">
           <div className="panel p-5"><div className="flex items-center gap-3"><div className="logo-stage !min-h-0 w-16 h-16 shrink-0"><LogoMark {...activeStudio.logo} size={58}/></div><div className="min-w-0"><div className="text-[9px] text-muted">PRODUCTION HOUSE</div><div className="text-sm font-black truncate mt-1">{activeStudio.name}</div><div className="text-[10px] text-muted mt-1">الرئيس التنفيذي: {activeStudio.ceo}</div></div></div><div className="divider"/><div className="flex items-center justify-between"><span className="text-[10px] text-muted">السوق الحالي</span><span className="tag tag-gold">{MARKET_LABELS[activeStudio.market]}</span></div><div className="mt-4 space-y-3">{MARKET_REQUIREMENTS.map((m) => { const unlocked = activeStudio.cash >= m.cash && activeStudio.reputation >= m.rep; const already = ["egypt", "gulf", "europe", "hollywood"].indexOf(activeStudio.market) >= ["egypt", "gulf", "europe", "hollywood"].indexOf(m.key); return <div key={m.key} className="flex items-center gap-2"><div className="flex-1"><div className="flex justify-between text-[10px]"><span>{MARKET_LABELS[m.key]}</span><span className="text-muted">{m.tagline}</span></div><div className="progress-track mt-1.5"><span style={{ width: `${Math.min(100, Math.max(activeStudio.cash / m.cash * 65, activeStudio.reputation / m.rep * 35))}%` }}/></div></div>{already ? <CheckCircle2 size={15} className="green-text"/> : <button disabled={!unlocked} onClick={() => unlockMarket(m.key)} className="btn btn-outline !px-2 !min-h-7 !text-[9px]">فتح</button>}</div>; })}</div></div>
-          <div className="panel p-5"><div className="flex items-center gap-2"><Activity size={16} className="gold-text"/><h3 className="section-title">نبض السوق</h3></div><p className="section-sub">كل دقيقة حقيقية تساوي يومًا داخل عالم اللعبة.</p><div className="flex items-center justify-between mt-4"><div><div className="text-2xl font-black">اليوم {gameDay}<span className="text-sm text-muted"> · W{week} / 52</span></div><div className="text-[9px] text-muted">السنة {year}</div></div><button className="btn btn-outline" onClick={() => { advanceDay(); setToast("مر يوم داخل اللعبة."); }}><Play size={14}/> مرور يوم</button></div><div className="progress-track mt-3"><span style={{ width: `${week / 52 * 100}%` }}/></div></div>
+          <div className="panel p-5"><div className="flex items-center gap-2"><Activity size={16} className="gold-text"/><h3 className="section-title">نبض السوق</h3></div><p className="section-sub">كل دقيقة حقيقية تساوي يومًا داخل عالم اللعبة.</p><div className="flex items-center justify-between mt-4"><div><div className="text-2xl font-black">اليوم {gameDay}<span className="text-sm text-muted"> · W{week} / 52</span></div><div className="text-[9px] text-muted">السنة {year}</div></div><span className="tag">دقيقة حقيقية = يوم</span></div><div className="progress-track mt-3"><span style={{ width: `${week / 52 * 100}%` }}/></div></div>
         </div>
       </div>
       <div className="panel p-5 mt-4"><div className="flex items-center justify-between gap-3"><div><div className="section-kicker">WORLD HISTORY / MEMORY</div><h3 className="section-title mt-1">ذاكرة عالم السينما</h3><p className="section-sub">الأحداث السابقة تُرسل كسياق تراكمي إلى محرك التقييم.</p></div><span className="tag">{worldHistory.length} حدث مسجل</span></div>{worldHistory.length ? <div className="mt-4 space-y-2 max-h-48 overflow-auto">{worldHistory.slice(0, 5).map((entry, i) => <div key={`${entry.year}-${i}`} className="flex items-start gap-3 text-[11px]"><span className="text-[9px] gold-text font-black pt-0.5">{entry.year}</span><p className="text-muted leading-6">{entry.text}</p></div>)}</div> : <p className="text-xs text-muted mt-4">سجل التاريخ فارغ. أول قرار تجاري أو عرض سينمائي سيبدأ كتابة الحكاية.</p>}</div>
@@ -571,13 +688,9 @@ export function GameShell() {
             {detectEgoRisk({ id: "preview", title: "", summary: "", format: "film", episodes: 0, season: "off_season", primaryGenre: form.primaryGenre, secondaryGenre: form.secondaryGenre, ageRating: "16+", crew: { director: form.director, writers: [form.writer1], cinematographer: form.cinematographer, composer: form.composer, editor_vfx: form.editor }, cast: { leads: [form.lead1, form.lead2], antagonist: form.antagonist, supporting: [form.support1, form.support2, form.support3, form.support4], cameos: [form.cameo1, form.cameo2] }, budget: form.budget, marketingBudget: form.marketingBudget, releaseSeason: form.releaseSeason, screens: form.screens, platformId: form.platformId, status: "draft", productionProgress: 0, crises: [], hype: 0, qualityModifier: 0, negotiationDiscount: draftDiscount, contracts: [], createdYear: year }, db.actors) && <div className="notice notice-error mt-3"><Shield size={15}/><p>خطر غرور مرتفع: يوجد نجمان من أصحاب Ego أعلى من 90 في الأدوار الرئيسية. خلاف محتمل على ترتيب الأسماء والبوستر.</p></div>}
             <div className="mt-4"><div className="text-[10px] text-muted mb-2">معاينة بطاقات الطاقم الفني</div><div className="grid grid-cols-2 md:grid-cols-3 gap-2">{db.crew.filter((member) => formCrewIds.includes(member.id)).map((member) => <CrewCard key={member.id} member={member}/>)}</div><div className="text-[10px] text-muted mb-2 mt-4">معاينة بطاقات الأبطال</div><div className="grid grid-cols-2 md:grid-cols-4 gap-2">{db.actors.filter((actor) => formCastIds.includes(actor.id)).slice(0, 4).map((actor) => <ActorCard key={actor.id} actor={actor}/>)}</div></div>
           </section>
-          <section className="panel p-5"><div className="flex items-center gap-2"><Banknote size={17} className="gold-text"/><h3 className="section-title">03 — ميزانية الإنتاج والتوزيع</h3></div><p className="section-sub">وزّع الإنفاق بين قيمة الصورة والديكور والخدع والتنفيذ.</p>
-            <div className="grid sm:grid-cols-2 gap-4 mt-4">{([ ["sets", "الديكور والمواقع"], ["costumes", "الملابس والإكسسوارات"], ["vfx", "الخدع البصرية VFX"], ["extras", "المجاميع والكومبارس"] ] as const).map(([key, label]) => <div key={key} className="panel-soft p-3"><div className="flex items-center justify-between text-[11px] font-bold"><span>{label}</span><span className="gold-text">{money(form.budget[key])}</span></div><input className="range mt-3" type="range" min={250000} max={20000000} step={250000} value={form.budget[key]} onChange={(e) => setForm({ ...form, budget: { ...form.budget, [key]: Number(e.target.value) } })}/></div>)}</div>
-            <div className="grid sm:grid-cols-2 gap-3 mt-4"><label className="field-wrap"><span className="field-label">ميزانية الإعلانات والتسويق: {money(form.marketingBudget)}</span><input className="range" type="range" min="500000" max="40000000" step="500000" value={form.marketingBudget} onChange={(e) => changeForm("marketingBudget", Number(e.target.value))}/></label><label className="field-wrap"><span className="field-label">عدد شاشات العرض: {form.screens}</span><input className="range" type="range" min="50" max="1000" step="25" value={form.screens} onChange={(e) => changeForm("screens", Number(e.target.value))}/></label></div>
-            <div className="mt-3"><SelectField label={form.format === "series" ? "منصة البث / القناة المستهدفة" : "بيع حقوق العرض للمنصة بعد السينما"} value={form.platformId} onChange={(v) => changeForm("platformId", v)} options={db.streaming_platforms.map((p) => ({ value: p.id, label: `${p.name} · قدرة شراء ${p.budget_capacity}` }))}/></div>
-          </section></>}
+          </>}
         </div>
-        <aside className="create-summary space-y-4 xl:sticky xl:top-24"><div className="panel p-5"><div className="section-kicker">GREENLIGHT SUMMARY</div><h3 className="section-title mt-1">ملف القرار</h3><div className="poster-card mt-4 !min-h-[190px]"><LogoMark {...activeStudio.logo} size={58}/><div className="text-[9px] tracking-[.25em] gold-text mt-3">A {activeStudio.name.toUpperCase()} PRODUCTION</div><div className="poster-title mt-3">{form.title || "عنوان العمل"}</div><div className="text-[9px] text-muted mt-3">{labelGenre(form.primaryGenre)} / {labelGenre(form.secondaryGenre)}</div></div><div className="divider"/><div className="flex justify-between text-[11px]"><span className="text-muted">تكلفة الإنتاج المقدّرة</span><b className="gold-text">{money(estimatedProductionSpend)}</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">ميزانية التسويق</span><b>{money(form.marketingBudget)}</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">عدد الممثلين</span><b>{formCastIds.length} / 9</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">ملاءمة الأنواع</span><b className={synergy.score > 0 ? "green-text" : "red-text"}>{synergy.label}</b></div><div className="divider"/><div className="flex justify-between text-[11px]"><span className="text-muted">السيولة بعد الإنتاج</span><b className={activeStudio.cash >= estimatedProductionSpend ? "green-text" : "red-text"}>{money(activeStudio.cash - estimatedProductionSpend)}</b></div>{createStep === "concept" ? <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={!form.title.trim() || form.summary.trim().length < 30} onClick={() => setCreateStep("casting")}>اعتماد الفكرة واختيار الطاقم <ChevronDown size={16}/></button> : <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={!form.title.trim() || formCastIds.length < 5} onClick={createNewProject}>عرض فكرة الفيلم والتفاوض مع الطاقم <HeartHandshake size={16}/></button>}<p className="text-[9px] text-muted mt-3 leading-5">سيتم خصم ميزانية العمل عند الضغط على بدء التصوير، وليس عند حفظ ملف التطوير.</p></div>
+        <aside className="create-summary space-y-4 xl:sticky xl:top-24"><div className="panel p-5"><div className="section-kicker">GREENLIGHT SUMMARY</div><h3 className="section-title mt-1">ملف القرار</h3><div className="poster-card mt-4 !min-h-[190px]"><LogoMark {...activeStudio.logo} size={58}/><div className="text-[9px] tracking-[.25em] gold-text mt-3">A {activeStudio.name.toUpperCase()} PRODUCTION</div><div className="poster-title mt-3">{form.title || "عنوان العمل"}</div><div className="text-[9px] text-muted mt-3">{labelGenre(form.primaryGenre)} / {labelGenre(form.secondaryGenre)}</div></div><div className="divider"/><div className="flex justify-between text-[11px]"><span className="text-muted">الأجور التعاقدية التقديرية</span><b className="gold-text">{money(estimatedSalary)}</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">الميزانية</span><b>بعد موافقة الطاقم</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">عدد الممثلين</span><b>{formCastIds.length} / 9</b></div><div className="flex justify-between text-[11px] mt-3"><span className="text-muted">ملاءمة الأنواع</span><b className={synergy.score > 0 ? "green-text" : "red-text"}>{synergy.label}</b></div><div className="divider"/><div className="flex justify-between text-[11px]"><span className="text-muted">السيولة قبل الميزانية</span><b className={activeStudio.cash >= estimatedSalary ? "green-text" : "red-text"}>{money(activeStudio.cash - estimatedSalary)}</b></div>{createStep === "concept" ? <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={!form.title.trim() || form.summary.trim().length < 30} onClick={() => setCreateStep("casting")}>اعتماد الفكرة واختيار الطاقم <ChevronDown size={16}/></button> : <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={!form.title.trim() || formCastIds.length < 5} onClick={createNewProject}>عرض فكرة الفيلم والتفاوض مع الطاقم <HeartHandshake size={16}/></button>}<p className="text-[9px] text-muted mt-3 leading-5">ستحدد ميزانية الإنتاج والتسويق بعد موافقة جميع أفراد الطاقم، ولن تُخصم أي أموال عند إرسال العروض.</p></div>
           <div className="panel p-4"><div className="flex items-center gap-2"><Info size={15} className="gold-text"/><span className="text-xs font-black">نصائح مدير الاستوديو</span></div><ul className="text-[10px] text-muted leading-7 mt-2 list-disc pr-4"><li>التوافق بين النوع والمخرج والمؤلف يؤثر في سقف النقاد.</li><li>سحب النجم الجماهيري مؤثر بقوة في افتتاحية الشباك.</li><li>المسلسلات تتطلب بيع الحقوق إلى منصة بميزانية مناسبة.</li></ul></div>
         </aside>
       </div>
@@ -593,11 +706,52 @@ export function GameShell() {
       <PageHeading kicker="PRODUCTION & CRISIS MANAGEMENT" title="غرفة الإنتاج" desc={`متابعة مراحل تنفيذ «${project.title}» والتحكم في الأزمات.`} action={<span className="tag tag-gold">{project.status === "draft" ? "بانتظار موافقات الطاقم" : project.status === "production" ? "التصوير جارٍ" : project.status === "post" ? "ما بعد الإنتاج" : "تم الطرح"}</span>}/>
       <div className="grid lg:grid-cols-[1fr_300px] gap-4 items-start">
         <div className="space-y-4">
-          <section className="panel p-5"><div className="flex items-center gap-3"><div className="logo-stage !min-h-0 w-16 h-16 shrink-0"><LogoMark {...activeStudio.logo} size={57}/></div><div className="min-w-0"><div className="section-kicker">PROJECT FILE / {project.format === "film" ? "FEATURE FILM" : "SERIES"}</div><h2 className="text-xl font-black mt-1 truncate">{project.title}</h2><div className="text-[10px] text-muted mt-1">{labelGenre(project.primaryGenre)} · {labelGenre(project.secondaryGenre)} · {project.ageRating}</div></div></div><div className="divider"/><div className="grid grid-cols-3 gap-2"><div className="panel-soft p-3"><div className="text-[9px] text-muted">تقدم التصوير</div><div className="text-lg font-black gold-text mt-1">{project.productionProgress}%</div></div><div className="panel-soft p-3"><div className="text-[9px] text-muted">الأزمات المتبقية</div><div className="text-lg font-black mt-1">{project.crises.filter((c) => !c.resolved).length}</div></div><div className="panel-soft p-3"><div className="text-[9px] text-muted">ضجة إعلامية</div><div className="text-lg font-black mt-1">{project.hype}</div></div></div><div className="progress-track mt-4 !h-3"><span style={{ width: `${project.productionProgress}%` }}/></div><div className="flex justify-between text-[9px] text-muted mt-2"><span>تجهيز اللوكيشن</span><span>التصوير</span><span>المونتاج والتسليم</span></div></section>
-          {project.status === "draft" && <section className="panel p-5"><div className="flex items-center gap-2"><HeartHandshake size={18} className="gold-text"/><h3 className="section-title">عروض التعاقد وردود الوكلاء</h3></div><p className="section-sub">تم إرسال الفكرة والسيناريو. كل عضو يراجع الدور والأجر والتوافق، وتصل الردود بعد مرور يوم داخل اللعبة.</p><div className="grid grid-cols-3 gap-2 mt-4"><div className="panel-soft p-3"><div className="text-[9px] text-muted">وافقوا</div><b className="text-xl green-text">{project.contracts.filter((c) => c.response === "accepted").length}</b></div><div className="panel-soft p-3"><div className="text-[9px] text-muted">بانتظار الرد</div><b className="text-xl">{project.contracts.filter((c) => c.response === "pending").length}</b></div><div className="panel-soft p-3"><div className="text-[9px] text-muted">رفضوا</div><b className="text-xl red-text">{project.contracts.filter((c) => c.response === "rejected").length}</b></div></div><div className="space-y-2 mt-4">{project.contracts.map((contract) => <div key={contract.memberId} className="panel-soft p-3"><div className="flex items-center justify-between gap-2"><b className="text-xs">{contract.memberName}</b><span className={`tag ${contract.response === "accepted" ? "tag-gold" : ""}`}>{contract.response === "accepted" ? "وافق" : contract.response === "rejected" ? "رفض" : `يرد في اليوم ${contract.responseDay}`}</span></div><div className="text-[10px] text-muted mt-1">عرض {money(contract.negotiatedSalary)} · {contract.role}</div>{contract.responseReason && <p className="text-xs leading-6 mt-2">{contract.responseReason}</p>}</div>)}</div>{project.contracts.some((c) => c.response === "rejected") && <button className="btn btn-outline w-full mt-3" onClick={() => { const contracts = project.contracts.map((c) => c.response === "rejected" ? { ...c, response: "pending" as const, responseDay: gameDay + 1, responseReason: undefined } : c); updateProject(project.id, { contracts }); setToast("أعدنا إرسال العروض المرفوضة. انتظر يومًا داخل اللعبة."); }}>إعادة التفاوض مع الرافضين</button>}{project.contracts.every((c) => c.response === "accepted") && <><div className="notice notice-success mt-3"><CheckCircle2 size={16}/><p>اكتمل الطاقم بالكامل. أصبح المشروع جاهزًا للميزانية والتصوير.</p></div><div className="grid sm:grid-cols-2 gap-3 mt-3"><div className="panel-soft p-3"><div className="text-[10px] text-muted">تكلفة الإنتاج والتعاقد</div><div className="text-xl font-black gold-text mt-1">{money(cost)}</div></div><div className="panel-soft p-3"><div className="text-[10px] text-muted">السيولة بعد الاعتماد</div><div className="text-xl font-black mt-1">{money(activeStudio.cash - cost)}</div></div></div><button className="btn btn-gold w-full mt-4 !min-h-12" disabled={activeStudio.cash < cost} onClick={() => startProduction(project)}>اعتماد الميزانية وبدء التصوير <Play size={16}/></button></>}</section>}
+          <section className="panel p-5"><div className="flex items-center gap-3"><div className="logo-stage !min-h-0 w-16 h-16 shrink-0"><LogoMark {...activeStudio.logo} size={57}/></div><div className="min-w-0"><div className="section-kicker">PROJECT FILE / {project.format === "film" ? "FEATURE FILM" : "SERIES"}</div><h2 className="text-xl font-black mt-1 truncate">{project.title}</h2><div className="text-[10px] text-muted mt-1">{labelGenre(project.primaryGenre)} · {labelGenre(project.secondaryGenre)} · {project.ageRating}</div></div></div><div className="divider"/><div className="grid grid-cols-3 gap-2"><div className="panel-soft p-3"><div className="text-[9px] text-muted">تقدم التصوير</div><div className="text-lg font-black gold-text mt-1">{project.productionProgress}%</div></div><div className="panel-soft p-3"><div className="text-[9px] text-muted">الأزمات المتبقية</div><div className="text-lg font-black mt-1">{project.crises.filter((c) => !c.resolved).length}</div></div><div className="panel-soft p-3"><div className="text-[9px] text-muted">ضجة إعلامية</div><div className="text-lg font-black mt-1">{project.hype}</div></div></div><div className="progress-track mt-4 !h-3"><span style={{ width: `${project.productionProgress}%` }}/></div><div className="flex justify-between text-[9px] text-muted mt-2"><span>تجهيز اللوكيشن</span><span>التصوير</span><span>المونتاج والتسليم</span></div>{project.productionStartDay !== undefined && <div className="panel-soft p-3 mt-4 flex flex-wrap items-center justify-between gap-2 text-[10px]"><span className="text-muted">بداية التصوير: اليوم {project.productionStartDay}</span><span className="text-muted">{project.productionEndDay !== undefined ? `انتهى فعليًا في اليوم ${project.productionEndDay}` : `الموعد المخطط: اليوم ${project.plannedEndDay ?? "—"} · متبقي ${Math.max(0, (project.plannedEndDay ?? gameDay) - gameDay)} يوم`}</span></div>}</section>
+          {project.status === "draft" && <section className="panel p-5">
+            <div className="flex items-center gap-2"><HeartHandshake size={18} className="gold-text"/><h3 className="section-title">عروض التعاقد وردود الوكلاء</h3></div>
+            <p className="section-sub">تم إرسال الفكرة والسيناريو. كل عضو يراجع الدور والأجر والتوافق، وتصل الردود بعد مرور يوم داخل اللعبة.</p>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              <div className="panel-soft p-3"><div className="text-[9px] text-muted">وافقوا</div><b className="text-xl green-text">{project.contracts.filter((c) => c.response === "accepted").length}</b></div>
+              <div className="panel-soft p-3"><div className="text-[9px] text-muted">بانتظار الرد</div><b className="text-xl">{project.contracts.filter((c) => c.response === "pending").length}</b></div>
+              <div className="panel-soft p-3"><div className="text-[9px] text-muted">رفضوا</div><b className="text-xl red-text">{project.contracts.filter((c) => c.response === "rejected").length}</b></div>
+            </div>
+            <div className="space-y-2 mt-4">{project.contracts.map((contract) => <div key={contract.memberId} className="panel-soft p-3">
+              <div className="flex items-center justify-between gap-2"><b className="text-xs">{contract.memberName}</b><span className={`tag ${contract.response === "accepted" ? "tag-gold" : ""}`}>{contract.response === "accepted" ? "وافق" : contract.response === "rejected" ? "رفض" : `يرد في اليوم ${contract.responseDay}`}</span></div>
+              <div className="text-[10px] text-muted mt-1">عرض {money(contract.negotiatedSalary)} · {contract.role}</div>
+              {contract.responseReason && <p className="text-xs leading-6 mt-2">{contract.responseReason}</p>}
+            </div>)}</div>
+            {project.contracts.some((c) => c.response === "rejected") && <button className="btn btn-outline w-full mt-3" onClick={() => {
+              const contracts = project.contracts.map((c) => c.response === "rejected" ? { ...c, response: "pending" as const, responseDay: gameDay + 1, responseReason: undefined } : c);
+              updateProject(project.id, { contracts });
+              setToast("أعدنا إرسال العروض المرفوضة. انتظر يومًا داخل اللعبة.");
+            }}>إعادة التفاوض مع الرافضين</button>}
+            {project.contracts.length > 0 && project.contracts.every((c) => c.response === "accepted") && <>
+              <div className="notice notice-success mt-3"><CheckCircle2 size={16}/><p>اكتمل الطاقم بالكامل. الآن حدد ميزانية الإنتاج والتسويق قبل بدء التصوير.</p></div>
+              <section className="panel-soft p-4 mt-4">
+                <div className="flex items-center gap-2"><Banknote size={17} className="gold-text"/><h4 className="text-sm font-black">تحديد ميزانية المشروع</h4></div>
+                <p className="text-[10px] text-muted mt-1">الميزانية هنا قابلة للتعديل قبل اعتمادها، ولن تُخصم إلا عند بدء التصوير.</p>
+                <div className="grid sm:grid-cols-2 gap-3 mt-4">
+                  {([["sets", "الديكور والمواقع"], ["costumes", "الملابس والإكسسوارات"], ["vfx", "الخدع البصرية VFX"], ["extras", "المجاميع والكومبارس"]] as const).map(([key, label]) => <label key={key} className="panel p-3 block">
+                    <div className="flex items-center justify-between gap-2 text-[10px] font-bold"><span>{label}</span><b className="gold-text">{money(project.budget[key])}</b></div>
+                    <input className="range mt-3" type="range" min={250000} max={20000000} step={250000} value={project.budget[key]} onChange={(event) => updateProject(project.id, { budget: { ...project.budget, [key]: Number(event.target.value) } })}/>
+                  </label>)}
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3 mt-3">
+                  <label className="field-wrap"><span className="field-label">ميزانية الإعلانات والتسويق: {money(project.marketingBudget)}</span><input className="range" type="range" min={500000} max={40000000} step={500000} value={project.marketingBudget} onChange={(event) => updateProject(project.id, { marketingBudget: Number(event.target.value) })}/></label>
+                  <label className="field-wrap"><span className="field-label">عدد شاشات العرض: {project.screens}</span><input className="range" type="range" min={50} max={1000} step={25} value={project.screens} onChange={(event) => updateProject(project.id, { screens: Number(event.target.value) })}/></label>
+                </div>
+                <div className="mt-3"><SelectField label={project.format === "series" ? "منصة البث / القناة المستهدفة" : "بيع حقوق العرض للمنصة بعد السينما"} value={project.platformId} onChange={(value) => updateProject(project.id, { platformId: value })} options={db.streaming_platforms.map((platform) => ({ value: platform.id, label: `${platform.name} · قدرة شراء ${platform.budget_capacity}` }))}/></div>
+              </section>
+              <div className="grid sm:grid-cols-2 gap-3 mt-3">
+                <div className="panel-soft p-3"><div className="text-[10px] text-muted">تكلفة الإنتاج والتعاقد</div><div className="text-xl font-black gold-text mt-1">{money(cost)}</div></div>
+                <div className="panel-soft p-3"><div className="text-[10px] text-muted">السيولة بعد الاعتماد</div><div className="text-xl font-black mt-1">{money(activeStudio.cash - cost)}</div></div>
+              </div>
+              <button className="btn btn-gold w-full mt-4 !min-h-12" disabled={activeStudio.cash < cost || busyAi} onClick={() => { void startProduction(project); }}>{busyAi ? "جارٍ إعداد أزمات وخطة التصوير..." : "اعتماد الميزانية وبدء التصوير"} <Play size={16}/></button>
+            </>}
+          </section>}
           {project.status === "production" && <>
             {openCrisis ? <section className="panel p-5 border border-red-500/20"><div className="flex items-start justify-between gap-2"><div className="flex items-center gap-2"><div className="icon-tile !bg-red-500/10 !border-red-500/20 !text-red-300"><Zap size={18}/></div><div><div className="section-kicker !text-red-300">LIVE PRODUCTION CRISIS</div><h3 className="section-title mt-1">{openCrisis.title}</h3></div></div><span className="tag !border-red-500/30 !text-red-300">قرار مطلوب</span></div><p className="text-xs text-muted leading-7 mt-4">{openCrisis.description}</p><div className="space-y-2 mt-4">{openCrisis.choices.map((choice, index) => <button key={choice.label} onClick={() => resolveCrisis(project, openCrisis.id, index)} className="w-full panel-soft p-3 text-right hover:border-amber-300/30 transition"><div className="flex items-center justify-between gap-2"><span className="text-xs font-black">{choice.label}</span><span className="text-[9px] text-muted">{choice.cash > 0 ? "+" : ""}{money(choice.cash)} ج.م</span></div><div className="flex gap-3 mt-2 text-[9px]"><span className={choice.hype >= 0 ? "green-text" : "red-text"}>Hype {choice.hype > 0 ? "+" : ""}{choice.hype}</span><span className={choice.quality >= 0 ? "green-text" : "red-text"}>جودة {choice.quality > 0 ? "+" : ""}{choice.quality}</span></div></button>)}</div><div className="divider"/><button className="btn btn-outline w-full" onClick={() => triggerContextReward("gulf_rescue", () => { addCash(20_000_000); addHistory({ year, kind: "business", text: `تمويل خليجي طارئ بقيمة 20 مليون أنقذ ميزانية ${project.title}.` }); })}><Landmark size={15}/> تمويل خليجي طارئ لإنقاذ ميزانية التصوير</button></section>
-              : <section className="panel p-5"><div className="flex items-center gap-2"><CheckCircle2 size={18} className="green-text"/><h3 className="section-title">اللوكيشن جاهز — لا توجد أزمة معلّقة</h3></div><p className="section-sub">حرّك الجدول إلى المرحلة التالية. قد تتغير حالة الإنتاج عند اكتمال التصوير.</p><button className="btn btn-gold w-full mt-4 !min-h-12" onClick={() => advanceProduction(project)}>تقدم في جدول التصوير (+32%) <ChevronDown size={16}/></button></section>}
+              : <section className="panel p-5"><div className="flex items-center gap-2"><CheckCircle2 size={18} className="green-text"/><h3 className="section-title">اللوكيشن جاهز — لا توجد أزمة معلّقة</h3></div><p className="section-sub">التصوير يتقدم تلقائيًا بنسبة 14% مع كل يوم داخل اللعبة. لا حاجة لأي قفز يدوي في الجدول.</p><div className="progress-track mt-4"><span style={{ width: `${project.productionProgress}%` }}/></div><div className="text-[10px] text-muted mt-2">المتبقي حتى التسليم: {Math.max(0, Math.ceil((100 - project.productionProgress) / 14))} أيام لعبة تقريبًا.</div></section>}
             <section className="panel p-5"><h3 className="section-title">سجل الأزمات</h3><div className="mt-3 space-y-2">{project.crises.map((crisis) => <div key={crisis.id} className="flex items-center justify-between gap-3 panel-soft p-3"><div className="text-[11px] font-bold">{crisis.title}</div><span className={`tag ${crisis.resolved ? "tag-gold" : ""}`}>{crisis.resolved ? "تم الحسم" : "مفتوحة"}</span></div>)}</div></section>
           </>}
           {project.status === "post" && <section className="panel p-5"><div className="flex items-center gap-2"><Sparkles size={18} className="gold-text"/><h3 className="section-title">مرحلة ما بعد الإنتاج جاهزة</h3></div><p className="section-sub">انتهى التصوير. حان الآن وقت التقييم النقدي والجماهيري ومحاكاة المنافسين في موسم الطرح.</p><div className="grid sm:grid-cols-2 gap-3 mt-4"><div className="panel-soft p-3"><div className="text-[10px] text-muted">ميزانية التسويق</div><div className="text-lg font-black mt-1">{money(project.marketingBudget)}</div></div><div className="panel-soft p-3"><div className="text-[10px] text-muted">شاشات العرض</div><div className="text-lg font-black mt-1">{project.screens.toLocaleString("en-US")}</div></div></div><button className="btn btn-gold w-full mt-4 !min-h-12" disabled={busyAi} onClick={() => releaseProject(project)}>{busyAi ? "النقاد يشاهدون العرض الخاص..." : "إطلاق العمل ومحاكاة السوق"} <Sparkles size={16}/></button><p className="text-[9px] text-muted mt-2">سيُرسل ملخص السيناريو وبيانات العمل وذاكرة العالم إلى محرك AI عند توفر المفاتيح.</p></section>}
@@ -623,7 +777,7 @@ export function GameShell() {
       <div className="panel-soft p-3 mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px]"><span className="text-muted">صافي السيولة بعد توزيع نقاط الأرباح التعاقدية</span><b className="green-text">{money((project.boxOffice ?? 0) - (project.backendPayout ?? 0))}</b><span className="text-muted">مستحقات Backend</span><b>{money(project.backendPayout ?? 0)}</b></div>
       <div className="grid lg:grid-cols-[.8fr_1.2fr] gap-4 mt-4">
         <div className="panel p-5"><div className="section-kicker">OFFICIAL RELEASE POSTER</div><div ref={shareRef} className="poster-card mt-3"><div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(135deg,transparent 45%,rgba(212,175,55,.13) 46%,transparent 48%),linear-gradient(45deg,transparent 45%,rgba(229,9,20,.1) 46%,transparent 48%)", backgroundSize: "40px 40px" }}/><div className="relative z-10 flex flex-col items-center"><LogoMark {...activeStudio.logo} size={83}/><div className="text-[9px] tracking-[.24em] gold-text mt-3">{activeStudio.name.toUpperCase()}</div><div className="poster-title mt-7">{project.title}</div><div className="text-[10px] text-white/65 mt-3">{labelGenre(project.primaryGenre)} · {labelGenre(project.secondaryGenre)}</div><div className="flex flex-wrap items-center justify-center gap-2 mt-5">{project.cast.leads.map((id) => db.actors.find((a) => a.id === id)?.name).filter(Boolean).map((name) => <span key={name} className="tag !text-white !border-white/20">{name}</span>)}</div><div className="mt-7 border-t border-amber-300/30 pt-4 w-full"><div className="text-[8px] tracking-[.25em] text-amber-200/70">WORLDWIDE BOX OFFICE + RIGHTS</div><div className="text-2xl font-black gold-text mt-1">{money(project.boxOffice ?? 0)} EGP</div><div className="text-[10px] text-white/70 mt-1">CRITICS {result.critics_score.toFixed(1)} · AUDIENCE {result.audience_score.toFixed(1)}</div><p className="text-[9px] leading-5 text-white/75 italic mt-4">“{result.reviews[0] ?? result.summary}”</p></div><div className="mt-6 text-[10px] tracking-[.3em] font-black">HYPTRIX</div></div></div><button className="btn btn-gold w-full mt-3" onClick={shareResult}><Upload size={15}/> إنشاء صورة عالية الجودة</button><p className="text-[9px] text-muted mt-2 text-center">1080px+ · مناسبة لمشاركتها على منصات التواصل</p></div>
-        <div className="space-y-4"><section className="panel p-5"><div className="flex items-center justify-between gap-2"><div><div className="section-kicker">CRITICS & AUDIENCE</div><h3 className="section-title mt-1">قراءة المراجعات النقدية</h3></div><span className="tag tag-gold">{result.critics_score >= 8 ? "إشادة واسعة" : result.critics_score >= 6.5 ? "استقبال إيجابي" : "انقسام نقدي"}</span></div><p className="text-xs text-muted leading-7 mt-3">{result.summary}</p><div className="space-y-3 mt-4">{result.reviews.map((review, i) => <div key={i} className="panel-soft p-3 flex gap-3"><div className="text-lg gold-text font-black">0{i + 1}</div><p className="text-xs leading-7">{review}</p></div>)}</div></section>
+        <div className="space-y-4"><section className="panel p-5"><div className="flex items-center justify-between gap-2"><div><div className="section-kicker">CRITICS & AUDIENCE</div><h3 className="section-title mt-1">قراءة المراجعات النقدية</h3></div><span className="tag tag-gold">{result.critics_score >= 8 ? "إشادة واسعة" : result.critics_score >= 6.5 ? "استقبال إيجابي" : "انقسام نقدي"}</span></div><p className="text-xs text-muted leading-7 mt-3">{result.summary}</p><div className="space-y-3 mt-4">{result.reviews.map((review, i) => <div key={i} className="panel-soft p-3 flex gap-3"><div className="shrink-0"><div className="text-lg gold-text font-black">0{i + 1}</div><div className="text-[8px] text-muted mt-1">{["ناقد السيناريو", "صحافة الجمهور", "الناقد الفني"][i] ?? "قراءة نقدية"}</div></div><p className="text-xs leading-7">{review}</p></div>)}</div></section>
           <section className="panel p-5"><div className="flex items-center gap-2"><Newspaper size={16} className="gold-text"/><h3 className="section-title">مانشيتات الصحافة ومنشورات الجمهور</h3></div><div className="space-y-2 mt-3">{result.headlines.map((headline, i) => <div key={i} className="panel-soft p-3 text-xs font-black leading-6">“{headline}”</div>)}{result.social_posts.map((post, i) => <div key={`s${i}`} className="p-3 text-[11px] leading-6 text-muted border-r-2 border-red-500/50 bg-white/[.02]">{post}</div>)}</div><button className="btn btn-outline mt-3 w-full" onClick={() => triggerContextReward("reputation_campaign", () => { const updated = { ...result, audience_score: Math.min(10, result.audience_score + .35), headlines: [...result.headlines, "حملة جماهيرية تعيد إشعال النقاش حول العمل."] }; updateProject(project.id, { result: updated, hype: project.hype + 10 }); })}><Megaphone size={15}/> حملة لجان إلكترونية لتلميع الفيلم بعد هجوم النقاد</button></section>
           <section className="panel p-5"><div className="flex items-center gap-2"><Target size={16} className="gold-text"/><h3 className="section-title">سباق الموسم ضد المنافسين</h3></div><p className="section-sub">تمت محاكاة إصدارات منافسة من شركات العالم المتاحة في قاعدة البيانات.</p><div className="flex items-center justify-between mt-3 mb-2 text-[10px]"><span className="text-muted">ترتيب شباك التذاكر</span><b className={playerRank === 1 ? "green-text" : "gold-text"}>#{playerRank} من {marketBoard.length}</b></div><div className="space-y-2">{marketBoard.map((entry, i) => <div key={entry.player ? "player" : entry.studioName} className={`flex items-center justify-between panel-soft p-3 ${entry.player ? "border-amber-300/30" : ""}`}><div className="flex items-center gap-2"><b className="text-xs gold-text">#{i + 1}</b><span className={`text-xs font-bold ${entry.player ? "text-white" : ""}`}>{entry.player ? `★ ${entry.studioName} (أنت)` : entry.studioName}</span></div><span className={`text-[10px] font-black ${entry.player ? "green-text" : "text-muted"}`}>{money(entry.boxOffice)}</span></div>)}</div></section>
         </div>
@@ -641,7 +795,7 @@ export function GameShell() {
       <PageHeading kicker="FESTIVAL SEASON / ANNUAL GALA" title="المهرجانات وحفلات الجوائز" desc="تُبنى الترشيحات على أداء الأعمال، ويحفظ العالم سجل الفائزين ليتذكرهم في السنوات القادمة." action={<button className="btn btn-gold" onClick={runAwards} disabled={week < 52 || worldHistory.some((entry) => entry.kind === "award" && entry.year === year)}><Trophy size={15}/> إقامة حفل نهاية السنة</button>}/>
       <div className="grid lg:grid-cols-[1fr_310px] gap-4 items-start"><div className="space-y-4"><section className="panel p-5"><div className="flex items-center justify-between gap-3"><div><div className="section-kicker">FEATURED FESTIVAL</div><h3 className="section-title mt-1">{festival?.name ?? "مهرجان العالم"}</h3><p className="section-sub">هيبة المهرجان: {festival?.prestige ?? 50}/100</p></div><div className="icon-tile !w-12 !h-12"><Award size={23}/></div></div><div className="divider"/><div className="grid grid-cols-3 gap-2">{db.festivals.map((f) => <div key={f.id} className="panel-soft p-3 text-center"><div className="text-[10px] font-black leading-5">{f.name}</div><div className="text-lg font-black gold-text mt-1">{f.prestige}</div><div className="text-[8px] text-muted">Prestige</div></div>)}</div><button className="btn btn-outline w-full mt-4" onClick={() => triggerContextReward("festival_pr", () => { const target = nominees[0]; if (target?.result) updateProject(target.id, { result: { ...target.result, critics_score: Math.min(10, target.result.critics_score + .25), award_nominations: uniq([...target.result.award_nominations, "أفضل حملة علاقات عامة"]) } }); })}><Megaphone size={15}/> حملة علاقات عامة للمهرجان قبل إعلان الجوائز</button></section>
         <section className="panel p-5"><div className="flex items-center justify-between"><div><div className="section-kicker">OFFICIAL NOMINEES</div><h3 className="section-title mt-1">قائمة الترشيحات</h3></div><span className="tag">{nominees.length} عمل</span></div>{nominees.length ? <div className="mt-4 space-y-3">{nominees.map((project, index) => <div key={project.id} className="panel-soft p-4"><div className="flex items-center gap-3"><div className="text-2xl font-black gold-text">{String(index + 1).padStart(2, "0")}</div><div className="flex-1"><div className="text-sm font-black">{project.title}</div><div className="text-[9px] text-muted mt-1">{project.format === "film" ? "أفضل فيلم" : "أفضل مسلسل"} · {labelGenre(project.primaryGenre)}</div></div><div className="text-lg font-black">{project.result?.critics_score.toFixed(1)}</div></div><div className="flex flex-wrap gap-1.5 mt-3">{(project.result?.award_nominations ?? []).map((nomination) => <span key={nomination} className="tag">{nomination}</span>)}</div></div>)}</div> : <div className="empty-state mt-4"><Trophy size={24} className="mx-auto gold-text"/><p className="text-xs mt-2">لا توجد ترشيحات بعد. اطرح عملاً واحدًا على الأقل لتدخل موسم الجوائز.</p></div>}</section>
-        </div><aside className="space-y-4"><div className="panel p-5"><div className="flex items-center gap-2"><Crown size={16} className="gold-text"/><h3 className="section-title">سجل الأساطير</h3></div><p className="section-sub">عدد الجوائز المتراكمة لكل ممثل.</p>{awardLeaders.length ? <div className="mt-3 space-y-3">{awardLeaders.map(({ actor, count }, i) => <div key={actor!.id} className="flex items-center gap-2"><div className="w-7 h-7 rounded-full bg-amber-300/10 grid place-items-center text-[10px] gold-text font-black">{i + 1}</div><div className="flex-1"><div className="text-[11px] font-bold">{actor!.name}</div><div className="text-[8px] text-muted">{tierName(actor!)}</div></div><b className="gold-text text-sm">{count}×</b></div>)}</div> : <p className="text-xs text-muted mt-4">سجل الجوائز سيبدأ بعد أول حفل سنوي.</p>}</div><div className="panel p-5"><div className="flex items-center gap-2"><CalendarDays size={16} className="gold-text"/><h3 className="section-title">التقويم السنوي</h3></div><div className="text-3xl font-black mt-4">{year}</div><div className="text-[10px] text-muted mt-1">الأسبوع {week} من 52</div><div className="progress-track mt-3"><span style={{ width: `${week / 52 * 100}%` }}/></div><button className="btn btn-ghost w-full mt-4" onClick={() => { advanceWeek(); setToast("تم تحديث تقويم اللعبة إلى الأسبوع التالي."); }}>تحديث أسبوع اللعبة <ChevronDown size={14}/></button></div></aside></div>
+        </div><aside className="space-y-4"><div className="panel p-5"><div className="flex items-center gap-2"><Crown size={16} className="gold-text"/><h3 className="section-title">سجل الأساطير</h3></div><p className="section-sub">عدد الجوائز المتراكمة لكل ممثل.</p>{awardLeaders.length ? <div className="mt-3 space-y-3">{awardLeaders.map(({ actor, count }, i) => <div key={actor!.id} className="flex items-center gap-2"><div className="w-7 h-7 rounded-full bg-amber-300/10 grid place-items-center text-[10px] gold-text font-black">{i + 1}</div><div className="flex-1"><div className="text-[11px] font-bold">{actor!.name}</div><div className="text-[8px] text-muted">{tierName(actor!)}</div></div><b className="gold-text text-sm">{count}×</b></div>)}</div> : <p className="text-xs text-muted mt-4">سجل الجوائز سيبدأ بعد أول حفل سنوي.</p>}</div><div className="panel p-5"><div className="flex items-center gap-2"><CalendarDays size={16} className="gold-text"/><h3 className="section-title">التقويم السنوي</h3></div><div className="text-3xl font-black mt-4">{year}</div><div className="text-[10px] text-muted mt-1">الأسبوع {week} من 52</div><div className="progress-track mt-3"><span style={{ width: `${week / 52 * 100}%` }}/></div><div className="panel-soft p-3 mt-4 text-[10px] text-muted leading-6">التقويم يتقدم تلقائيًا مع مرور الوقت الحقيقي: كل دقيقة تساوي يومًا واحدًا داخل اللعبة.</div></div></aside></div>
     </>;
   }
 
