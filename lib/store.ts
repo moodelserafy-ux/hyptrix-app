@@ -35,7 +35,7 @@ export const useGameStore = create<GameState & GameActions>()(persist((setState,
   ...initialState,
   hydrate: async () => {
     let importedDatabase: GameDatabase | null = null;
-    try { importedDatabase = await get<GameDatabase>("hyptrix_custom_db"); } catch { /* Keep the database already present in persisted state. */ }
+    try { importedDatabase = (await get<GameDatabase>("hyptrix_custom_db")) ?? null; } catch { /* Keep the database already present in persisted state. */ }
     const current = getState();
     const now = Date.now();
     // Keep the persisted day during hydration. syncClock() applies offline time
