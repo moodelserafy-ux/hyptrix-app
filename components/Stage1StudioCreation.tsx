@@ -43,6 +43,7 @@ export function Stage1StudioCreation() {
     initializeStudio,
   } = useGameStore();
 
+  const [showLandingHero, setShowLandingHero] = useState(true);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1);
   const [maxUnlockedStep, setMaxUnlockedStep] = useState<1 | 2 | 3 | 4>(1);
   const [logoDrawerTab, setLogoDrawerTab] = useState<'presets' | 'emblems' | 'frames' | 'colors'>('presets');
@@ -101,20 +102,107 @@ export function Stage1StudioCreation() {
     { step: 4 as const, title: 'القدرة' },
   ];
 
+  if (showLandingHero) {
+    return (
+      <div className="mx-auto max-w-3xl py-4 sm:py-8">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
+          <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
+            <div className="space-y-3 max-w-xl">
+              <div className="text-xs font-semibold text-violet-700">
+                Hyptrix.com · محاكاة إمبراطورية السينما والدراما ثلاثية الأبعاد
+              </div>
+              <h1
+                className="font-display text-2xl font-black tracking-tight text-slate-900 sm:text-4xl"
+                style={{ textWrap: 'balance' }}
+              >
+                شيّد مدينتك الإنتاجية 3D، أبرم صفقات النجوم، وتصدّر شباك التذاكر.
+              </h1>
+              <p className="text-sm leading-relaxed text-slate-600 sm:text-base">
+                في Hyptrix أنت المؤسس والمدير التنفيذي لاستوديو إنتاج سينمائي وتلفزيوني. تبدأ بسيولة 75 مليون ج.م لتبني البلاتوهات ومعدات التصوير، وتنتج أفلاماً ومسلسلات تنافس بها في المواسم والمهرجانات السنوية.
+              </p>
+            </div>
+
+            <div className="shrink-0 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <StudioLogoSvg config={{ emblem, frame, palette }} size={84} />
+            </div>
+          </div>
+
+          {/* 3-Step 5-Second Pitch */}
+          <div className="mt-8 grid grid-cols-1 gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4">
+              <div className="font-display text-sm font-bold text-slate-900">
+                01. بناء الاستوديو والمعدات 3D
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                طوّر البلاتوه السينمائي، أسطول كاميرات IMAX والدرون، وبرج الخدع البصرية لرفع جودة أعمالك وحمايتها.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4">
+              <div className="font-display text-sm font-bold text-slate-900">
+                02. السيناريو والتفاوض مع النجوم
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                اختر التصنيف الدرامي، اكتب حبكة العمل، وتفاوض بالترتيب مع أكثر من 160 ممثلاً ومخرجاً ومدير تصوير.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4">
+              <div className="font-display text-sm font-bold text-slate-900">
+                03. التوزيع العالمي والحفل السنوي
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                وزّع أعمالك في مصر والخليج وأوروبا وهوليوود، ونافس الشركات الكبرى في حفل الجوائز السنوي.
+              </p>
+            </div>
+          </div>
+
+          {/* Primary Actions */}
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => setShowLandingHero(false)}
+              className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-violet-600 px-6 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-violet-700 whitespace-nowrap"
+            >
+              <span>ابدأ تأسيس استوديو الإنتاج (4 خطوات)</span>
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              data-start="true"
+              onClick={() => handleCreateStudio()}
+              className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 py-3.5 text-xs font-bold text-slate-800 transition hover:bg-slate-50 whitespace-nowrap"
+            >
+              <Play className="h-3.5 w-3.5 fill-current text-violet-600" />
+              <span>دخول فوري باستوديو جاهز 3D</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto max-w-xl py-2 sm:py-4">
-      {/* Compact Native Mobile Game Top Stepper with Locked Steps */}
-      <div className="mb-5 rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/80 bg-white/95 p-4 shadow-[0_12px_30px_-10px_rgba(99,102,241,0.15)]">
+    <div className="mx-auto max-w-2xl py-2 sm:py-4">
+      {/* Compact Top Stepper */}
+      <div className="mb-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-[10px] font-black text-violet-700">
-              <Zap className="h-3 w-3" />
-              مهمة تأسيس الاستوديو ({wizardStep} / 4)
-            </span>
-            <h1 className="font-display mt-1 text-lg font-black text-slate-900 sm:text-xl">
-              بناء إمبراطورية الإنتاج السينمائي والدرامي
+            <div className="text-xs font-medium text-slate-500">
+              تأسيس الاستوديو · الخطوة {wizardStep} من 4
+            </div>
+            <h1 className="font-display mt-0.5 text-lg font-bold text-slate-900 sm:text-xl">
+              إعداد هوية شركة الإنتاج السينمائي
             </h1>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowLandingHero(true)}
+            className="text-xs font-medium text-slate-500 hover:text-slate-900 whitespace-nowrap"
+          >
+            العودة للمقدمة
+          </button>
         </div>
 
         {/* Locked Step Track */}

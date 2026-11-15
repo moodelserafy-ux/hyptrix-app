@@ -28,15 +28,15 @@ test('formatMoney formats billions as 1B / 1.25B instead of 1000M', () => {
   assert.equal(formatMoney(45_500_000), '45.5M');
 });
 
-test('Resolved database contains 100 core actors plus 20 emerging rising talents over time', () => {
+test('Resolved database contains 160 core actors and 59 crew members with zero pre-baked rising stars', () => {
   const resolved = getResolvedDatabase(null);
   const coreActors = resolved.actors.filter((a) => !a.isRisingDiscovery);
   const risingActors = resolved.actors.filter((a) => a.isRisingDiscovery);
 
-  assert.equal(coreActors.length, 100);
-  assert.equal(risingActors.length, 20);
-  assert.equal(resolved.actors.length, 120);
-  assert.ok(risingActors.every((a) => (a.unlockDay ?? 0) >= 2));
+  assert.equal(coreActors.length, 160);
+  assert.equal(risingActors.length, 0);
+  assert.equal(resolved.actors.length, 160);
+  assert.ok(resolved.crew.length >= 55);
 });
 
 test('combineAndRankLocal strictly sorts local studios descending by netWorth', () => {
@@ -220,4 +220,90 @@ test('calculateStudioMarketValue separates liquid cash from studio enterprise ma
     ],
   });
   assert.ok(postHitValuation > initialValuation + 80_000_000);
+
+  // Upgrading 3D physical buildings & equipment increases studio market value and production quality
+  const upgradedValuation = calculateStudioMarketValue({
+    cash: 95_000_000,
+    reputation: 64,
+    releasedProjects: [],
+    facilitiesLevels: {
+      soundstage: 3,
+      camera_rig: 3,
+      vfx_tower: 3,
+      audio_stage: 2,
+      marketing_hub: 2,
+    },
+  });
+  assert.ok(upgradedValuation > initialValuation + 100_000_000);
 });
+
+test('Dynamic simulation engine penalizes genre repetition and generates unpredictable market twists', () => {
+  const repeatedGenreRun = calculateFinancialsAndQuality({
+    format: 'film',
+    filmSeason: 'summer',
+    primaryGenre: 'action',
+    secondaryGenre: null,
+    ageRating: '+12',
+    director: baseDb.crew[0],
+    writers: [baseDb.crew[4]],
+    dop: baseDb.crew[7],
+    composer: baseDb.crew[9],
+    vfx: baseDb.crew[11],
+    leads: [baseDb.actors[0]],
+    antagonist: baseDb.actors[1],
+    supporting: [],
+    cameos: [],
+    budgetAllocation: {
+      setsAndLocations: 8_000_000,
+      costumesAndMakeup: 4_000_000,
+      vfxAndStunts: 10_000_000,
+      extrasAndCrowds: 3_000_000,
+    },
+    marketingBudget: 12_000_000,
+    screensCount: 140,
+    platformDealAmount: 20_000_000,
+    founderPerk: 'visionary_director',
+    hypeScore: 75,
+    aiBoxOfficeMultiplier: 1.0,
+    marketRegion: 'egypt',
+    previousGenres: ['action', 'action'],
+    entropySeed: 42,
+  });
+
+  const freshGenreRun = calculateFinancialsAndQuality({
+    format: 'film',
+    filmSeason: 'summer',
+    primaryGenre: 'action',
+    secondaryGenre: null,
+    ageRating: '+12',
+    director: baseDb.crew[0],
+    writers: [baseDb.crew[4]],
+    dop: baseDb.crew[7],
+    composer: baseDb.crew[9],
+    vfx: baseDb.crew[11],
+    leads: [baseDb.actors[0]],
+    antagonist: baseDb.actors[1],
+    supporting: [],
+    cameos: [],
+    budgetAllocation: {
+      setsAndLocations: 8_000_000,
+      costumesAndMakeup: 4_000_000,
+      vfxAndStunts: 10_000_000,
+      extrasAndCrowds: 3_000_000,
+    },
+    marketingBudget: 12_000_000,
+    screensCount: 140,
+    platformDealAmount: 20_000_000,
+    founderPerk: 'visionary_director',
+    hypeScore: 75,
+    aiBoxOfficeMultiplier: 1.0,
+    marketRegion: 'egypt',
+    previousGenres: ['comedy', 'romance'],
+    entropySeed: 42,
+  });
+
+  assert.ok(repeatedGenreRun.simulationTwists.some((t) => t.id === 'genre_fatigue'));
+  assert.ok(freshGenreRun.simulationTwists.some((t) => t.id === 'genre_fresh_wave'));
+  assert.ok(freshGenreRun.totalBoxOfficeRevenue > repeatedGenreRun.totalBoxOfficeRevenue);
+});
+

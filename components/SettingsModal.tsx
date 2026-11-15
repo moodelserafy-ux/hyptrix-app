@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useGameStore } from '@/lib/store';
-import { validateCustomDatabase } from '@/lib/db-resolver';
+import { validateCustomDatabase, getResolvedDatabase } from '@/lib/db-resolver';
 import {
   Settings,
   Upload,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   X,
+  Download,
 } from 'lucide-react';
 
 export function SettingsModal({
@@ -38,6 +39,24 @@ export function SettingsModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!isOpen) return null;
+
+  const handleDownloadFullJsonTemplate = () => {
+    const resolvedDb = getResolvedDatabase(customDbPatch);
+    const jsonString = JSON.stringify(resolvedDb, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'hyptrix_full_database.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setStatusMsg({
+      type: 'success',
+      text: `تم تحميل الملف الكامل (hyptrix_full_database.json) ويضم ${resolvedDb.actors.length} ممثل و${resolvedDb.crew.length} مخرج وطاقم و${resolvedDb.competitor_studios.length} شركات! يمكنك تعديل الأسماء وروابط الصور ثم رفعه هنا.`,
+    });
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -155,13 +174,13 @@ export function SettingsModal({
           </div>
 
           <div className="mt-4 space-y-5">
-            {/* Section 1: Upload or Paste Custom JSON Database */}
+            {/* Section 1: Upload, Download Template, or Paste Custom JSON Database */}
             <div className="rounded-2xl border-2 border-indigo-100 bg-[#F8FAFF] p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FileJson className="h-5 w-5 text-violet-600" />
                   <h3 className="font-display text-sm font-black text-slate-900">
-                    إضافة ملف بيانات مخصص (JSON)
+                    إضافة أو تحميل ملف بيانات مخصص (JSON)
                   </h3>
                 </div>
                 {customDbPatch && (
@@ -172,8 +191,17 @@ export function SettingsModal({
               </div>
 
               <p className="mt-1 text-[11px] font-medium leading-relaxed text-slate-600">
-                يمكنك رفع ملف JSON يحتوي على أسماء وصور الممثلين والمخرجين والشركات والمنصات المفضلة لديك، أو لصق محتوى الملف مباشرة:
+                حمّل القالب الكامل (160 ممثل + 59 مخرج وطاقم + الشركات) بصيغة JSON، ثم ضع روابط الصور والأسماء التي تريدها وأعد رفعه هنا ليُحفظ دائماً في متصفحك:
               </p>
+
+              <button
+                type="button"
+                onClick={handleDownloadFullJsonTemplate}
+                className="mt-3 flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-200 border-b-4 border-b-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-800 transition hover:bg-emerald-100 active:border-b-2 active:translate-y-0.5"
+              >
+                <Download className="h-4 w-4 text-emerald-600" />
+                <span>تحميل ملف قاعدة البيانات الكامل (JSON) للتعديل عليه</span>
+              </button>
 
               <input
                 ref={fileInputRef}
@@ -183,7 +211,7 @@ export function SettingsModal({
                 className="hidden"
               />
 
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2.5 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}

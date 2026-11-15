@@ -10,7 +10,13 @@ import {
   getLiveActorsWithEvolution,
 } from '@/lib/store';
 import { getResolvedDatabase, GENRES } from '@/lib/db-resolver';
-import { evaluateCastChemistry, formatMoney } from '@/lib/game-engine';
+import {
+  evaluateCastChemistry,
+  formatMoney,
+  MARKET_CONFIGS,
+  MarketRegion,
+} from '@/lib/game-engine';
+import { AnimatedFilmingSetGraphic } from './CinematicGraphicsScene';
 import {
   Camera,
   Sliders,
@@ -26,11 +32,15 @@ import {
   Tv,
   Handshake,
   Radio,
+  Globe,
 } from 'lucide-react';
 
 export function Stage4ProductionCrises() {
   const {
     draft,
+    cash,
+    marketValue,
+    unlockedRegions,
     gameDay,
     currentYear,
     customDbPatch,
@@ -39,6 +49,8 @@ export function Stage4ProductionCrises() {
     groqApiKeyClient,
     preferredGroqModel,
     updateDraft,
+    toggleDraftDistributionMarket,
+    unlockMarketRegionWithCash,
     advanceGameDay,
     resolveCrisisOption,
     pushBreakingNewsModal,
@@ -60,6 +72,7 @@ export function Stage4ProductionCrises() {
   const [broadcastNegMessage, setBroadcastNegMessage] = useState<string | null>(
     null
   );
+  const [marketStatusMsg, setMarketStatusMsg] = useState<string | null>(null);
   const prevElapsedRef = useRef<number>(draft.filmingDaysElapsed);
 
   const liveActors = getLiveActorsWithEvolution({
@@ -89,6 +102,20 @@ export function Stage4ProductionCrises() {
     draft.budgetAllocation.extrasAndCrowds;
 
   const isSeries = draft.format === 'series';
+
+  const activeDistMarkets: MarketRegion[] =
+    Array.isArray(draft.selectedDistributionMarkets) &&
+    draft.selectedDistributionMarkets.length > 0
+      ? draft.selectedDistributionMarkets
+      : ['egypt'];
+
+  const totalDistributionFee = activeDistMarkets.reduce(
+    (sum, mId) =>
+      sum +
+      (MARKET_CONFIGS.find((c) => c.id === mId)?.distributionFeePerProject ||
+        0),
+    0
+  );
 
   const digitalPlatforms = db.streaming_platforms.filter(
     (p) => p.platform_type === 'digital_platform' || p.id.startsWith('plat_')
@@ -345,7 +372,7 @@ export function Stage4ProductionCrises() {
     draft.filmingDaysElapsed >= draft.filmingDurationDays;
 
   const steps = [
-    { id: 1 as const, label: '1. الميزانيات وعقود المنصات والقنوات' },
+    { id: 1 as const, label: '1. الميزانيات والأسواق والمنصات' },
     { id: 2 as const, label: '2. موقع التصوير وإدارة الأزمات' },
   ];
 
@@ -356,7 +383,7 @@ export function Stage4ProductionCrises() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[11px] font-black text-violet-700">
-              المرحلة 3 من 5 · الإنتاج والتسويق والتصوير ({subStep}/2)
+              المرحلة 3 من 4 · الإنتاج والتوزيع والتصوير ({subStep}/2)
             </div>
             <h2 className="font-display mt-0.5 text-lg font-black text-slate-900">
               إنتاج{' '}
@@ -553,6 +580,142 @@ export function Stage4ProductionCrises() {
               </div>
             </div>
 
+            {/* Section B-2: Interactive Global Markets Distribution (خريطة الأسواق الإقليمية والعالمية) */}
+            <div className="border-t border-indigo-100 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-5 w-5 text-cyan-600" />
+                  <div>
+                    <h3 className="font-display text-base font-black text-slate-900">
+                      ثالثاً: خريطة الأسواق والتوزيع الدولي للعمل
+                    </h3>
+                    <p className="text-[11px] font-bold text-slate-500">
+                      توزيع العمل في أسواق إضافية يرفع الإيرادات العالمية مقابل رسوم توزيع ودبلجة إضافية
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-xl bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-800 tabular-nums border border-cyan-200">
+                  رسوم التوزيع: {formatMoney(totalDistributionFee)} ج.م
+                </span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {MARKET_CONFIGS.map((cfg) => {
+                  const mId = cfg.id;
+                  const isUnlocked = unlockedRegions.includes(mId);
+                  const isSelected = activeDistMarkets.includes(mId);
+                  const canAffordLicense = cash >= cfg.earlyLicenseCost;
+                  const bonusPct = Math.round(cfg.revenueBonusFactor * 100);
+
+                  return (
+                    <div
+                      key={mId}
+                      className={`flex flex-col justify-between rounded-2xl border-2 p-3 text-right transition ${
+                        isSelected
+                          ? 'border-cyan-600 border-b-4 border-b-cyan-700 bg-cyan-50/75 shadow-xs'
+                          : isUnlocked
+                          ? 'border-indigo-100 bg-[#F8FAFF] hover:border-cyan-300'
+                          : 'border-slate-200 bg-slate-100/75'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="font-display text-xs font-black text-slate-900">
+                            {cfg.name}
+                          </span>
+                          {isSelected ? (
+                            <span className="rounded-lg bg-cyan-600 px-2 py-0.5 text-[9px] font-black text-white">
+                              مفعل للتوزيع ✓
+                            </span>
+                          ) : isUnlocked ? (
+                            <span className="rounded-lg bg-indigo-100 px-2 py-0.5 text-[9px] font-black text-indigo-700">
+                              متاح
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-200 px-2 py-0.5 text-[9px] font-black text-slate-600">
+                              <Lock className="h-2.5 w-2.5" />
+                              مغلق
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="mt-1 text-[10px] font-bold text-slate-600">
+                          {cfg.description}
+                        </p>
+
+                        <div className="mt-2 flex items-center justify-between text-[10px] font-black tabular-nums">
+                          <span className="text-emerald-700">
+                            {mId === 'egypt'
+                              ? 'السوق الأساسي (100%)'
+                              : `عائد إضافي +${bonusPct}%`}
+                          </span>
+                          <span className="text-slate-700">
+                            {cfg.distributionFeePerProject === 0
+                              ? 'مشمول بالميزانية'
+                              : `تكلفة التوزيع: ${formatMoney(cfg.distributionFeePerProject)} ج.م`}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-2.5 border-t border-indigo-100/80 pt-2">
+                        {isUnlocked ? (
+                          <button
+                            type="button"
+                            disabled={mId === 'egypt'}
+                            onClick={() => {
+                              toggleDraftDistributionMarket(mId);
+                              setMarketStatusMsg(null);
+                            }}
+                            className={`w-full rounded-xl py-1.5 px-2.5 text-[11px] font-black transition ${
+                              mId === 'egypt'
+                                ? 'bg-emerald-100 text-emerald-800 cursor-default'
+                                : isSelected
+                                ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+                                : 'bg-cyan-600 text-white hover:bg-cyan-700'
+                            }`}
+                          >
+                            {mId === 'egypt'
+                              ? 'السوق المحلي مفعل دائماً'
+                              : isSelected
+                              ? 'إلغاء التوزيع في هذا السوق'
+                              : `تفعيل التوزيع (+${formatMoney(cfg.distributionFeePerProject)} ج.م)`}
+                          </button>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <div className="text-[9px] font-bold text-slate-500">
+                              يفتح تلقائياً عند قيمة سوقية {formatMoney(cfg.unlockMarketValue)} ج.م (حاليًا {formatMoney(marketValue)})
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!canAffordLicense}
+                              onClick={() => {
+                                const ok = unlockMarketRegionWithCash(mId);
+                                if (ok) {
+                                  setMarketStatusMsg(`تم فتح رخصة التوزيع في ${cfg.name} وتفعيلها للعمل الحالي!`);
+                                  toggleDraftDistributionMarket(mId);
+                                } else {
+                                  setMarketStatusMsg('الرصيد النقدي في الخزينة غير كافٍ لشراء رخصة التوزيع المبكر.');
+                                }
+                              }}
+                              className="w-full rounded-xl bg-violet-600 py-1.5 px-2 text-[10px] font-black text-white shadow-2xs transition hover:bg-violet-700 disabled:opacity-45"
+                            >
+                              شراء رخصة التوزيع المبكر ({formatMoney(cfg.earlyLicenseCost)} ج.م)
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {marketStatusMsg && (
+                <div className="mt-2 rounded-xl bg-emerald-50 p-2 text-[11px] font-black text-emerald-800 border border-emerald-200">
+                  {marketStatusMsg}
+                </div>
+              )}
+            </div>
+
             {/* Section C: Digital Platforms AND TV Broadcast Channels (for Series) */}
             <div className="border-t border-indigo-100 pt-4 space-y-4">
               <div>
@@ -560,8 +723,8 @@ export function Stage4ProductionCrises() {
                   <Tv2 className="h-4 w-4 text-violet-600" />
                   <span>
                     {isSeries
-                      ? 'ثالثاً (أ): التفاوض مع المنصة الرقمية العارضة للمسلسل (Watch IT / Shahid VIP / وغيرها):'
-                      : 'ثالثاً: اختر عقد المنصة الرقمية الحصري بعد العرض السينمائي:'}
+                      ? 'رابعاً (أ): التفاوض مع المنصة الرقمية العارضة للمسلسل:'
+                      : 'رابعاً: اختر عقد المنصة الرقمية الحصري بعد العرض السينمائي:'}
                   </span>
                 </div>
 
@@ -612,7 +775,7 @@ export function Stage4ProductionCrises() {
                   <div className="mb-2.5 flex items-center gap-1.5 text-xs font-black text-slate-800">
                     <Tv className="h-4 w-4 text-cyan-600" />
                     <span>
-                      ثالثاً (ب): التفاوض مع القناة التلفزيونية الفضائية لبث حلقات المسلسل:
+                      رابعاً (ب): التفاوض مع القناة التلفزيونية الفضائية لبث حلقات المسلسل:
                     </span>
                   </div>
 
@@ -707,8 +870,8 @@ export function Stage4ProductionCrises() {
                 <Calendar className="h-4 w-4 text-violet-600" />
                 <span>
                   {isSeries
-                    ? 'رابعاً: موعد بدء تصوير المسلسل وموعد عرض الحلقة الأولى:'
-                    : 'رابعاً: موعد بدء التصوير وموعد نزول الفيلم لدور العرض:'}
+                    ? 'خامساً: موعد بدء تصوير المسلسل وموعد عرض الحلقة الأولى:'
+                    : 'خامساً: موعد بدء التصوير وموعد نزول الفيلم لدور العرض:'}
                 </span>
               </div>
 
@@ -848,6 +1011,17 @@ export function Stage4ProductionCrises() {
                 style={{ width: `${filmingProgressPct}%` }}
               />
             </div>
+
+            {/* Interactive Animated Soundstage Filming Graphic */}
+            <AnimatedFilmingSetGraphic
+              title={draft.title || 'الفرعون الأخير'}
+              genre={draft.primaryGenre}
+              leadName={selectedLeads[0]?.name || 'بطل العمل'}
+              directorName={selectedDirector?.name || 'مخرج العمل'}
+              dayCurrent={draft.filmingDaysElapsed}
+              dayTotal={draft.filmingDurationDays}
+              isComplete={isFilmingComplete}
+            />
 
             {/* Automatic Live Filming Status Box (No manual day skip!) */}
             {!isFilmingComplete && !activeCrisis && (

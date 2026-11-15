@@ -38,9 +38,19 @@ import {
   ChevronDown,
   Clapperboard,
   PenLine,
+  Camera,
+  Music,
+  WandSparkles,
+  Check,
 } from 'lucide-react';
 
-type MainMarketSection = 'actors_market' | 'crew_market';
+type SequentialTeamStep =
+  | 'actors'
+  | 'director'
+  | 'cinematographer'
+  | 'composer'
+  | 'editor_vfx';
+
 type ActorTierFilter = 'ALL' | 'S' | 'A' | 'B' | 'C' | 'RISING' | 'EVOLVED';
 
 interface ActiveNegotiationTarget {
@@ -48,6 +58,56 @@ interface ActiveNegotiationTarget {
   kind: 'actor' | 'crew';
   roleSlot: OfferRoleSlot;
 }
+
+const SEQUENTIAL_STEPS: {
+  id: SequentialTeamStep;
+  stepNum: number;
+  shortLabel: string;
+  title: string;
+  nextButtonLabel: string;
+  required: boolean;
+}[] = [
+  {
+    id: 'actors',
+    stepNum: 1,
+    shortLabel: '1. الممثلون',
+    title: 'الخطوة 1 من 5: اختيار الممثلين وأدوار البطولة',
+    nextButtonLabel: 'التالي: اختيار مخرج العمل',
+    required: true,
+  },
+  {
+    id: 'director',
+    stepNum: 2,
+    shortLabel: '2. المخرج',
+    title: 'الخطوة 2 من 5: اختيار مخرج العمل',
+    nextButtonLabel: 'التالي: اختيار مدير التصوير (DOP)',
+    required: true,
+  },
+  {
+    id: 'cinematographer',
+    stepNum: 3,
+    shortLabel: '3. التصوير',
+    title: 'الخطوة 3 من 5: اختيار مدير التصوير والإضاءة',
+    nextButtonLabel: 'التالي: اختيار الموسيقار',
+    required: false,
+  },
+  {
+    id: 'composer',
+    stepNum: 4,
+    shortLabel: '4. الموسيقى',
+    title: 'الخطوة 4 من 5: اختيار مؤلف الموسيقى التصويرية',
+    nextButtonLabel: 'التالي: اختيار المونتير والخدع البصرية',
+    required: false,
+  },
+  {
+    id: 'editor_vfx',
+    stepNum: 5,
+    shortLabel: '5. المونتاج',
+    title: 'الخطوة 5 من 5: اختيار المونتير والخدع البصرية (VFX)',
+    nextButtonLabel: 'اعتماد الطاقم بالكامل والانتقال للميزانيات والتصوير!',
+    required: false,
+  },
+];
 
 export function Stage3CrewCastCards() {
   const {
@@ -78,11 +138,8 @@ export function Stage3CrewCastCards() {
     gameDay,
   }).filter((a) => a.status !== 'retired' && a.status !== 'deceased');
 
-  const [marketSection, setMarketSection] =
-    useState<MainMarketSection>('actors_market');
-  const [crewFilter, setCrewFilter] = useState<
-    'director' | 'cinematographer' | 'composer' | 'editor_vfx'
-  >('director');
+  const [currentTeamStep, setCurrentTeamStep] =
+    useState<SequentialTeamStep>('actors');
   const [actorSearchQuery, setActorSearchQuery] = useState<string>('');
   const [actorTierFilter, setActorTierFilter] =
     useState<ActorTierFilter>('ALL');
@@ -298,21 +355,60 @@ export function Stage3CrewCastCards() {
     }
   };
 
-  const handleProceedToProduction = () => {
-    if (!draft.directorId) {
-      setErrorMsg(
-        'يرجى التعاقد مع مخرج العمل أولاً من قائمة «المخرج والطاقم الفني» قبل بدء التصوير!'
-      );
+  const currentStepIndex = SEQUENTIAL_STEPS.findIndex(
+    (s) => s.id === currentTeamStep
+  );
+  const activeStepMeta = SEQUENTIAL_STEPS[currentStepIndex] || SEQUENTIAL_STEPS[0];
+
+  const handleNextSequentialStep = () => {
+    setErrorMsg(null);
+    if (currentTeamStep === 'actors') {
+      setCurrentTeamStep('director');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+    if (currentTeamStep === 'director') {
+      setCurrentTeamStep('cinematographer');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (currentTeamStep === 'cinematographer') {
+      setCurrentTeamStep('composer');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (currentTeamStep === 'composer') {
+      setCurrentTeamStep('editor_vfx');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // Final Step ('editor_vfx'): Validate required roles before proceeding to Stage 4
     if (signedActorIds.length === 0) {
       setErrorMsg(
-        'يرجى التعاقد مع ممثل واحد على الأقل من «سوق الممثلين» وانتظار موافقته قبل الانتقال للتصوير!'
+        'يرجى التعاقد مع ممثل واحد على الأقل وانتظار موافقته قبل بدء التصوير!'
       );
+      setCurrentTeamStep('actors');
       return;
     }
-    setErrorMsg(null);
+    if (!draft.directorId) {
+      setErrorMsg(
+        'يرجى التعاقد مع مخرج العمل أولاً وانتظار موافقته قبل بدء التصوير!'
+      );
+      setCurrentTeamStep('director');
+      return;
+    }
     setActiveScreen('PRODUCTION_CRISES');
+  };
+
+  const handlePrevSequentialStep = () => {
+    setErrorMsg(null);
+    if (currentStepIndex > 0) {
+      setCurrentTeamStep(SEQUENTIAL_STEPS[currentStepIndex - 1].id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      setActiveScreen('PROJECT_SETUP');
+    }
   };
 
   // Filter & sort actors for the unified Actor Market
@@ -352,17 +448,26 @@ export function Stage3CrewCastCards() {
   const canProceedToProduction =
     Boolean(draft.directorId) && signedActorIds.length >= 1;
 
+  const getStepCompletionBadge = (stepId: SequentialTeamStep) => {
+    if (stepId === 'actors') return signedActorIds.length > 0;
+    if (stepId === 'director') return Boolean(draft.directorId);
+    if (stepId === 'cinematographer') return Boolean(draft.dopId);
+    if (stepId === 'composer') return Boolean(draft.composerId);
+    if (stepId === 'editor_vfx') return Boolean(draft.vfxId);
+    return false;
+  };
+
   return (
     <div className="mx-auto max-w-xl space-y-4 py-2">
-      {/* Clean Top Header + 2-List Switcher (سوق الممثلين | المخرج والطاقم الفني) */}
+      {/* Sequential 5-Step Wizard Header (1. الممثلون -> 2. المخرج -> 3. التصوير -> 4. الموسيقى -> 5. المونتاج) */}
       <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/80 bg-white p-4 shadow-[0_12px_30px_-10px_rgba(99,102,241,0.14)]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-[11px] font-black text-violet-700">
-              المرحلة 2 من 5 · التعاقدات وتشكيل فريق العمل
+              المرحلة 2 من 4 · تشكيل الطاقم بالترتيب ({activeStepMeta.stepNum}/5)
             </div>
             <h2 className="font-display mt-0.5 text-base font-black text-slate-900 sm:text-lg">
-              سوق النجوم لعمل «{draft.title || 'الفرعون الأخير'}»
+              {activeStepMeta.title}
             </h2>
           </div>
 
@@ -374,45 +479,58 @@ export function Stage3CrewCastCards() {
           </div>
         </div>
 
-        {/* Two Main Market Lists Switcher */}
-        <div className="mt-3.5 grid grid-cols-2 gap-2 rounded-2xl bg-[#F2F5FF] p-1.5">
-          <button
-            type="button"
-            onClick={() => setMarketSection('actors_market')}
-            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-black transition-all ${
-              marketSection === 'actors_market'
-                ? 'border-2 border-violet-600 bg-white text-violet-800 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Users className="h-4 w-4 text-violet-600" />
-            <span>سوق الممثلين ({signedActorIds.length} موقعين)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMarketSection('crew_market')}
-            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-black transition-all ${
-              marketSection === 'crew_market'
-                ? 'border-2 border-cyan-500 bg-white text-cyan-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Clapperboard className="h-4 w-4 text-cyan-600" />
-            <span>
-              المخرج والطاقم الفني ({selectedDirector ? 'المخرج ✓' : 'اختر المخرج'})
-            </span>
-          </button>
+        {/* 5 Sequential Role Step Pills */}
+        <div className="mt-3.5 grid grid-cols-5 gap-1.5 rounded-2xl bg-[#F2F5FF] p-1.5">
+          {SEQUENTIAL_STEPS.map((st) => {
+            const isActive = currentTeamStep === st.id;
+            const isSigned = getStepCompletionBadge(st.id);
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => {
+                  setErrorMsg(null);
+                  setCurrentTeamStep(st.id);
+                }}
+                className={`flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center text-[10px] font-black transition-all ${
+                  isActive
+                    ? 'border-2 border-violet-600 bg-violet-600 text-white shadow-xs'
+                    : isSigned
+                    ? 'border border-emerald-300 bg-emerald-50 text-emerald-800'
+                    : 'bg-white/80 text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span className="truncate">{st.shortLabel}</span>
+                <span
+                  className={`mt-0.5 text-[8px] font-bold ${
+                    isActive
+                      ? 'text-violet-100'
+                      : isSigned
+                      ? 'text-emerald-700'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  {st.id === 'actors'
+                    ? `${signedActorIds.length} موقع`
+                    : isSigned
+                    ? 'تم التوقيع ✓'
+                    : st.required
+                    ? 'أساسي'
+                    : 'اختياري'}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Compact Signed Team Summary Strip */}
-        {(selectedDirector || allSelectedActors.length > 0 || pendingOffersList.length > 0) && (
+        {(selectedDirector ||
+          selectedDop ||
+          selectedComposer ||
+          selectedVfx ||
+          allSelectedActors.length > 0 ||
+          pendingOffersList.length > 0) && (
           <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-indigo-100 pt-3 text-[11px]">
-            {selectedDirector && (
-              <span className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">
-                🎬 المخرج: {selectedDirector.name}
-              </span>
-            )}
             {allSelectedActors.map((act) => (
               <span
                 key={act.id}
@@ -424,6 +542,26 @@ export function Stage3CrewCastCards() {
                   : ''}
               </span>
             ))}
+            {selectedDirector && (
+              <span className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">
+                🎬 المخرج: {selectedDirector.name}
+              </span>
+            )}
+            {selectedDop && (
+              <span className="inline-flex items-center gap-1 rounded-xl border border-cyan-200 bg-cyan-50 px-2.5 py-1 font-black text-cyan-800">
+                🎥 تصوير: {selectedDop.name}
+              </span>
+            )}
+            {selectedComposer && (
+              <span className="inline-flex items-center gap-1 rounded-xl border border-fuchsia-200 bg-fuchsia-50 px-2.5 py-1 font-black text-fuchsia-800">
+                🎵 موسيقى: {selectedComposer.name}
+              </span>
+            )}
+            {selectedVfx && (
+              <span className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 font-black text-amber-800">
+                ✨ مونتاج: {selectedVfx.name}
+              </span>
+            )}
             {pendingOffersList.map((pend) => (
               <span
                 key={pend.talentId}
@@ -451,11 +589,11 @@ export function Stage3CrewCastCards() {
         </div>
       )}
 
-      {/* Main Content Area: Either Unified Actor Market OR Director & Crew List */}
+      {/* Main Content Area: Sequential Step Content */}
       <AnimatePresence mode="wait">
-        {marketSection === 'actors_market' ? (
+        {currentTeamStep === 'actors' ? (
           <motion.div
-            key="actors-market-list"
+            key="seq-step-actors"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
@@ -562,62 +700,72 @@ export function Stage3CrewCastCards() {
           </motion.div>
         ) : (
           <motion.div
-            key="crew-market-list"
+            key={`seq-step-${currentTeamStep}`}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.14)] sm:p-5"
           >
-            {/* Crew Sub-Role Tabs */}
-            <div className="mb-4 grid grid-cols-2 gap-1.5 rounded-2xl bg-[#F2F5FF] p-1.5 sm:grid-cols-4">
-              {[
-                {
-                  id: 'director' as const,
-                  label: `مخرج العمل (${selectedDirector ? '✓' : 'مطلوب'})`,
-                },
-                {
-                  id: 'cinematographer' as const,
-                  label: `مدير التصوير (${selectedDop ? '✓' : 'اختياري'})`,
-                },
-                {
-                  id: 'composer' as const,
-                  label: `الموسيقى (${selectedComposer ? '✓' : 'اختياري'})`,
-                },
-                {
-                  id: 'editor_vfx' as const,
-                  label: `المونتاج (${selectedVfx ? '✓' : 'اختياري'})`,
-                },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setCrewFilter(t.id)}
-                  className={`min-h-[38px] rounded-xl px-2 text-xs font-black transition ${
-                    crewFilter === t.id
-                      ? 'border border-indigo-100 bg-white text-violet-700 shadow-xs'
-                      : 'text-slate-600'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            {/* Role Category Explanation Banner */}
+            <div className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-[#F8FAFF] p-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
+                  {currentTeamStep === 'director' ? (
+                    <Clapperboard className="h-5 w-5" />
+                  ) : currentTeamStep === 'cinematographer' ? (
+                    <Camera className="h-5 w-5" />
+                  ) : currentTeamStep === 'composer' ? (
+                    <Music className="h-5 w-5" />
+                  ) : (
+                    <WandSparkles className="h-5 w-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-display text-sm font-black text-slate-900">
+                    {activeStepMeta.title}
+                  </h3>
+                  <p className="text-[11px] font-bold text-slate-500">
+                    {currentTeamStep === 'director'
+                      ? 'المخرج هو قائد الرؤية الفنية ويتحكم في انسجام النجوم وجودة العمل النهائية (أساسي).'
+                      : currentTeamStep === 'cinematographer'
+                      ? 'مدير التصوير يرفع جودة الكادرات البصرية والإضاءة السينمائية.'
+                      : currentTeamStep === 'composer'
+                      ? 'الموسيقار يصنع الهوية السمعية والتأثير العاطفي للمشاهد.'
+                      : 'المونتير ومشرف الـ VFX يضبط إيقاع المشاهد والخدع البصرية.'}
+                  </p>
+                </div>
+              </div>
+
+              {getStepCompletionBadge(currentTeamStep) && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-emerald-100 px-2.5 py-1 text-[11px] font-black text-emerald-800">
+                  <Check className="h-3.5 w-3.5 stroke-[3]" />
+                  <span>تم الاختيار</span>
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               {db.crew
-                .filter((c) => c.role === crewFilter)
+                .filter((c) => c.role === currentTeamStep)
                 .map((member) => {
                   const isSelected =
-                    (crewFilter === 'director' && draft.directorId === member.id) ||
-                    (crewFilter === 'cinematographer' && draft.dopId === member.id) ||
-                    (crewFilter === 'composer' && draft.composerId === member.id) ||
-                    (crewFilter === 'editor_vfx' && draft.vfxId === member.id);
+                    (currentTeamStep === 'director' &&
+                      draft.directorId === member.id) ||
+                    (currentTeamStep === 'cinematographer' &&
+                      draft.dopId === member.id) ||
+                    (currentTeamStep === 'composer' &&
+                      draft.composerId === member.id) ||
+                    (currentTeamStep === 'editor_vfx' &&
+                      draft.vfxId === member.id);
 
                   const isRoleFull =
-                    (crewFilter === 'director' && Boolean(draft.directorId)) ||
-                    (crewFilter === 'cinematographer' && Boolean(draft.dopId)) ||
-                    (crewFilter === 'composer' && Boolean(draft.composerId)) ||
-                    (crewFilter === 'editor_vfx' && Boolean(draft.vfxId));
+                    (currentTeamStep === 'director' &&
+                      Boolean(draft.directorId)) ||
+                    (currentTeamStep === 'cinematographer' &&
+                      Boolean(draft.dopId)) ||
+                    (currentTeamStep === 'composer' &&
+                      Boolean(draft.composerId)) ||
+                    (currentTeamStep === 'editor_vfx' && Boolean(draft.vfxId));
 
                   const offer = draft.talentOffers[member.id];
 
@@ -626,13 +774,13 @@ export function Stage3CrewCastCards() {
                       key={member.id}
                       talent={member}
                       kind="crew"
-                      selectedRoleLabel={SLOT_ARABIC_NAMES[crewFilter]}
+                      selectedRoleLabel={SLOT_ARABIC_NAMES[currentTeamStep]}
                       isSelected={isSelected}
                       isSlotLocked={isRoleFull && !isSelected}
                       offer={offer}
                       gameDay={gameDay}
                       onNegotiateAndPitch={() =>
-                        openNegotiationModal(member, 'crew', crewFilter)
+                        openNegotiationModal(member, 'crew', currentTeamStep)
                       }
                       onCancelContract={() => removeTalentFromDraft(member.id)}
                       negotiatedSalary={getNegotiatedCost(
@@ -647,16 +795,13 @@ export function Stage3CrewCastCards() {
         )}
       </AnimatePresence>
 
-      {/* Bottom Action Bar to Proceed to Production & Marketing */}
+      {/* Bottom Sequential Wizard Navigation Bar */}
       <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-4 shadow-md">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-600 mb-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-600">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-violet-600" />
             <span>
-              تم التوقيع مع: المخرج ({draft.directorId ? '1/1' : '0/1'}) · الممثلين الموقعين ({signedActorIds.length})
-              {pendingOffersList.length > 0
-                ? ` · قيد انتظار الرد (${pendingOffersList.length})`
-                : ''}
+              الممثلون ({signedActorIds.length}) · المخرج ({draft.directorId ? '✓' : '—'}) · تصوير ({draft.dopId ? '✓' : '—'}) · موسيقى ({draft.composerId ? '✓' : '—'}) · مونتاج ({draft.vfxId ? '✓' : '—'})
             </span>
           </div>
           <span className="font-black text-emerald-700 tabular-nums">
@@ -664,30 +809,28 @@ export function Stage3CrewCastCards() {
           </span>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2.5">
           <button
             type="button"
-            onClick={() => setActiveScreen('PROJECT_SETUP')}
-            className="flex min-h-[48px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"
+            onClick={handlePrevSequentialStep}
+            className="flex min-h-[50px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700 transition hover:border-violet-300"
           >
             <ArrowRight className="h-4 w-4" />
-            <span>السيناريو</span>
+            <span>
+              {currentStepIndex === 0 ? 'السيناريو' : 'الخطوة السابقة'}
+            </span>
           </button>
 
           <button
             type="button"
-            onClick={handleProceedToProduction}
+            onClick={handleNextSequentialStep}
             className={`flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 px-5 py-3 text-sm font-black text-white shadow-lg transition active:border-b-0 active:translate-y-1 ${
-              canProceedToProduction
+              currentTeamStep === 'editor_vfx' && canProceedToProduction
                 ? 'border-emerald-900/40 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 shadow-emerald-500/25'
                 : 'border-indigo-900/40 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 shadow-indigo-500/20'
             }`}
           >
-            <span>
-              {canProceedToProduction
-                ? 'اكتمال التعاقدات! الانتقال للميزانيات والتصوير'
-                : 'اعتماد الفريق والانتقال للميزانيات والتسويق'}
-            </span>
+            <span>{activeStepMeta.nextButtonLabel}</span>
             <ArrowLeft className="h-4 w-4" />
           </button>
         </div>

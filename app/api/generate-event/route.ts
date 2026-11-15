@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
       return await handleDiscoverAiRisingStar(p, groqKeyOverride, preferredModel);
     }
 
+    if (mode === 'discover_ai_emerging_studio') {
+      return await handleDiscoverAiEmergingStudio(p, groqKeyOverride, preferredModel);
+    }
+
     if (mode === 'generate_ai_memory_news') {
       return await handleGenerateAiMemoryNews(p, groqKeyOverride, preferredModel);
     }
@@ -838,7 +842,7 @@ async function handleEvaluateFestivalCeremony(
 }
 
 /**
- * World Simulation Mode: Invent a brand-new Rising Star Actor/Actress
+ * World Simulation Mode: Invent a brand-new Rising Star Actor/Actress via AI
  */
 async function handleDiscoverAiRisingStar(
   payload: Record<string, unknown>,
@@ -848,20 +852,30 @@ async function handleDiscoverAiRisingStar(
   const existingNames = Array.isArray(payload?.existingNames)
     ? (payload.existingNames as string[]).join('، ')
     : '';
+  const studioName = String(payload?.studioName || 'استوديو اللاعب');
+  const ceoName = String(payload?.ceoName || 'المنتج التنفيذي');
+  const gameDay = Number(payload?.gameDay || 16);
+  const currentYear = Number(payload?.currentYear || 2026);
+  const memoryArr = Array.isArray(payload?.aiMemoryLog)
+    ? (payload.aiMemoryLog as string[])
+    : [];
 
-  const systemPrompt = `أنت كشاف مواهب سينمائية ودرامية في مصر.
-المطلوب منك ابتكار ممثل شاب صاعد جديد تماماً أو ممثلة شابة صاعدة جديدة تماماً (اسم مصري واقعي وجذاب غير موجود في هذه القائمة: ${existingNames}).
+  const systemPrompt = `أنت كشاف مواهب سينمائية ودرامية في مصر والوطن العربي.
+سياق عالم اللاعب الحالي: شركة "${studioName}" بقيادة "${ceoName}" في اليوم #${gameDay} من عام ${currentYear}.
+آخر أحداث عالم هذا اللاعب: ${memoryArr.slice(0, 4).join(' | ') || 'انطلاق الموسم السينمائي'}.
+المطلوب منك ابتكار ممثل شاب صاعد جديد تماماً أو ممثلة شابة صاعدة جديدة تماماً (اسم ثنائي مصري/عربي واقعي ومبتكر غير موجود في القائمة الحالية: ${existingNames.slice(0, 500)}).
 أرجع JSON فقط يحتوي على:
 - name: الاسم الثنائي للموهبة الصاعدة
 - gender: "M" أو "F"
 - age: رقم بين 19 و 27
-- archetype: وصف قصير لنوعية الأدوار التي يبرع فيها (مثلاً: "بطل دراما وتشويق شاب" أو "نجمة كوميديا ورومانسية صاعدة")
-- base_salary: رقم بين 1800000 و 3500000
-- overall: رقم بين 70 و 77
-- headline: عنوان خبر فني عاجل عن ظهور هذه الموهبة الصاعدة وتألقها
-- detail: جملتان تصفان كيف خطفت الأنظار في الوسط الفني وأصبحت متاحة للتعاقد.`;
+- archetype: وصف قصير لنوعية الأدوار التي يبرع فيها (مثلاً: "موهبة صاعدة في الإثارة النفسية" أو "نجمة كوميديا ورومانسية شابة")
+- base_salary: رقم بين 1600000 و 3400000
+- overall: رقم بين 71 و 78
+- best_genre: واحد من ("Drama", "Thriller", "Comedy", "Action", "Romance", "Horror", "Sci-Fi", "Historical")
+- headline: عنوان خبر فني صحفي عن ظهور هذه الموهبة الصاعدة وتألقها
+- detail: جملتان تصفان كيف خطفت الأنظار في الوسط الفني وأصبحت متاحة الآن للتعاقد أمام شركات الإنتاج ومنها "${studioName}".`;
 
-  const userPrompt = `ابتكر موهبة تمثيلية مصرية صاعدة جديدة الآن بصيغة JSON.`;
+  const userPrompt = `ابتكر موهبة تمثيلية صاعدة جديدة تماماً في اليوم ${gameDay} من عام ${currentYear} بصيغة JSON.`;
 
   const groqRes = await callGroqJson(
     systemPrompt,
@@ -871,16 +885,18 @@ async function handleDiscoverAiRisingStar(
   );
 
   if (groqRes && typeof groqRes.data.name === 'string') {
-    const ovr = Math.min(79, Math.max(69, Number(groqRes.data.overall || 73)));
+    const ovr = Math.min(79, Math.max(70, Number(groqRes.data.overall || 74)));
+    const bestGenre = String(groqRes.data.best_genre || 'Drama');
     const actor = {
-      id: `act_ai_${Date.now()}`,
-      name: groqRes.data.name,
-      gender: groqRes.data.gender === 'F' ? 'F' : 'M',
-      age: Math.min(29, Math.max(19, Number(groqRes.data.age || 23))),
+      id: `act_ai_${Date.now()}_${gameDay}`,
+      name: groqRes.data.name.trim(),
+      gender: (groqRes.data.gender === 'F' ? 'F' : 'M') as 'M' | 'F',
+      age: Math.min(28, Math.max(19, Number(groqRes.data.age || 23))),
       tier: 'C' as const,
+      image_url: '',
       base_salary: Math.min(
-        4_500_000,
-        Math.max(1_500_000, Number(groqRes.data.base_salary || 2_400_000))
+        4_200_000,
+        Math.max(1_500_000, Number(groqRes.data.base_salary || 2_300_000))
       ),
       archetype:
         typeof groqRes.data.archetype === 'string'
@@ -888,23 +904,25 @@ async function handleDiscoverAiRisingStar(
           : 'موهبة تمثيلية صاعدة',
       stats: {
         overall: ovr,
-        acting: ovr + 2,
-        box_office: ovr - 3,
-        charisma: ovr + 1,
-        ego: 48,
+        acting: Math.min(88, ovr + 3),
+        box_office_pull: Math.max(66, ovr - 2),
+        charisma: Math.min(88, ovr + 2),
+        ego: 46,
       },
       genre_mastery: {
+        [bestGenre]: 88,
         Drama: 84,
-        Thriller: 80,
-        Comedy: 78,
-        Action: 76,
+        Thriller: 81,
+        Comedy: 79,
+        Action: 78,
         Romance: 80,
       },
       synergy_with: [],
       rivalries: [],
       isAiGenerated: true,
+      isRisingDiscovery: true,
       status: 'active' as const,
-      lastEvolutionNote: 'موهبة صاعدة جديدة في السوق ✨',
+      lastEvolutionNote: 'موهبة صاعدة مولدة بالذكاء الاصطناعي ✨',
     };
 
     return NextResponse.json({
@@ -912,7 +930,7 @@ async function handleDiscoverAiRisingStar(
       headline:
         typeof groqRes.data.headline === 'string'
           ? groqRes.data.headline
-          : `موهبة صاعدة تخطف الأنظار: انضمام «${actor.name}» لسوق الممثلين!`,
+          : `موهبة صاعدة تخطف الأنظار: انضمام «${actor.name}» لسوق النجوم!`,
       detail:
         typeof groqRes.data.detail === 'string'
           ? groqRes.data.detail
@@ -920,7 +938,171 @@ async function handleDiscoverAiRisingStar(
     });
   }
 
-  return NextResponse.json({ actor: null });
+  // Unique procedural seed tied to player's studioName + ceoName + gameDay + timestamp
+  const firstMale = ['زياد', 'مروان', 'آدم', 'سيف', 'نديم', 'فارس', 'باسل', 'تيم', 'رامي', 'مازن', 'كريم', 'ياسين'];
+  const firstFemale = ['لينا', 'مريم', 'ملك', 'تيا', 'داليدا', 'فريدة', 'نور', 'سارة', 'جنى', 'كرمة', 'سلسبيل', 'تمارا'];
+  const lastNames = ['الشناوي', 'النبوي', 'ذو الفقار', 'المنسترلي', 'الداغر', 'السيوفي', 'العلايلي', 'المهدي', 'الرفاعي', 'الشهابي', 'البنداري', 'سرحان'];
+  const seed = hashSeed(`${studioName}_${ceoName}_${gameDay}_${currentYear}_${Date.now()}`);
+  const isFem = seed % 2 === 0;
+  const fName = isFem
+    ? firstFemale[seed % firstFemale.length]
+    : firstMale[seed % firstMale.length];
+  const lName = lastNames[(seed >> 3) % lastNames.length];
+  const generatedName = `${fName} ${lName}`;
+  const ovr = 72 + (seed % 6);
+  const age = 20 + (seed % 7);
+
+  const fallbackActor = {
+    id: `act_ai_${Date.now()}_${gameDay}`,
+    name: generatedName,
+    gender: (isFem ? 'F' : 'M') as 'M' | 'F',
+    age,
+    tier: 'C' as const,
+    image_url: '',
+    base_salary: (1.8 + (seed % 14) * 0.1) * 1_000_000,
+    archetype: isFem ? 'نجمة دراما وتشويق صاعدة بقوة' : 'بطل شاب صاعد في الأكشن والغموض',
+    stats: {
+      overall: ovr,
+      acting: ovr + 3,
+      box_office_pull: ovr - 2,
+      charisma: ovr + 2,
+      ego: 45,
+    },
+    genre_mastery: {
+      Drama: 86,
+      Thriller: 84,
+      Action: 80,
+      Comedy: 78,
+      Romance: 82,
+    },
+    synergy_with: [],
+    rivalries: [],
+    isAiGenerated: true,
+    isRisingDiscovery: true,
+    status: 'active' as const,
+    lastEvolutionNote: 'موهبة صاعدة جديدة في السوق ✨',
+  };
+
+  return NextResponse.json({
+    actor: fallbackActor,
+    headline: `اكتشاف فني جديد: صعود الموهبة الشابة «${generatedName}» إلى دائرة الضوء!`,
+    detail: `لفت الوجه الصاعد «${generatedName}» (${age} سنة) أنظار المخرجين والنقاد بأدائه التلقائي، ليصبح متاحاً الآن للتعاقد أمام «${studioName}» والشركات المنافسة.`,
+  });
+}
+
+/**
+ * World Simulation Mode: Invent a brand-new Emerging Production Studio via AI
+ */
+async function handleDiscoverAiEmergingStudio(
+  payload: Record<string, unknown>,
+  groqKeyOverride?: string,
+  preferredModel?: string
+) {
+  const studioName = String(payload?.studioName || 'استوديو اللاعب');
+  const ceoName = String(payload?.ceoName || 'المنتج التنفيذي');
+  const currentYear = Number(payload?.currentYear || 2026);
+  const gameDay = Number(payload?.gameDay || 20);
+  const existingStudios = Array.isArray(payload?.existingStudios)
+    ? (payload.existingStudios as string[]).join('، ')
+    : '';
+  const memoryArr = Array.isArray(payload?.aiMemoryLog)
+    ? (payload.aiMemoryLog as string[])
+    : [];
+
+  const systemPrompt = `أنت محلل اقتصادي لصناعة السينما والدراما في مصر والشرق الأوسط.
+سياق العالم الحالي: شركة اللاعب هي "${studioName}" بقيادة "${ceoName}" في عام ${currentYear} (اليوم #${gameDay}).
+الشركات الموجودة حالياً في السوق: (${existingStudios}).
+آخر أحداث السوق: ${memoryArr.slice(0, 4).join(' | ') || 'منافسة محتدمة على شباك التذاكر'}.
+
+المطلوب منك ابتكار شركة إنتاج سينمائي ودرامي جديدة تماماً تدخل السوق الآن برأس مال قوي لتنافس "${studioName}" وباقي الشركات (اختر اسماً عربياً/مصرياً فخماً ومبتكراً غير مكرر في القائمة أعلاه).
+أرجع JSON فقط يحتوي على:
+- name: اسم شركة الإنتاج الجديدة
+- ceo: اسم المؤسس والمدير التنفيذي للشركة الجديدة
+- specialty: تخصص الشركة الفني (مثلاً "أفلام الإثارة والمنصات الرقمية" أو "الإنتاجات التاريخية والأكشن الضخم")
+- estimated_net_worth: القيمة السوقية المبدئية للشركة بالجنيه (رقم بين 180000000 و 460000000)
+- market_power: رقم بين 66 و 83
+- preferred_genres: مصفوفة من تصنيفين من ("Action", "Drama", "Thriller", "Comedy", "Horror", "Sci-Fi", "Romance", "Historical")
+- headline: عنوان خبر صحفي اقتصادي عاجل عن تأسيس الشركة ودخولها المنافسة
+- detail: جملتان تصفان خطة الشركة الجديدة بقيادة مؤسسها لمنافسة "${studioName}" في الموسم القادم.`;
+
+  const userPrompt = `ابتكر شركة إنتاج سينمائي منافسة جديدة تماماً بصيغة JSON الآن.`;
+
+  const groqRes = await callGroqJson(
+    systemPrompt,
+    userPrompt,
+    groqKeyOverride,
+    preferredModel
+  );
+
+  const colors = ['#7C3AED', '#0284C7', '#E11D48', '#059669', '#D97706', '#4F46E5'];
+  const seed = hashSeed(`${studioName}_${ceoName}_${gameDay}_${currentYear}_${Date.now()}`);
+
+  if (groqRes && typeof groqRes.data.name === 'string' && typeof groqRes.data.ceo === 'string') {
+    const netWorth = Math.min(
+      520_000_000,
+      Math.max(165_000_000, Number(groqRes.data.estimated_net_worth || 260_000_000))
+    );
+    const power = Math.min(85, Math.max(64, Number(groqRes.data.market_power || 73)));
+    const genres = Array.isArray(groqRes.data.preferred_genres) && groqRes.data.preferred_genres.length > 0
+      ? (groqRes.data.preferred_genres as string[])
+      : ['Drama', 'Thriller'];
+
+    const newStudio = {
+      id: `comp_ai_${Date.now()}_${gameDay}`,
+      name: groqRes.data.name.trim(),
+      ceo: groqRes.data.ceo.trim(),
+      logo_url: '',
+      market_power: power,
+      estimated_net_worth: netWorth,
+      specialty:
+        typeof groqRes.data.specialty === 'string'
+          ? groqRes.data.specialty
+          : 'إنتاج سينمائي ودرامي مشترك',
+      preferred_genres: genres,
+      rival_aggression: 76,
+      color: colors[seed % colors.length],
+    };
+
+    return NextResponse.json({
+      studio: newStudio,
+      headline:
+        typeof groqRes.data.headline === 'string'
+          ? groqRes.data.headline
+          : `بورصة الإنتاج: الإعلان رسمياً عن تأسيس «${newStudio.name}» بقيمة سوقية ${(netWorth / 1_000_000).toFixed(0)}M ج.م!`,
+      detail:
+        typeof groqRes.data.detail === 'string'
+          ? groqRes.data.detail
+          : `أعلن المنتج «${newStudio.ceo}» إطلاق شركة «${newStudio.name}» (${newStudio.specialty}) لتدخل سباق الترتيب العام مباشرة إلى جانب «${studioName}».`,
+    });
+  }
+
+  const studioPrefixes = ['مجموعة كليوباترا', 'استوديوهات أوريون', 'شركة الصقر الذهبي', 'دار الفنون الحديثة', 'كيان ميديا', 'أفلام المحروسة الجديدة', 'بوابة الشرق'];
+  const studioSuffixes = ['للإنتاج السينمائي', 'للصناعات الإبداعية', 'للإنتاج الفني والمنصات', 'للسينما والدراما'];
+  const ceoFirst = ['شريف', 'طارق', 'نديم', 'عاصم', 'هشام', 'باهر', 'سلطان'];
+  const ceoLast = ['الدمرداش', 'المنشاوي', 'الألفي', 'الكيلاني', 'التهامي', 'البهنساوي'];
+
+  const genStudioName = `${studioPrefixes[seed % studioPrefixes.length]} ${studioSuffixes[(seed >> 2) % studioSuffixes.length]}`;
+  const genCeoName = `${ceoFirst[(seed >> 3) % ceoFirst.length]} ${ceoLast[(seed >> 4) % ceoLast.length]}`;
+  const netWorth = (195 + (seed % 180)) * 1_000_000;
+
+  const fallbackStudio = {
+    id: `comp_ai_${Date.now()}_${gameDay}`,
+    name: genStudioName,
+    ceo: genCeoName,
+    logo_url: '',
+    market_power: 70 + (seed % 12),
+    estimated_net_worth: netWorth,
+    specialty: 'الإنتاجات السينمائية الضخمة ومسلسلات المنصات',
+    preferred_genres: ['Action', 'Thriller'],
+    rival_aggression: 75,
+    color: colors[seed % colors.length],
+  };
+
+  return NextResponse.json({
+    studio: fallbackStudio,
+    headline: `منافس جديد في السوق: تدشين «${genStudioName}» بقيادة ${genCeoName} بقيمة ${(netWorth / 1_000_000).toFixed(0)}M ج.م!`,
+    detail: `دخلت «${genStudioName}» رسمياً إلى جدول ترتيب شركات الإنتاج برأس مال ضخم، معلنة استهدافها استقطاب نجوم الصف الأول ومنافسة «${studioName}».`,
+  });
 }
 
 /**
@@ -947,12 +1129,12 @@ async function handleGenerateAiMemoryNews(
       : `تأسيس شركة «${studioName}» بقيادة «${ceoName}» بقيمة سوقية ${(marketValue / 1_000_000).toFixed(0)}M ج.م`;
 
   const rivalPool = [
-    'المتحدة للإنتاج السينمائي',
-    'سينرجي تامر مرسي',
-    'العدل جروب',
-    'نيو سينشري للإنتاج',
-    'السبكي للإنتاج السينمائي',
-    'أفلام مصر العالمية',
+    'المتحدون ميديا جروب',
+    'سيرجي للإنتاج الفني',
+    'العدلي جروب للدراما',
+    'نيو سينما للقرن الجديد',
+    'السباعي للإنتاج السينمائي',
+    'أفلام النيل الدولية',
   ];
   const chosenRival = rivalPool[(gameDay + currentYear) % rivalPool.length];
 
@@ -1069,24 +1251,29 @@ function buildGroundedRivalReleases(payload: Record<string, unknown>) {
   const studios = Array.isArray(payload?.competitorStudios)
     ? (payload.competitorStudios as string[])
     : [
-        'المتحدة للإنتاج السينمائي',
-        'سينرجي تامر مرسي',
-        'العدل جروب',
-        'نيو سينشري',
-        'السبكي للإنتاج السينمائي',
+        'المتحدون ميديا جروب',
+        'سيرجي للإنتاج الفني',
+        'العدلي جروب للدراما',
+        'نيو سينما للقرن الجديد',
+        'السباعي للإنتاج السينمائي',
       ];
   const stars = Array.isArray(payload?.availableStars)
     ? (payload.availableStars as string[])
-    : ['كريم عبد العزيز', 'أحمد عز', 'أمير كرارة', 'منى زكي', 'ياسمين عبد العزيز'];
+    : ['كريم عبدون', 'أحمد عزمي', 'أمير كرم', 'منى زاهر', 'ياسمين العبد'];
 
   const sampleTitles = isSeries
     ? ['العهد السري', 'شارع السلطان', 'الوريث الأخير', 'ليالي المحروسة', 'دائرة الشك']
     : ['الرصاصة الذهبية', 'خط النار', 'سر الغرفة 204', 'ليلة في الزمالك', 'طريق الهروب'];
 
-  return studios.slice(0, 4).map((studioName, idx) => {
-    const isDelayed = idx === 3;
-    const title = sampleTitles[idx % sampleTitles.length];
-    const leadStarName = stars[idx % Math.max(1, stars.length)] || 'نجم شباك';
+  const seed = hashSeed(`${payload?.title || 'film'}_${studios[0] || ''}`);
+  // Only 2 or 3 studios release alongside the player in a single season window
+  const count = seed % 2 === 0 ? 2 : 3;
+  const rareDelay = seed % 6 === 0;
+
+  return studios.slice(0, count).map((studioName, idx) => {
+    const isDelayed = rareDelay && idx === count - 1;
+    const title = sampleTitles[(seed + idx) % sampleTitles.length];
+    const leadStarName = stars[(seed + idx) % Math.max(1, stars.length)] || 'نجم شباك';
     if (isDelayed) {
       return {
         studioName,
@@ -1100,8 +1287,8 @@ function buildGroundedRivalReleases(payload: Record<string, unknown>) {
       };
     }
     const baseRev =
-      idx === 0 ? 92_000_000 : idx === 1 ? 68_000_000 : 44_000_000;
-    const criticScore = idx === 0 ? 7.9 : idx === 1 ? 7.2 : 6.4;
+      idx === 0 ? 114_000_000 : idx === 1 ? 82_000_000 : 54_000_000;
+    const criticScore = idx === 0 ? 8.3 : idx === 1 ? 7.6 : 6.9;
     return {
       studioName,
       title,
@@ -1177,21 +1364,21 @@ function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>
     rival_releases: buildGroundedRivalReleases(payload),
     reviews: [
       {
-        criticName: 'طارق الشناوي',
+        criticName: 'طارق الشهاوي',
         publication: 'الشاشة الذهبية',
         sentiment: posScore >= 7.0 ? 'positive' : 'mixed',
         quote: positiveQuotes[seed % positiveQuotes.length],
         score: posScore,
       },
       {
-        criticName: 'ماجدة خير الله',
+        criticName: 'ماجدة خيرت',
         publication: 'بوابة الفن السابع',
         sentiment: 'negative',
         quote: negativeQuotes[(seed + 1) % negativeQuotes.length],
         score: negScore,
       },
       {
-        criticName: 'أندرو محسن',
+        criticName: 'نديم محسن',
         publication: 'سينما إنسايدر',
         sentiment: 'mixed',
         quote: mixedQuotes[(seed + 2) % mixedQuotes.length],
@@ -1237,10 +1424,10 @@ async function handleEvaluateRelease(
   const format = String(payload?.format || 'film');
   const competitorStudios = Array.isArray(payload?.competitorStudios)
     ? (payload.competitorStudios as string[]).join('، ')
-    : 'المتحدة للإنتاج السينمائي، سينرجي، العدل جروب، نيو سينشري';
+    : 'المتحدون ميديا جروب، سيرجي للإنتاج الفني، العدلي جروب للدراما، نيو سينما للقرن الجديد';
   const availableStars = Array.isArray(payload?.availableStars)
     ? (payload.availableStars as string[]).join('، ')
-    : 'كريم عبد العزيز، أحمد عز، أمير كرارة، منى زكي';
+    : 'كريم عبدون، أحمد عزمي، أمير كرم، منى زاهر';
 
   const systemPrompt = `أنت لجنة نقاد سينمائيين ودراميين مصريين ومحللي شباك تذاكر.
 حلل ${format === 'series' ? 'مسلسل' : 'فيلم'} "${title}" بناءً على السيناريو الفعلي الذي كتبه المنتج:
@@ -1253,7 +1440,7 @@ async function handleEvaluateRelease(
 قواعد الأسلوب:
 1. اكتب آراء النقاد ومنشورات الجمهور بلغة مصرية طبيعية وراقية واحترافية (تذكر تفاصيل حقيقية من قصة وسيناريو المنتج).
 2. اجعل آراء النقاد الثلاثة متباينة بصدق (إشادة نقدية، نقد فني صريح لنقاط الضعف، ورأي متوازن).
-3. ولّد أيضاً أعمال الشركات المنافسة في هذا الموسم ضمن مصفوفة rival_releases (4 شركات منافسة: 3 منها طرحت أعمالاً بإيرادات وتقييمات متفاوتة بواقعية بين نجاح كبير أو متوسط أو إخفاق، وشركة واحدة تأخرت وأجلت عرض عملها هذا الموسم status: "delayed").
+3. ولّد أيضاً أعمال الشركات المنافسة التي نزلت في نفس الموسم فقط ضمن مصفوفة rival_releases (شركتان أو 3 شركات منافسة فقط تنزل في نفس الموسم مع اللاعب، وأعمالها قوية وتنافس بجدية بتقييمات بين 6.8 و 8.9 وإيرادات واقعية قوية بين 50M و 150M ج.م، ولا تجعل الشركات تؤجل دائماً بل نادراً جداً).
 
 أرجع JSON فقط يحتوي على:
 - critic_score (رقم من 3.5 إلى 9.2)
@@ -1262,7 +1449,7 @@ async function handleEvaluateRelease(
 - viral_trend_label (عنوان الصدى الجماهيري)
 - reviews: مصفوفة من 3 نقاد (criticName, publication, sentiment: "positive"|"mixed"|"negative", quote يذكر تفاصيل القصة، score)
 - social_posts: مصفوفة من 3 منشورات سوشيال ميديا (handle, platform, content, likes)
-- rival_releases: مصفوفة من 4 عناصر، كل عنصر يحتوي على (studioName, title, genre, leadStarName, boxOfficeRevenue, criticScore, status: "released"|"delayed", delayReason)`;
+- rival_releases: مصفوفة من 2 أو 3 عناصر فقط، كل عنصر يحتوي على (studioName, title, genre, leadStarName, boxOfficeRevenue, criticScore, status: "released")`;
 
   const userPrompt = `قيّم عمل «${title}» وولّد منافسات الموسم الآن بصيغة JSON.`;
 
@@ -1284,7 +1471,7 @@ async function handleEvaluateRelease(
     );
     const rivalReleases = Array.isArray(groqRes.data.rival_releases) &&
       groqRes.data.rival_releases.length >= 2
-      ? groqRes.data.rival_releases
+      ? groqRes.data.rival_releases.slice(0, 3)
       : buildGroundedRivalReleases(payload);
 
     return NextResponse.json({

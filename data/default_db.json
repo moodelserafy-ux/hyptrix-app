@@ -1,7 +1,7 @@
 {
   "meta": {
-    "pack_name": "حزمة إمبراطورية الفن الافتراضية (Hyptrix Core DB)",
-    "version": "1.0"
+    "pack_name": "حزمة إمبراطورية الفن الافتراضية (Hyptrix Parody Universe)",
+    "version": "2.0"
   },
   "actors": [
     {
@@ -11,7 +11,8 @@
       "age": 38,
       "tier": "S",
       "image_url": "",
-      "base_salary": 45000000,
+      "base_salary": 36000000,
+      "archetype": "فارس الأكشن والمطاردات الكبرى",
       "stats": {
         "overall": 94,
         "acting": 88,
@@ -21,7 +22,7 @@
       },
       "genre_mastery": {
         "action": 97,
-        "popular_drama": 98,
+        "popular_drama": 96,
         "comedy": 62,
         "romance": 55,
         "psychological_horror": 60,
@@ -36,7 +37,8 @@
       "age": 41,
       "tier": "S",
       "image_url": "",
-      "base_salary": 42000000,
+      "base_salary": 34000000,
+      "archetype": "عبقري الغموض والأدوار المركبة",
       "stats": {
         "overall": 93,
         "acting": 96,
@@ -62,7 +64,8 @@
       "age": 34,
       "tier": "S",
       "image_url": "",
-      "base_salary": 35000000,
+      "base_salary": 30000000,
+      "archetype": "سيدة الشاشة والبطولات الدرامية",
       "stats": {
         "overall": 91,
         "acting": 95,
@@ -87,7 +90,8 @@
       "age": 36,
       "tier": "S",
       "image_url": "",
-      "base_salary": 38000000,
+      "base_salary": 32000000,
+      "archetype": "ملك الكوميديا الذكية وشباك التذاكر",
       "stats": {
         "overall": 90,
         "acting": 82,
@@ -112,7 +116,8 @@
       "age": 29,
       "tier": "A",
       "image_url": "",
-      "base_salary": 22000000,
+      "base_salary": 20000000,
+      "archetype": "نجمة الرومانسية العصرية والإثارة",
       "stats": {
         "overall": 86,
         "acting": 87,
@@ -136,7 +141,8 @@
       "age": 48,
       "tier": "A",
       "image_url": "",
-      "base_salary": 25000000,
+      "base_salary": 22000000,
+      "archetype": "عملاق الملاحم التاريخية والسير الذاتية",
       "stats": {
         "overall": 88,
         "acting": 97,
@@ -161,7 +167,8 @@
       "age": 54,
       "tier": "A",
       "image_url": "",
-      "base_salary": 19000000,
+      "base_salary": 18000000,
+      "archetype": "أيقونة الدراما الاجتماعية والتاريخية",
       "stats": {
         "overall": 87,
         "acting": 98,
@@ -185,7 +192,8 @@
       "age": 33,
       "tier": "A",
       "image_url": "",
-      "base_salary": 20000000,
+      "base_salary": 19000000,
+      "archetype": "بطل أفلام السطو والخيال العلمي",
       "stats": {
         "overall": 84,
         "acting": 85,
@@ -209,6 +217,7 @@
       "tier": "B",
       "image_url": "",
       "base_salary": 9500000,
+      "archetype": "جوكر الكوميديا العائلية والمواقف",
       "stats": {
         "overall": 78,
         "acting": 84,
@@ -232,6 +241,7 @@
       "tier": "B",
       "image_url": "",
       "base_salary": 8000000,
+      "archetype": "بطلة الرعب النفسي والماورائيات",
       "stats": {
         "overall": 76,
         "acting": 81,
@@ -255,6 +265,7 @@
       "tier": "B",
       "image_url": "",
       "base_salary": 7500000,
+      "archetype": "نجم التحقيقات البوليسية والدراما",
       "stats": {
         "overall": 75,
         "acting": 80,
@@ -277,6 +288,7 @@
       "tier": "B",
       "image_url": "",
       "base_salary": 7000000,
+      "archetype": "نجمة اللايت كوميدي والرومانسية",
       "stats": {
         "overall": 74,
         "acting": 78,
@@ -299,6 +311,7 @@
       "tier": "C",
       "image_url": "",
       "base_salary": 2500000,
+      "archetype": "وجه شاب طموح في الأكشن والخيال",
       "stats": {
         "overall": 68,
         "acting": 74,
@@ -321,6 +334,7 @@
       "tier": "C",
       "image_url": "",
       "base_salary": 2000000,
+      "archetype": "موهبة شابة في الدراما والرومانسية",
       "stats": {
         "overall": 66,
         "acting": 73,
@@ -343,6 +357,7 @@
       "role": "director",
       "image_url": "",
       "base_salary": 18000000,
+      "specialty": "الملاحم البصرية وأفلام الأكشن الكبرى",
       "stats": {
         "overall": 94,
         "vision": 97,
@@ -358,6 +373,7 @@
       "role": "director",
       "image_url": "",
       "base_salary": 14000000,
+      "specialty": "الغموض النفسي والخيال العلمي",
       "stats": {
         "overall": 90,
         "vision": 95,
@@ -373,6 +389,7 @@
       "role": "director",
       "image_url": "",
       "base_salary": 12000000,
+      "specialty": "الكوميديا الجماهيرية والدراما الشعبية",
       "stats": {
         "overall": 86,
         "vision": 85,
@@ -388,6 +405,7 @@
       "role": "director",
       "image_url": "",
       "base_salary": 6500000,
+      "specialty": "السير الذاتية والرومانسية الواقعية",
       "stats": {
         "overall": 77,
         "vision": 84,
@@ -403,6 +421,7 @@
       "role": "writer",
       "image_url": "",
       "base_salary": 11000000,
+      "specialty": "الحبكات البوليسية والتاريخية العميقة",
       "stats": {
         "overall": 93,
         "vision": 95,
@@ -419,6 +438,7 @@
       "role": "writer",
       "image_url": "",
       "base_salary": 9000000,
+      "specialty": "سيناريوهات الأكشن والإثارة الجماهيرية",
       "stats": {
         "overall": 88,
         "vision": 89,
@@ -435,6 +455,7 @@
       "role": "writer",
       "image_url": "",
       "base_salary": 5500000,
+      "specialty": "الكوميديا الرومانسية والفانتازيا",
       "stats": {
         "overall": 81,
         "vision": 84,
@@ -451,6 +472,7 @@
       "role": "cinematographer",
       "image_url": "",
       "base_salary": 8500000,
+      "specialty": "التصوير الملحمي وإضاءة المعارك",
       "stats": {
         "overall": 92,
         "vision": 96,
@@ -465,6 +487,7 @@
       "role": "cinematographer",
       "image_url": "",
       "base_salary": 4500000,
+      "specialty": "الكاميرا الديناميكية والدراما الحية",
       "stats": {
         "overall": 80,
         "vision": 82,
@@ -479,13 +502,14 @@
       "role": "composer",
       "image_url": "",
       "base_salary": 7500000,
+      "specialty": "الأوركسترا التصويرية الملحمية",
       "stats": {
         "overall": 93,
         "vision": 97,
         "pacing": 90,
         "efficiency": 89
       },
-      "best_genres": ["historical", "psychological_horror", "romance", "drama", "action"]
+      "best_genres": ["historical", "psychological_horror", "romance", "action"]
     },
     {
       "id": "mus_2",
@@ -493,6 +517,7 @@
       "role": "composer",
       "image_url": "",
       "base_salary": 4000000,
+      "specialty": "الإيقاعات العصرية والموسيقى السريعة",
       "stats": {
         "overall": 79,
         "vision": 81,
@@ -507,6 +532,7 @@
       "role": "editor_vfx",
       "image_url": "",
       "base_salary": 9500000,
+      "specialty": "الخدع البصرية المتقدمة CGI والمونتاج السريع",
       "stats": {
         "overall": 91,
         "vision": 94,
@@ -521,6 +547,7 @@
       "role": "editor_vfx",
       "image_url": "",
       "base_salary": 4800000,
+      "specialty": "المونتاج الدرامي وتصحيح الألوان",
       "stats": {
         "overall": 82,
         "vision": 80,
@@ -533,42 +560,42 @@
   "competitor_studios": [
     {
       "id": "comp_1",
-      "name": "المتحدة للإنتاج السينمائي والدرامي",
+      "name": "الإمبراطورية للإنتاج السينمائي",
       "logo_url": "",
       "market_power": 95,
       "preferred_genres": ["action", "historical", "popular_drama"]
     },
     {
       "id": "comp_2",
-      "name": "مجموعة سينرجي للترفيه",
+      "name": "مجموعة سينما تاج للترفيه",
       "logo_url": "",
       "market_power": 92,
       "preferred_genres": ["action", "crime_mystery", "popular_drama"]
     },
     {
       "id": "comp_3",
-      "name": "العدل جروب للدراما والسينما",
+      "name": "الرواد جروب للدراما والسينما",
       "logo_url": "",
       "market_power": 89,
       "preferred_genres": ["popular_drama", "biography", "romance"]
     },
     {
       "id": "comp_4",
-      "name": "نيو سينشري بيكتشرز",
+      "name": "نيو فيجن بيكتشرز",
       "logo_url": "",
       "market_power": 86,
       "preferred_genres": ["crime_mystery", "psychological_horror", "heist"]
     },
     {
       "id": "comp_5",
-      "name": "السبكي للإنتاج السينمائي",
+      "name": "السباعي للإنتاج السينمائي",
       "logo_url": "",
       "market_power": 85,
       "preferred_genres": ["popular_drama", "light_comedy", "comedy"]
     },
     {
       "id": "comp_6",
-      "name": "أفلام مصر العالمية",
+      "name": "أفلام الكنانة الدولية",
       "logo_url": "",
       "market_power": 84,
       "preferred_genres": ["historical", "biography", "romance"]
@@ -577,49 +604,49 @@
   "streaming_platforms": [
     {
       "id": "plat_1",
-      "name": "Watch IT (ووتش إت)",
+      "name": "شوفها بلس (Shoofha+)",
       "logo_url": "",
       "budget_capacity": 96
     },
     {
       "id": "plat_2",
-      "name": "Shahid VIP (شاهد VIP)",
+      "name": "شاشة ستريم VIP (Shasha VIP)",
       "logo_url": "",
       "budget_capacity": 98
     },
     {
       "id": "plat_3",
-      "name": "Yango Play (يانجو بلاي)",
+      "name": "سيني بلاي (CinePlay)",
       "logo_url": "",
       "budget_capacity": 91
     },
     {
       "id": "plat_4",
-      "name": "Netflix MENA (نتفليكس الشرق الأوسط)",
+      "name": "ستار فليكس الشرق الأوسط (StarFlix)",
       "logo_url": "",
       "budget_capacity": 99
     },
     {
       "id": "tv_1",
-      "name": "شبكة قنوات MBC مصر",
+      "name": "شبكة قنوات النيل الذهبية",
       "logo_url": "",
       "budget_capacity": 95
     },
     {
       "id": "tv_2",
-      "name": "شبكة قنوات ON Drama",
+      "name": "شبكة قنوات أونلاين دراما",
       "logo_url": "",
       "budget_capacity": 93
     },
     {
       "id": "tv_3",
-      "name": "قنوات DMC دراما",
+      "name": "قنوات المحروسة دراما",
       "logo_url": "",
       "budget_capacity": 89
     },
     {
       "id": "tv_4",
-      "name": "شبكة قنوات CBC والحياة",
+      "name": "شبكة قنوات العاصمة والنهار",
       "logo_url": "",
       "budget_capacity": 86
     }
@@ -627,25 +654,25 @@
   "festivals": [
     {
       "id": "fest_1",
-      "name": "مهرجان القاهرة السينمائي الدولي",
+      "name": "مهرجان النيل السينمائي الدولي",
       "logo_url": "",
       "prestige": 97
     },
     {
       "id": "fest_2",
-      "name": "حفل جوائز Joy Awards للترفيه",
+      "name": "حفل جوائز التاج الذهبي للترفيه",
       "logo_url": "",
       "prestige": 99
     },
     {
       "id": "fest_3",
-      "name": "مهرجان الجونة السينمائي",
+      "name": "مهرجان اللؤلؤة السينمائي",
       "logo_url": "",
       "prestige": 94
     },
     {
       "id": "fest_4",
-      "name": "مهرجان البحر الأحمر السينمائي",
+      "name": "مهرجان المرجان السينمائي الدولي",
       "logo_url": "",
       "prestige": 96
     }

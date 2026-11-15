@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useGameStore, formatGameDate } from '@/lib/store';
+import { AnimatedRedCarpetFestivalGraphic } from './CinematicGraphicsScene';
 import {
   Newspaper,
   Trophy,
@@ -81,6 +82,15 @@ export function WorldPopupsOverlay() {
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
             className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-amber-300 border-b-4 border-b-amber-500 bg-gradient-to-b from-[#FFFDF5] via-white to-[#F5F3FF] p-5 shadow-[0_24px_60px_-12px_rgba(245,158,11,0.35)] sm:p-6"
           >
+            {/* Animated Red Carpet & Trophy Stage Scene */}
+            <div className="mb-3">
+              <AnimatedRedCarpetFestivalGraphic
+                festivalName={activeFestival.festivalName}
+                year={activeFestival.year}
+                wonCount={activeFestival.playerWonCount}
+              />
+            </div>
+
             {/* Festival Red Carpet Header */}
             <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 p-4 text-white shadow-md">
               <div className="flex items-center justify-between gap-3">

@@ -20,6 +20,7 @@ import {
   RivalRelease,
 } from '@/lib/game-engine';
 import { ViralShareCard } from './ViralShareCard';
+import { AnimatedCinemaPremiereGraphic } from './CinematicGraphicsScene';
 import {
   Trophy,
   Newspaper,
@@ -71,6 +72,7 @@ export function Stage5ReleaseSimulation() {
     lastReleasedProject,
     completeProjectRelease,
     advanceReleaseTrackingDay,
+    resetDraftForNewProject,
     setActiveScreen,
   } = useGameStore();
 
@@ -296,8 +298,6 @@ export function Stage5ReleaseSimulation() {
       draft.budgetAllocation.vfxAndStunts +
       draft.budgetAllocation.extrasAndCrowds;
 
-    const totalBudget = talentPayroll + prodSpend + draft.marketingBudget;
-
     const scriptWordCount = draft.scriptSynopsis.trim()
       ? draft.scriptSynopsis.trim().split(/\s+/).length
       : 0;
@@ -327,8 +327,18 @@ export function Stage5ReleaseSimulation() {
       hypeScore: draft.hypeScore,
       aiBoxOfficeMultiplier: 1.0,
       marketRegion: currentRegion,
+      selectedDistributionMarkets: draft.selectedDistributionMarkets,
       scriptWordCount,
+      facilitiesLevels: stateSnap.facilitiesLevels,
+      previousGenres: stateSnap.releasedProjects.map((p) => p.primaryGenre),
+      entropySeed: gameDay * 37 + currentYear * 13 + (draft.title?.length || 5) * 7,
     });
+
+    const totalBudget =
+      talentPayroll +
+      prodSpend +
+      draft.marketingBudget +
+      prelim.distributionFeesTotal;
 
     const isSeries = draft.format === 'series';
     const maxSteps = isSeries ? draft.episodes || 15 : 10;
@@ -415,12 +425,16 @@ export function Stage5ReleaseSimulation() {
         hypeScore: draft.hypeScore,
         aiBoxOfficeMultiplier: multiplier,
         marketRegion: currentRegion,
+        selectedDistributionMarkets: draft.selectedDistributionMarkets,
         scriptWordCount,
+        facilitiesLevels: stateSnap.facilitiesLevels,
+        previousGenres: stateSnap.releasedProjects.map((p) => p.primaryGenre),
+        entropySeed: gameDay * 37 + currentYear * 13 + (draft.title?.length || 5) * 7,
       });
 
       const rivals: RivalRelease[] =
         Array.isArray(aiData.rival_releases) && aiData.rival_releases.length >= 2
-          ? (aiData.rival_releases as RivalRelease[])
+          ? (aiData.rival_releases as RivalRelease[]).slice(0, 3)
           : fallbackRivals;
 
       const playerCompareRev = finalNumbers.totalGrossRevenue;
@@ -470,8 +484,24 @@ export function Stage5ReleaseSimulation() {
         streamingRevenue: finalNumbers.totalStreamingRevenue,
         totalGrossRevenue: finalNumbers.totalGrossRevenue,
         netProfit: finalNumbers.totalGrossRevenue - totalBudget,
-        criticScore: Number(aiData.critic_score || 6.8),
-        audienceScore: Number(aiData.audience_score || 7.2),
+        criticScore: Number(
+          Math.min(
+            9.6,
+            Math.max(
+              3.5,
+              Number(aiData.critic_score || 6.8) + finalNumbers.criticDeltaFromTwists
+            )
+          ).toFixed(1)
+        ),
+        audienceScore: Number(
+          Math.min(
+            9.8,
+            Math.max(
+              3.8,
+              Number(aiData.audience_score || 7.2) + finalNumbers.audienceDeltaFromTwists
+            )
+          ).toFixed(1)
+        ),
         boxOfficeRank,
         reviews: (aiData.reviews as CriticReviewItem[]) || [],
         socialPosts: (aiData.social_posts as SocialPostItem[]) || [],
@@ -480,6 +510,7 @@ export function Stage5ReleaseSimulation() {
           `#${(draft.title || 'الفرعون_الأخير').replace(/\s+/g, '_')} يتصدر النقاشات الفنية!`,
         rivalReleases: rivals,
         awardsWon: [],
+        simulationTwists: finalNumbers.simulationTwists,
         releaseDayStart: gameDay,
         daysTracked: 1,
         dailyNews: [
@@ -541,21 +572,21 @@ export function Stage5ReleaseSimulation() {
         boxOfficeRank: betterRivals + 1,
         reviews: [
           {
-            criticName: 'طارق الشناوي',
+            criticName: 'طارق الشهاوي',
             publication: 'الشاشة الذهبية',
             sentiment: 'positive',
             quote: `معالجة «${draft.title || 'الفرعون الأخير'}» منحت ${finalLeads[0]?.name} مساحة تمثيلية صادقة، وإدارة المخرج ${director.name} لإيقاع المشاهد الافتتاحية كانت موفقة.`,
             score: Number(Math.min(9.1, groundedCritic + 0.8).toFixed(1)),
           },
           {
-            criticName: 'ماجدة خير الله',
+            criticName: 'ماجدة خيرت',
             publication: 'بوابة الفن السابع',
             sentiment: 'negative',
             quote: `كان يمكن تطوير خطوط الصراع الفرعية في «${draft.title || 'الفرعون الأخير'}» بشكل أعمق بدلاً من الاعتماد الكامل على كاريزما البطل في النصف الثاني.`,
             score: Number(Math.max(3.8, groundedCritic - 1.5).toFixed(1)),
           },
           {
-            criticName: 'أندرو محسن',
+            criticName: 'نديم محسن',
             publication: 'سينما إنسايدر',
             sentiment: 'mixed',
             quote: `عمل متوازن فنياً وتجارياً؛ التصوير والموسيقى على مستوى متميز، وإن كانت النهاية تفتح باباً لنقاش طويل بين الجمهور.`,
@@ -767,6 +798,52 @@ export function Stage5ReleaseSimulation() {
             exit={{ opacity: 0, y: -16 }}
             className="space-y-4 rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-5 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.15)]"
           >
+            {/* Animated Cinema Premiere / TV Broadcast Screen Graphic */}
+            <AnimatedCinemaPremiereGraphic
+              title={proj.title}
+              isSeries={isSeries}
+              currentStep={currentStep}
+              maxSteps={maxSteps}
+              liveRevenueFormatted={formatMoney(livePlayerRevenue)}
+              rank={livePlayerRank}
+              criticScore={proj.criticScore}
+            />
+
+            {/* Dynamic Simulation Twists & Studio Facilities Impact */}
+            {proj.simulationTwists && proj.simulationTwists.length > 0 && (
+              <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
+                <div className="text-xs font-bold text-slate-900">
+                  تفاعلات السوق والمفاجآت غير المتوقعة لهذا الطرح:
+                </div>
+                {proj.simulationTwists.map((twist) => (
+                  <div
+                    key={twist.id}
+                    className="rounded-xl border border-slate-200 bg-white p-3 text-xs"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-slate-900">{twist.title}</span>
+                      <span
+                        className={`font-semibold tabular-nums ${
+                          twist.impactType === 'positive'
+                            ? 'text-emerald-700'
+                            : twist.impactType === 'negative'
+                            ? 'text-rose-600'
+                            : 'text-amber-700'
+                        }`}
+                      >
+                        {twist.boxOfficeMultiplier >= 1
+                          ? `+${Math.round((twist.boxOfficeMultiplier - 1) * 100)}% شباك التذاكر`
+                          : `${Math.round((twist.boxOfficeMultiplier - 1) * 100)}% شباك التذاكر`}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-slate-600 leading-relaxed">
+                      {twist.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Live Box Office OR Series Episode Broadcast Tracker */}
             <div className="rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 via-indigo-50/60 to-cyan-50/70 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -876,8 +953,8 @@ export function Stage5ReleaseSimulation() {
               {currentStep >= maxSteps && (
                 <div className="mt-3 rounded-2xl bg-emerald-100/90 p-2.5 text-center text-xs font-black text-emerald-900">
                   {isSeries
-                    ? `اكتمل عرض جميع حلقات المسلسل (${maxSteps} حلقة) بنجاح وتم إعلان جوائز المهرجانات!`
-                    : 'اكتمل أسبوعا العرض الأساسيان (10 أيام) واستقرت الإيرادات النهائية وتم إعلان جوائز المهرجانات!'}
+                    ? `اكتمل عرض جميع حلقات المسلسل (${maxSteps} حلقة) بنجاح ودخل العمل رسمياً سباق الحفل السنوي الكبير للجوائز لعام ${proj.year}!`
+                    : `اكتمل أسبوعا العرض الأساسيان (10 أيام) واستقرت الإيرادات النهائية ودخل الفيلم رسمياً سباق الحفل السنوي الكبير للجوائز لعام ${proj.year}!`}
                 </div>
               )}
             </div>
@@ -1203,7 +1280,12 @@ export function Stage5ReleaseSimulation() {
               logo={logo}
             />
 
-            <div className="flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/80 p-3.5 text-xs font-bold text-amber-950">
+              🏆 تم تسجيل «{proj.title}» رسمياً ضمن الأعمال المرشحة لـ{' '}
+              <strong>حفل الجوائز السنوي الكبير لعام {proj.year}</strong>! يمكنك الآن العودة للمقر لإنتاج أفلام أو مسلسلات أخرى في نفس العام لزيادة فرصك في الحفل السنوي.
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setSubStep(2)}
@@ -1216,10 +1298,19 @@ export function Stage5ReleaseSimulation() {
               <button
                 type="button"
                 onClick={() => setActiveScreen('FESTIVALS_AWARDS')}
-                className="flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 border-emerald-900/40 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-6 py-3.5 text-sm font-black text-white shadow-xl shadow-emerald-500/25 transition active:border-b-0 active:translate-y-1"
+                className="flex min-h-[48px] items-center gap-1.5 rounded-2xl border-2 border-amber-300 border-b-4 border-b-amber-400 bg-amber-50 px-3.5 py-2.5 text-xs font-black text-amber-900"
               >
-                <Award className="h-5 w-5" />
-                <span>سجل المهرجانات والجوائز والعودة للمقر!</span>
+                <Award className="h-4 w-4 text-amber-600" />
+                <span>قائمة ترشيحات العام</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => resetDraftForNewProject('STUDIO_HUB')}
+                className="flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 border-emerald-900/40 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-5 py-3.5 text-sm font-black text-white shadow-xl shadow-emerald-500/25 transition active:border-b-0 active:translate-y-1"
+              >
+                <Sparkles className="h-5 w-5" />
+                <span>العودة للاستوديو لإنتاج عمل جديد هذا العام!</span>
               </button>
             </div>
           </motion.div>

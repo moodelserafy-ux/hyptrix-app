@@ -5,6 +5,7 @@ import { motion } from 'motion/react';
 import { ActorItem, CrewItem, GENRES, GenreId } from '@/lib/db-resolver';
 import { getCardTierClass, formatMoney } from '@/lib/game-engine';
 import { TalentOfferRecord } from '@/lib/store';
+import { TalentCharacterPortraitSvg } from './CinematicGraphicsScene';
 import {
   Award,
   CheckCircle2,
@@ -54,12 +55,6 @@ export function EaFcTalentCard({
   const isActor = kind === 'actor';
   const actor = isActor ? (talent as ActorItem) : null;
   const crew = !isActor ? (talent as CrewItem) : null;
-
-  const initials = talent.name
-    .split(' ')
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('');
 
   const daysRemaining = offer ? Math.max(1, offer.responseDueDay - gameDay) : 0;
   const isSigned = Boolean(isSelected || offer?.status === 'accepted');
@@ -126,9 +121,9 @@ export function EaFcTalentCard({
             ) : null}
           </div>
 
-          {/* Avatar + Name + Age */}
+          {/* Illustrated Character Avatar + Name + Age */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-indigo-100 bg-white shadow-inner">
+            <div className="relative flex h-13 w-13 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-indigo-100 bg-white shadow-inner">
               {talent.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -141,9 +136,14 @@ export function EaFcTalentCard({
                   }}
                 />
               ) : (
-                <span className={`font-display text-base font-black ${tier.textColor}`}>
-                  {initials}
-                </span>
+                <TalentCharacterPortraitSvg
+                  name={talent.name}
+                  gender={actor ? actor.gender : 'M'}
+                  role={crew ? crew.role : 'actor'}
+                  tier={actor ? actor.tier : overall >= 90 ? 'S' : overall >= 84 ? 'A' : 'B'}
+                  age={actor ? actor.age : 42}
+                  isRising={Boolean(actor?.isRisingDiscovery || actor?.isAiGenerated)}
+                />
               )}
               {awardCount > 0 && (
                 <div className="absolute -bottom-0.5 -right-0.5 flex items-center gap-0.5 rounded-tl-md bg-amber-500 px-1 text-[9px] font-black text-white tabular-nums">

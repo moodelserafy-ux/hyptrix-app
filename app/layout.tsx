@@ -14,38 +14,39 @@ const readexPro = Readex_Pro({
   variable: '--font-readex',
 });
 
-const appUrl = process.env.APP_URL || 'https://hyptrix.app';
+const appUrl = process.env.APP_URL || 'https://hyptrix.com';
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي',
+    default: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي 3D',
     template: '%s | Hyptrix — Cinema & TV Tycoon',
   },
   description:
-    'Hyptrix هي أقوى لعبة محاكاة وإدارة شركات إنتاج سينمائي وتلفزيوني باللغة العربية. أسس استوديو الإنتاج الخاص بك، اكتب السيناريو، تفاوض مع أكثر من 100 نجم ومخرج، أدر ميزانيات الأفلام والمسلسلات، وتصدر شباك التذاكر والمهرجانات.',
+    'Hyptrix هي لعبة محاكاة وإدارة شركات إنتاج سينمائي وتلفزيوني ثلاثية الأبعاد (3D) باللغة العربية. شيّد بلاتوهات التصوير وطوّر معدات الكاميرات والخدع البصرية، اكتب السيناريو، تفاوض مع أكثر من 160 نجماً ومخرجاً، ونافس في شباك التذاكر والحفل السنوي للجوائز.',
   keywords: [
     'Hyptrix',
+    'hyptrix.com',
     'Cinema & TV Tycoon',
     'لعبة إدارة شركة إنتاج سينمائي',
     'لعبة إنتاج أفلام ومسلسلات',
-    'محاكاة السينما العربية',
+    'محاكاة السينما العربية 3D',
     'لعبة شباك التذاكر',
-    'إدارة استوديو سينمائي',
+    'إدارة استوديو سينمائي ثلاثي الأبعاد',
     'ألعاب محاكاة وإدارة أعمال',
     'Movie Studio Tycoon Arabic',
     'TV Production Tycoon Game',
     'أفضل لعبة إدارة إنتاج فني',
   ],
-  authors: [{ name: 'Hyptrix Interactive Studios' }],
+  authors: [{ name: 'Hyptrix Interactive Studios', url: 'https://hyptrix.com' }],
   creator: 'Hyptrix Interactive Studios',
   publisher: 'Hyptrix Interactive Studios',
-  manifest: '/manifest.json',
+  manifest: '/manifest.webmanifest',
   alternates: {
-    canonical: '/',
+    canonical: 'https://hyptrix.com',
     languages: {
-      'ar-EG': '/',
-      ar: '/',
+      'ar-EG': 'https://hyptrix.com',
+      ar: 'https://hyptrix.com',
     },
   },
   robots: {
@@ -60,19 +61,19 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: 'Hyptrix — Cinema & TV Tycoon | إمبراطورية الإنتاج السينمائي والدرامي',
+    title: 'Hyptrix — Cinema & TV Tycoon | إمبراطورية الإنتاج السينمائي والدرامي 3D',
     description:
-      'ابنِ إمبراطوريتك السينمائية والتلفزيونية في Hyptrix: تطوير السيناريو، التفاوض مع أكثر من 100 نجم ومخرج، إدارة الأزمات، متابعة عرض حلقات المسلسلات وإيرادات شباك التذاكر.',
-    url: appUrl,
+      'ابنِ مدينتك الإنتاجية ثلاثية الأبعاد في Hyptrix: تشييد البلاتوهات وتطوير معدات الكاميرات، كتابة السيناريو، التفاوض مع أكثر من 160 نجماً ومخرجاً، وإدارة شباك التذاكر والمهرجانات.',
+    url: 'https://hyptrix.com',
     siteName: 'Hyptrix — Cinema & TV Tycoon',
     locale: 'ar_EG',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي',
+    title: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي 3D',
     description:
-      'أسس شركة إنتاجك السينمائي والدرامي، تفاوض مع ألمع النجوم والمخرجين، نافس في شباك التذاكر ومواسم المسلسلات، وتصدر ترتيب شركات الإنتاج.',
+      'شيّد استوديو إنتاجك ثلاثي الأبعاد، طوّر الكاميرات والبلاتوهات، تفاوض مع النجوم والمخرجين، وتصدر شباك التذاكر في Hyptrix.',
   },
   category: 'games',
 };
@@ -85,42 +86,35 @@ const jsonLdSchema = {
       name: 'Hyptrix — Cinema & TV Tycoon',
       alternateName: [
         'هايبتريكس: إمبراطورية السينما والدراما',
-        'Hyptrix Movie & TV Studio Tycoon',
+        'Hyptrix Movie & TV Studio Tycoon 3D',
       ],
-      url: appUrl,
+      url: 'https://hyptrix.com',
       inLanguage: 'ar',
       applicationCategory: 'GameApplication',
-      applicationSubCategory: 'Business Simulation & Tycoon Game',
+      applicationSubCategory: '3D Business Simulation & Tycoon Game',
       genre: [
         'Simulation',
         'Business Tycoon',
         'Strategy',
-        'Cinema & TV Studio Management',
+        '3D Cinema & TV Studio Management',
       ],
       operatingSystem: 'Web, Android, iOS, Desktop PWA',
       playMode: 'SinglePlayer',
       description:
-        'Hyptrix هي اللعبة العربية الأولى والأعمق لمحاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني. تتيح للاعب تأسيس استوديو إنتاج فني، اختيار التصنيفات الدرامية، صياغة السيناريو، التفاوض مع أكثر من 100 ممثل ومخرج، إدارة مواقع التصوير، طرح الأفلام في شباك التذاكر أو عرض المسلسلات حلقة بحلقة عبر القنوات والمنصات، والمنافسة على جوائز المهرجانات.',
+        'Hyptrix هي لعبة محاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني ثلاثية الأبعاد باللغة العربية على hyptrix.com. تتيح للاعب بناء مدينة إنتاجية متكاملة (بلاتوهات تصوير، أبراج خدع بصرية، استوديوهات صوت، ومعدات كاميرات IMAX)، كتابة السيناريو، التفاوض مع أكثر من 160 ممثلاً ومخرجاً، طرح الأفلام في شباك التذاكر أو عرض المسلسلات عبر المنصات، والمنافسة في الحفل السنوي للجوائز.',
       featureList: [
-        'تأسيس استوديو إنتاج سينمائي وتلفزيوني وتصميم الهوية والشعار',
-        'نظام تطوير سيناريو متكامل للأفلام السينمائية والمسلسلات الدرامية',
-        'سوق مواهب ضخم يضم أكثر من 100 ممثل وممثلة ووجوه صاعدة جديدة تظهر مع تقدم الزمن',
-        'نظام تفاوض واقعي مع المخرجين والنجوم ومديري التصوير والمؤلفين الموسيقيين',
-        'محاكاة دقيقة لإيرادات شباك التذاكر للأفلام وعرض حلقات المسلسلات حلقة بحلقة',
-        'لوحة متصدرين محلية تنافسية لأغنى وأقوى شركات الإنتاج',
+        'بناء وتطوير مدينة الاستوديو ثلاثية الأبعاد (3D) تشمل البلاتوهات ومعدات الكاميرات والخدع البصرية واستوديو الصوت',
+        'نظام تطوير سيناريو عميق للأفلام السينمائية والمسلسلات الدرامية',
+        'سوق مواهب يضم أكثر من 160 ممثلاً وممثلة ومخرجاً مع نظام تفاوض واقعي',
+        'محرك حسابي احتمالي ديناميكي يحاكي مفاجآت السوق وتقلبات الجمهور والنقاد',
+        'التوزيع العالمي للأعمال في مصر والخليج وأوروبا وهوليوود',
+        'حفل جوائز سنوي كبير يقارن بين جميع أعمال العام بأسلوب عادل',
       ],
       offers: {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'EGP',
         availability: 'https://schema.org/InStock',
-      },
-      aggregateRating: {
-        '@type': 'AggregateRating',
-        ratingValue: '4.9',
-        ratingCount: '2480',
-        bestRating: '5',
-        worstRating: '1',
       },
     },
     {

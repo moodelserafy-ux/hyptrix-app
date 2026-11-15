@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.APP_URL || 'https://hyptrix.app';
+  const baseUrl = process.env.APP_URL || 'https://hyptrix.com';
   return [
     {
       url: baseUrl,
