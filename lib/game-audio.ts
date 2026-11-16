@@ -1,84 +1,200 @@
 'use client';
 
-type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext };
+/**
+ * Pure Web Audio API Synthesizer for Hyptrix Cinema & TV Tycoon
+ * Zero external sound files required.
+ */
 
-let audioContext: AudioContext | null = null;
+let audioCtx: AudioContext | null = null;
+let isAudioMuted = false;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
-  const browserWindow = window as AudioWindow;
-  const AudioContextConstructor = window.AudioContext || browserWindow.webkitAudioContext;
-  if (!AudioContextConstructor) return null;
-  if (!audioContext || audioContext.state === 'closed') {
-    audioContext = new AudioContextConstructor();
+  if (isAudioMuted) return null;
+  if (!audioCtx) {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (AudioContextClass) {
+      audioCtx = new AudioContextClass();
+    }
   }
-  if (audioContext.state === 'suspended') {
-    void audioContext.resume().catch(() => undefined);
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
   }
-  return audioContext;
+  return audioCtx;
 }
 
-function tone(
-  frequency: number,
-  startAt: number,
-  duration: number,
-  volume: number,
-  waveform: OscillatorType = 'sine',
-  endFrequency?: number
-) {
-  const context = getAudioContext();
-  if (!context) return;
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  const start = context.currentTime + startAt;
-  const end = start + duration;
-  oscillator.type = waveform;
-  oscillator.frequency.setValueAtTime(frequency, start);
-  if (endFrequency) oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), end);
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), start + Math.min(0.025, duration * 0.18));
-  gain.gain.exponentialRampToValueAtTime(0.0001, end);
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start(start);
-  oscillator.stop(end + 0.015);
+export function setGameAudioMuted(muted: boolean) {
+  isAudioMuted = muted;
 }
 
-export function playUiClick() {
-  tone(620, 0, 0.055, 0.035, 'sine', 480);
+export function getGameAudioMuted(): boolean {
+  return isAudioMuted;
 }
 
-export function playContractSigned() {
-  tone(523.25, 0, 0.14, 0.055, 'sine');
-  tone(659.25, 0.1, 0.16, 0.05, 'sine');
-  tone(783.99, 0.21, 0.28, 0.06, 'triangle');
+export function toggleGameAudioMuted(): boolean {
+  isAudioMuted = !isAudioMuted;
+  if (!isAudioMuted) {
+    playClickSound();
+  }
+  return isAudioMuted;
 }
 
-export function playCrisisAlert() {
-  tone(420, 0, 0.16, 0.055, 'triangle', 310);
-  tone(330, 0.2, 0.22, 0.06, 'triangle', 240);
-  tone(420, 0.48, 0.14, 0.045, 'sine', 290);
+/**
+ * Crisp tactile UI click sound
+ */
+export function playClickSound() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.exponentialRampToValueAtTime(180, now + 0.045);
+
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.05);
+  } catch {
+    // Ignore audio context restrictions
+  }
 }
 
-export function playAwardFanfare() {
-  tone(523.25, 0, 0.2, 0.055, 'triangle');
-  tone(659.25, 0.14, 0.2, 0.055, 'triangle');
-  tone(783.99, 0.28, 0.24, 0.06, 'triangle');
-  tone(1046.5, 0.46, 0.42, 0.065, 'sine');
+/**
+ * Soft modal / tab switch whoosh-tick
+ */
+export function playTabSwitchSound() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(340, now);
+    osc.frequency.exponentialRampToValueAtTime(680, now + 0.065);
+
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.075);
+  } catch {
+    // Ignore
+  }
 }
 
-export function playGameSound(name: 'click' | 'contract' | 'crisis' | 'award') {
-  switch (name) {
-    case 'contract':
-      playContractSigned();
-      break;
-    case 'crisis':
-      playCrisisAlert();
-      break;
-    case 'award':
-      playAwardFanfare();
-      break;
-    default:
-      playUiClick();
+/**
+ * Rich celebratory chord when signing a contract or submitting an offer
+ */
+export function playContractSignedSound() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      const startTime = now + idx * 0.055;
+      osc.frequency.setValueAtTime(freq, startTime);
+
+      gain.gain.setValueAtTime(0.001, startTime);
+      gain.gain.linearRampToValueAtTime(0.09, startTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.32);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(startTime);
+      osc.stop(startTime + 0.34);
+    });
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Dramatic low alert sound when a production crisis appears
+ */
+export function playCrisisAlertSound() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    [220, 196].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sawtooth';
+      const start = now + idx * 0.14;
+      osc.frequency.setValueAtTime(freq, start);
+      osc.frequency.linearRampToValueAtTime(freq * 0.92, start + 0.12);
+
+      gain.gain.setValueAtTime(0.07, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.13);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start);
+      osc.stop(start + 0.14);
+    });
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Ascending golden fanfare when winning an award or upgrading a studio facility
+ */
+export function playAwardFanfareSound() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const fanfare = [440, 554.37, 659.25, 880, 1108.73]; // A major golden arpeggio
+
+    fanfare.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      const start = now + idx * 0.07;
+      osc.frequency.setValueAtTime(freq, start);
+
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(0.1, start + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.45);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start);
+      osc.stop(start + 0.46);
+    });
+  } catch {
+    // Ignore
   }
 }

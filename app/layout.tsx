@@ -19,20 +19,20 @@ const appUrl = process.env.APP_URL || 'https://hyptrix.com';
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي 3D',
+    default: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي',
     template: '%s | Hyptrix — Cinema & TV Tycoon',
   },
   description:
-    'Hyptrix هي لعبة محاكاة وإدارة شركات إنتاج سينمائي وتلفزيوني ثلاثية الأبعاد (3D) باللغة العربية. شيّد بلاتوهات التصوير وطوّر معدات الكاميرات والخدع البصرية، اكتب السيناريو، تفاوض مع أكثر من 160 نجماً ومخرجاً، ونافس في شباك التذاكر والحفل السنوي للجوائز.',
+    'Hyptrix هي لعبة محاكاة وإدارة شركات إنتاج سينمائي وتلفزيوني باللغة العربية. شيّد بلاتوهات التصوير وطوّر معدات الكاميرات والمؤثرات البصرية، اكتب السيناريو، تفاوض مع أكثر من 160 نجماً ومخرجاً، ونافس في شباك التذاكر والحفل السنوي للجوائز.',
   keywords: [
     'Hyptrix',
     'hyptrix.com',
     'Cinema & TV Tycoon',
     'لعبة إدارة شركة إنتاج سينمائي',
     'لعبة إنتاج أفلام ومسلسلات',
-    'محاكاة السينما العربية 3D',
+    'محاكاة السينما العربية',
     'لعبة شباك التذاكر',
-    'إدارة استوديو سينمائي ثلاثي الأبعاد',
+    'إدارة استوديو سينمائي',
     'ألعاب محاكاة وإدارة أعمال',
     'Movie Studio Tycoon Arabic',
     'TV Production Tycoon Game',
@@ -61,9 +61,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: 'Hyptrix — Cinema & TV Tycoon | إمبراطورية الإنتاج السينمائي والدرامي 3D',
+    title: 'Hyptrix — Cinema & TV Tycoon | إمبراطورية الإنتاج السينمائي والدرامي',
     description:
-      'ابنِ مدينتك الإنتاجية ثلاثية الأبعاد في Hyptrix: تشييد البلاتوهات وتطوير معدات الكاميرات، كتابة السيناريو، التفاوض مع أكثر من 160 نجماً ومخرجاً، وإدارة شباك التذاكر والمهرجانات.',
+      'ابنِ مدينتك الإنتاجية في Hyptrix: تشييد البلاتوهات وتطوير معدات الكاميرات، كتابة السيناريو، التفاوض مع أكثر من 160 نجماً ومخرجاً، وإدارة شباك التذاكر والمهرجانات.',
     url: 'https://hyptrix.com',
     siteName: 'Hyptrix — Cinema & TV Tycoon',
     locale: 'ar_EG',
@@ -71,9 +71,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي 3D',
+    title: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي',
     description:
-      'شيّد استوديو إنتاجك ثلاثي الأبعاد، طوّر الكاميرات والبلاتوهات، تفاوض مع النجوم والمخرجين، وتصدر شباك التذاكر في Hyptrix.',
+      'شيّد استوديو إنتاجك، طوّر الكاميرات والبلاتوهات، تفاوض مع النجوم والمخرجين، وتصدر شباك التذاكر في Hyptrix.',
   },
   category: 'games',
 };
@@ -86,24 +86,24 @@ const jsonLdSchema = {
       name: 'Hyptrix — Cinema & TV Tycoon',
       alternateName: [
         'هايبتريكس: إمبراطورية السينما والدراما',
-        'Hyptrix Movie & TV Studio Tycoon 3D',
+        'Hyptrix Movie & TV Studio Tycoon',
       ],
       url: 'https://hyptrix.com',
       inLanguage: 'ar',
       applicationCategory: 'GameApplication',
-      applicationSubCategory: '3D Business Simulation & Tycoon Game',
+      applicationSubCategory: 'Business Simulation & Tycoon Game',
       genre: [
         'Simulation',
         'Business Tycoon',
         'Strategy',
-        '3D Cinema & TV Studio Management',
+        'Cinema & TV Studio Management',
       ],
       operatingSystem: 'Web, Android, iOS, Desktop PWA',
       playMode: 'SinglePlayer',
       description:
-        'Hyptrix هي لعبة محاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني ثلاثية الأبعاد باللغة العربية على hyptrix.com. تتيح للاعب بناء مدينة إنتاجية متكاملة (بلاتوهات تصوير، أبراج خدع بصرية، استوديوهات صوت، ومعدات كاميرات IMAX)، كتابة السيناريو، التفاوض مع أكثر من 160 ممثلاً ومخرجاً، طرح الأفلام في شباك التذاكر أو عرض المسلسلات عبر المنصات، والمنافسة في الحفل السنوي للجوائز.',
+        'Hyptrix هي لعبة محاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني باللغة العربية على hyptrix.com. تتيح للاعب بناء مدينة إنتاجية متكاملة، كتابة السيناريو، التفاوض مع أكثر من 160 ممثلاً ومخرجاً، طرح الأفلام في شباك التذاكر أو عرض المسلسلات عبر المنصات، والمنافسة في الحفل السنوي للجوائز.',
       featureList: [
-        'بناء وتطوير مدينة الاستوديو ثلاثية الأبعاد (3D) تشمل البلاتوهات ومعدات الكاميرات والخدع البصرية واستوديو الصوت',
+        'بناء وتطوير مدينة الاستوديو تشمل البلاتوهات ومعدات الكاميرات والمؤثرات البصرية واستوديو الصوت',
         'نظام تطوير سيناريو عميق للأفلام السينمائية والمسلسلات الدرامية',
         'سوق مواهب يضم أكثر من 160 ممثلاً وممثلة ومخرجاً مع نظام تفاوض واقعي',
         'محرك حسابي احتمالي ديناميكي يحاكي مفاجآت السوق وتقلبات الجمهور والنقاد',
@@ -125,7 +125,7 @@ const jsonLdSchema = {
           name: 'ما هي أفضل لعبة إدارة شركات إنتاج سينمائي وتلفزيوني باللغة العربية؟',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'تُعد لعبة Hyptrix — Cinema & TV Tycoon الخيار الأول والأعمق لمحاكاة إدارة استوديوهات السينما والتلفزيون باللغة العربية، حيث تجمع بين كتابة السيناريو، التفاوض الواقعي مع أكثر من 100 نجم ومخرج، إدارة ميزانيات التصوير والدعاية، ومحاكاة إيرادات شباك التذاكر وعرض المسلسلات حلقة بحلقة.',
+            text: 'تُعد لعبة Hyptrix — Cinema & TV Tycoon الخيار الأول والأعمق لمحاكاة إدارة استوديوهات السينما والتلفزيون باللغة العربية، حيث تجمع بين كتابة السيناريو، التفاوض الواقعي مع أكثر من 160 نجم ومخرج، إدارة ميزانيات التصوير والدعاية، ومحاكاة إيرادات شباك التذاكر وعرض المسلسلات حلقة بحلقة.',
           },
         },
         {
@@ -143,7 +143,7 @@ const jsonLdSchema = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl" className={`${alexandria.variable} ${readexPro.variable}`}>
+    <html lang="ar" dir="rtl" className={`dark ${alexandria.variable} ${readexPro.variable}`}>
       <head>
         <script
           type="application/ld+json"
@@ -152,12 +152,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body
         suppressHydrationWarning
-        className="h-dvh w-screen overflow-hidden bg-[#0A0A0C] text-slate-100 antialiased selection:bg-amber-500 selection:text-black"
+        className="h-dvh w-screen overflow-hidden select-none bg-[#0A0A0C] text-slate-100 antialiased selection:bg-[#D4AF37] selection:text-[#0A0A0C]"
         style={{
           fontFamily: 'var(--font-readex), system-ui, -apple-system, sans-serif',
         }}
       >
-        {children}
+        <div className="relative h-dvh w-screen overflow-hidden select-none bg-gradient-to-b from-[#0A0A0C] to-[#16161D]">
+          {children}
+        </div>
       </body>
     </html>
   );

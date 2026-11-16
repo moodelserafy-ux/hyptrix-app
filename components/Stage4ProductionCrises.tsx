@@ -1,1153 +1,847 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useMemo, useState } from 'react';
 import {
   useGameStore,
   CrisisEventItem,
-  DailyAiNewsItem,
-  formatGameDate,
+  ReleasedProjectRecord,
   getLiveActorsWithEvolution,
 } from '@/lib/store';
-import { getResolvedDatabase, GENRES } from '@/lib/db-resolver';
 import {
-  evaluateCastChemistry,
   formatMoney,
   MARKET_CONFIGS,
-  MarketRegion,
+  FilmReleaseSeason,
+  SeriesSeason,
+  calculateFinancialsAndQuality,
+  generateRivalReleases,
+  DEFAULT_FACILITIES_LEVELS,
 } from '@/lib/game-engine';
+import { getResolvedDatabase } from '@/lib/db-resolver';
 import { AnimatedFilmingSetGraphic } from './CinematicGraphicsScene';
-import { playCrisisAlert } from '@/lib/game-audio';
 import {
-  Camera,
-  Sliders,
-  AlertTriangle,
+  Coins,
   Megaphone,
-  Tv2,
-  CheckCircle2,
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  Lock,
+  Globe2,
   Calendar,
+  Clapperboard,
+  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  Sparkles,
   Tv,
-  Handshake,
-  Radio,
-  Globe,
+  ShieldAlert,
 } from 'lucide-react';
+import {
+  playClickSound,
+  playTabSwitchSound,
+  playCrisisAlertSound,
+  playContractSignedSound,
+} from '@/lib/game-audio';
 
-export function Stage4ProductionCrises() {
+const DEFAULT_CRISES: CrisisEventItem[] = [
+  {
+    id: 'crisis_set_weather',
+    title: 'عاصفة مفاجئة تهدد ديكورات التصوير الخارجي',
+    description:
+      'ضربت رياح شديدة موقع التصوير الخارجي الرئيسي قبل تصوير مشهد الذروة، والطاقم ينتظر قرارك الإداري الفوري.',
+    optionA: {
+      label: 'نقل المشهد لأحدث بلاتوه مغلق وتأمين المعدات (4M)',
+      cost: 4_000_000,
+      hypeDelta: 5,
+      qualityDelta: 6,
+    },
+    optionB: {
+      label: 'اختصار المشهد والتصوير بالكاميرات المحمولة فوراً (مجاناً)',
+      cost: 0,
+      hypeDelta: -2,
+      qualityDelta: -4,
+    },
+  },
+  {
+    id: 'crisis_star_stunt',
+    title: 'مطالبة بطل العمل بمشهد أكشن حقيقي خطير',
+    description:
+      'أصر نجم الشباك على أداء مشهد المطاردة بنفسه بدون دوبلير لزيادة مصداقية العمل أمام الجمهور.',
+    optionA: {
+      label: 'استقدام فريق تأمين وخدع عالمي لتنفيذ اللقطة (5M)',
+      cost: 5_000_000,
+      hypeDelta: 10,
+      qualityDelta: 7,
+    },
+    optionB: {
+      label: 'الاعتماد على دوبلير محترف ومونتاج سريع (1M)',
+      cost: 1_000_000,
+      hypeDelta: 2,
+      qualityDelta: 1,
+    },
+  },
+];
+
+export default function Stage4ProductionCrises() {
   const {
     draft,
     cash,
-    marketValue,
-    unlockedRegions,
-    gameDay,
     currentYear,
-    customDbPatch,
+    gameDay,
+    founderPerk,
+    currentRegion,
+    unlockedRegions,
+    facilitiesLevels,
+    releasedProjects,
     aiGeneratedActors,
     actorDynamicState,
-    groqApiKeyClient,
-    preferredGroqModel,
+    emergingCompetitors,
+    customDbPatch,
     updateDraft,
     toggleDraftDistributionMarket,
-    unlockMarketRegionWithCash,
-    advanceGameDay,
     resolveCrisisOption,
-    pushBreakingNewsModal,
+    applyEmergencyGulfBailout,
+    completeProjectRelease,
     setActiveScreen,
   } = useGameStore();
 
-  const db = getResolvedDatabase(customDbPatch);
-  const [subStep, setSubStep] = useState<1 | 2>(
-    draft.filmingStartDay !== null ? 2 : 1
+  const [phase, setPhase] = useState<'budget' | 'filming'>('budget');
+  const [budgetTab, setBudgetTab] = useState<'alloc' | 'markets' | 'schedule'>(
+    'alloc'
   );
-  const [maxUnlocked, setMaxUnlocked] = useState<1 | 2>(
-    draft.filmingStartDay !== null ? 2 : 1
-  );
-  const [startOffsetDays, setStartOffsetDays] = useState<1 | 3 | 7>(1);
-  const [loadingEvent, setLoadingEvent] = useState(false);
-  const [selectedTvChannelId, setSelectedTvChannelId] = useState<string>('tv_1');
-  const [negotiatedBroadcastBonus, setNegotiatedBroadcastBonus] =
-    useState<boolean>(false);
-  const [broadcastNegMessage, setBroadcastNegMessage] = useState<string | null>(
-    null
-  );
-  const [marketStatusMsg, setMarketStatusMsg] = useState<string | null>(null);
-  const prevElapsedRef = useRef<number>(draft.filmingDaysElapsed);
+  const [crisisIndex, setCrisisIndex] = useState(0);
 
-  const liveActors = getLiveActorsWithEvolution({
-    baseActors: db.actors,
-    aiGeneratedActors,
-    actorDynamicState,
-    currentYear,
-    gameDay,
-  });
-  const selectedLeads = liveActors.filter((a) =>
-    draft.leadActorIds.includes(a.id)
+  const db = useMemo(
+    () => getResolvedDatabase(customDbPatch),
+    [customDbPatch]
   );
-  const selectedAntagonist = liveActors.find(
-    (a) => a.id === draft.antagonistId
+
+  const liveActors = useMemo(
+    () =>
+      getLiveActorsWithEvolution({
+        baseActors: db.actors,
+        aiGeneratedActors,
+        actorDynamicState,
+        currentYear,
+        gameDay,
+      }),
+    [db.actors, aiGeneratedActors, actorDynamicState, currentYear, gameDay]
   );
-  const selectedDirector = db.crew.find((c) => c.id === draft.directorId);
 
-  const chemistry = evaluateCastChemistry([
-    ...selectedLeads,
-    ...(selectedAntagonist ? [selectedAntagonist] : []),
-  ]);
+  const directorObj = useMemo(
+    () =>
+      db.crew.find((c) => c.id === draft.directorId) ||
+      db.crew.find((c) => c.role === 'director')!,
+    [db.crew, draft.directorId]
+  );
 
-  const totalProdBudget =
+  const leadActorObjs = useMemo(
+    () => liveActors.filter((a) => draft.leadActorIds.includes(a.id)),
+    [liveActors, draft.leadActorIds]
+  );
+
+  const prodSpendTotal =
     draft.budgetAllocation.setsAndLocations +
     draft.budgetAllocation.costumesAndMakeup +
     draft.budgetAllocation.vfxAndStunts +
     draft.budgetAllocation.extrasAndCrowds;
 
-  const isSeries = draft.format === 'series';
-
-  const activeDistMarkets: MarketRegion[] =
-    Array.isArray(draft.selectedDistributionMarkets) &&
-    draft.selectedDistributionMarkets.length > 0
-      ? draft.selectedDistributionMarkets
-      : ['egypt'];
-
-  const totalDistributionFee = activeDistMarkets.reduce(
-    (sum, mId) =>
-      sum +
-      (MARKET_CONFIGS.find((c) => c.id === mId)?.distributionFeePerProject ||
-        0),
-    0
-  );
-
-  const digitalPlatforms = db.streaming_platforms.filter(
-    (p) => p.platform_type === 'digital_platform' || p.id.startsWith('plat_')
-  );
-  const tvChannels = db.streaming_platforms.filter(
-    (p) => p.platform_type === 'tv_channel' || p.id.startsWith('tv_')
-  );
-
-  const chosenDigitalPlat =
-    digitalPlatforms.find((p) => p.id === draft.selectedPlatformId) ||
-    digitalPlatforms[0];
-  const chosenTvChannel =
-    tvChannels.find((p) => p.id === selectedTvChannelId) || tvChannels[0];
-
-  const computeCombinedDealAmount = (
-    digId: string,
-    tvId: string,
-    hasBonus: boolean
-  ) => {
-    const dig =
-      digitalPlatforms.find((p) => p.id === digId) || digitalPlatforms[0];
-    const tv = tvChannels.find((p) => p.id === tvId) || tvChannels[0];
-    const digOffer = Math.round(
-      ((dig?.budget_capacity || 80) / 100) * (isSeries ? 26_000_000 : 28_000_000)
-    );
-    const tvOffer = isSeries
-      ? Math.round(((tv?.budget_capacity || 85) / 100) * 22_000_000)
-      : 0;
-    const raw = digOffer + tvOffer;
-    return hasBonus ? Math.round(raw * 1.15) : raw;
-  };
-
-  const handleSelectDigitalPlatform = (platId: string) => {
-    const totalDeal = computeCombinedDealAmount(
-      platId,
-      selectedTvChannelId,
-      negotiatedBroadcastBonus
-    );
-    updateDraft({
-      selectedPlatformId: platId,
-      platformDealAmount: totalDeal,
+  const totalCastSalaries = useMemo(() => {
+    let sum = directorObj ? directorObj.base_salary : 0;
+    leadActorObjs.forEach((a) => {
+      sum += a.base_salary;
     });
+    return sum;
+  }, [directorObj, leadActorObjs]);
+
+  const totalEstimatedCost =
+    prodSpendTotal + draft.marketingBudget + totalCastSalaries;
+
+  const activeCrisesList =
+    draft.crises.length > 0 ? draft.crises : DEFAULT_CRISES;
+  const currentCrisis = activeCrisesList[crisisIndex] || null;
+  const isFilmingDone = crisisIndex >= activeCrisesList.length;
+
+  const handleStartFilming = () => {
+    playCrisisAlertSound();
+    if (draft.crises.length === 0) {
+      updateDraft({ crises: DEFAULT_CRISES });
+    }
+    setCrisisIndex(0);
+    setPhase('filming');
   };
 
-  const handleSelectTvChannel = (tvId: string) => {
-    setSelectedTvChannelId(tvId);
-    const totalDeal = computeCombinedDealAmount(
-      draft.selectedPlatformId || digitalPlatforms[0]?.id || 'plat_1',
-      tvId,
-      negotiatedBroadcastBonus
+  const handleResolveChoice = (choice: 'A' | 'B' | 'VIP') => {
+    if (!currentCrisis) return;
+    playContractSignedSound();
+    if (choice === 'VIP') {
+      applyEmergencyGulfBailout(currentCrisis.id);
+    } else {
+      resolveCrisisOption(currentCrisis.id, choice);
+    }
+    setCrisisIndex((prev) => prev + 1);
+  };
+
+  const handleCompleteAndRelease = () => {
+    playContractSignedSound();
+
+    const writers = db.crew.filter((c) => draft.writerIds.includes(c.id));
+    const dop = db.crew.find((c) => c.id === draft.dopId) || null;
+    const composer = db.crew.find((c) => c.id === draft.composerId) || null;
+    const vfx = db.crew.find((c) => c.id === draft.vfxId) || null;
+    const antagonist =
+      liveActors.find((a) => a.id === draft.antagonistId) || null;
+    const supporting = liveActors.filter((a) =>
+      draft.supportingActorIds.includes(a.id)
     );
-    updateDraft({
-      platformDealAmount: totalDeal,
+    const cameos = liveActors.filter((a) =>
+      draft.cameoActorIds.includes(a.id)
+    );
+
+    const scriptWords = draft.scriptSynopsis.trim().split(/\s+/).length;
+    const prevGenres = releasedProjects.map((p) => p.primaryGenre);
+
+    const sim = calculateFinancialsAndQuality({
+      format: draft.format,
+      episodes: draft.episodes,
+      seriesSeason: draft.seriesSeason,
+      filmSeason: draft.filmSeason,
+      primaryGenre: draft.primaryGenre,
+      secondaryGenre: draft.secondaryGenre,
+      ageRating: draft.ageRating,
+      director: directorObj,
+      writers,
+      dop,
+      composer,
+      vfx,
+      leads: leadActorObjs,
+      antagonist,
+      supporting,
+      cameos,
+      budgetAllocation: draft.budgetAllocation,
+      marketingBudget: draft.marketingBudget,
+      screensCount: draft.screensCount,
+      platformDealAmount: draft.platformDealAmount,
+      founderPerk,
+      hypeScore: draft.hypeScore,
+      aiBoxOfficeMultiplier: 1.0,
+      marketRegion: currentRegion,
+      selectedDistributionMarkets: draft.selectedDistributionMarkets,
+      scriptWordCount: scriptWords,
+      facilitiesLevels: facilitiesLevels || DEFAULT_FACILITIES_LEVELS,
+      previousGenres: prevGenres,
+      entropySeed: gameDay + currentYear,
     });
-  };
 
-  const handleNegotiateBroadcastBoost = () => {
-    if (negotiatedBroadcastBonus) return;
-    setNegotiatedBroadcastBonus(true);
-    const totalDeal = computeCombinedDealAmount(
-      draft.selectedPlatformId || digitalPlatforms[0]?.id || 'plat_1',
-      selectedTvChannelId,
-      true
+    const rawCritic = Math.min(
+      9.6,
+      Math.max(
+        4.5,
+        Number(
+          (
+            sim.technicalQuality / 10 +
+            draft.qualityModifier * 0.08 +
+            sim.criticDeltaFromTwists
+          ).toFixed(1)
+        )
+      )
     );
-    updateDraft({
-      platformDealAmount: totalDeal,
-    });
-    setBroadcastNegMessage(
-      isSeries
-        ? `نجح التفاوض مع إدارة «${chosenDigitalPlat?.name}» وقناة «${chosenTvChannel?.name}» لرفع قيمة عقد العرض المشترك بنسبة +15% ليصل إلى ${formatMoney(totalDeal)} ج.م!`
-        : `نجح التفاوض مع منصة «${chosenDigitalPlat?.name}» لرفع قيمة العرض الرقمي الحصري بنسبة +15% ليصل إلى ${formatMoney(totalDeal)} ج.م!`
+    const rawAudience = Math.min(
+      9.7,
+      Math.max(
+        4.8,
+        Number(
+          (
+            (sim.starPower * 0.45 + sim.technicalQuality * 0.55) / 10 +
+            sim.audienceDeltaFromTwists
+          ).toFixed(1)
+        )
+      )
     );
-  };
 
-  const calculatedDurationDays = isSeries
-    ? draft.episodes === 30
-      ? 10
-      : 8
-    : draft.budgetAllocation.vfxAndStunts >= 15_000_000
-    ? 8
-    : 6;
-
-  const previewStartDay = draft.filmingStartDay ?? gameDay + startOffsetDays;
-  const previewReleaseDay =
-    draft.scheduledReleaseDay ?? previewStartDay + calculatedDurationDays;
-
-  const triggerLiveProductionEvents = async (
-    elapsedDays: number,
-    currentDay: number,
-    forceMilestoneNews = false
-  ) => {
-    if (loadingEvent) return;
-    setLoadingEvent(true);
-    try {
-      if (draft.crises.length === 0 && elapsedDays >= 2) {
-        const res = await fetch('/api/generate-event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'mid_production_crises',
-            groqKeyOverride: groqApiKeyClient,
-            preferredModel: preferredGroqModel,
-            payload: {
-              title: draft.title || 'الفرعون الأخير',
-              synopsis: draft.scriptSynopsis,
-              leadName: selectedLeads[0]?.name || 'بطل العمل',
-              antagonistName: selectedAntagonist?.name || 'الخصم الدرامي',
-              ageRating: draft.ageRating,
-              hasEgoClash: chemistry.hasSevereClash,
-              format: draft.format,
-            },
-          }),
-        });
-        const data = await res.json();
-        if (Array.isArray(data.crises)) {
-          updateDraft({ crises: data.crises as CrisisEventItem[] });
-        }
-      }
-
-      const isMilestoneDay =
-        forceMilestoneNews ||
-        elapsedDays === 2 ||
-        elapsedDays === 5 ||
-        elapsedDays >= calculatedDurationDays;
-
-      const alreadyHasNewsForDay = (draft.productionNews || []).some(
-        (n) => n.day === currentDay
-      );
-
-      if (
-        isMilestoneDay &&
-        !alreadyHasNewsForDay &&
-        (draft.productionNews || []).length < 3
-      ) {
-        const genreAr =
-          GENRES.find((g) => g.id === draft.primaryGenre)?.name ||
-          draft.primaryGenre;
-        const newsRes = await fetch('/api/generate-event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'generate_daily_news',
-            groqKeyOverride: groqApiKeyClient,
-            preferredModel: preferredGroqModel,
-            payload: {
-              phase: 'filming',
-              gameDay: currentDay,
-              day: elapsedDays,
-              projectTitle: draft.title || 'الفرعون الأخير',
-              title: draft.title || 'الفرعون الأخير',
-              synopsis: draft.scriptSynopsis,
-              leadName: selectedLeads[0]?.name || 'نجم العمل',
-              directorName: selectedDirector?.name || 'مخرج العمل',
-              primaryGenre: genreAr,
-              currentHype: draft.hypeScore,
-              format: draft.format,
-            },
-          }),
-        });
-        const newsData = await newsRes.json();
-        if (newsData.headline) {
-          const item: DailyAiNewsItem = {
-            id: `news_${currentDay}_${(draft.productionNews || []).length}`,
-            day: currentDay,
-            headline: newsData.headline,
-            detail: newsData.detail || '',
-            impactType: newsData.impact_type || 'positive',
-            hypeDelta: Number(newsData.hype_delta || 3),
-            source: newsData.source,
-          };
-          updateDraft({
-            hypeScore: Math.max(
-              15,
-              Math.min(100, draft.hypeScore + item.hypeDelta)
-            ),
-            productionNews: [item, ...(draft.productionNews || []).slice(0, 2)],
-          });
-          // Pop up sudden single-story breaking news on the main screen!
-          pushBreakingNewsModal({
-            id: item.id,
-            day: currentDay,
-            year: currentYear,
-            category: 'production_news',
-            badgeLabel: 'خبر عاجل من كواليس التصوير 🎬',
-            headline: item.headline,
-            detail: item.detail,
-            highlightName: draft.title || 'الفرعون الأخير',
-            extraStatBadge:
-              item.hypeDelta >= 0
-                ? `+${item.hypeDelta}% حماس الجمهور`
-                : `${item.hypeDelta}% ترقب`,
-          });
-        }
-      }
-    } catch {
-      // Fallback handled smoothly
-    } finally {
-      setLoadingEvent(false);
-    }
-  };
-
-  // React automatically when the active-session game clock advances filmingDaysElapsed
-  useEffect(() => {
-    if (
-      subStep === 2 &&
-      draft.filmingDaysElapsed > prevElapsedRef.current &&
-      !loadingEvent
-    ) {
-      prevElapsedRef.current = draft.filmingDaysElapsed;
-      const timer = setTimeout(() => {
-        void triggerLiveProductionEvents(
-          draft.filmingDaysElapsed,
-          gameDay,
-          false
-        );
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subStep, draft.filmingDaysElapsed, gameDay]);
-
-  const handleLockPreProductionAndStartFilming = () => {
-    const startDay = gameDay + startOffsetDays;
-    const releaseDay = startDay + calculatedDurationDays;
-    const totalDeal = computeCombinedDealAmount(
-      draft.selectedPlatformId || digitalPlatforms[0]?.id || 'plat_1',
-      selectedTvChannelId,
-      negotiatedBroadcastBonus
+    const rivalReleases = generateRivalReleases(
+      [...db.competitor_studios, ...emergingCompetitors],
+      liveActors,
+      draft.leadActorIds,
+      1.0,
+      gameDay + currentYear,
+      draft.format
     );
-    updateDraft({
-      filmingStartDay: startDay,
-      filmingDurationDays: calculatedDurationDays,
-      scheduledReleaseDay: releaseDay,
-      platformDealAmount: totalDeal,
-    });
-    if (startOffsetDays > 0 && gameDay < startDay) {
-      advanceGameDay(startOffsetDays);
-    }
-    setMaxUnlocked(2);
-    setSubStep(2);
+
+    const higherRivalsCount = rivalReleases.filter(
+      (r) => r.status !== 'delayed' && r.boxOfficeRevenue > sim.totalGrossRevenue
+    ).length;
+
+    const totalCostWithDist = totalEstimatedCost + sim.distributionFeesTotal;
+    const netProfit = sim.totalGrossRevenue - totalCostWithDist;
+
+    const newRecord: ReleasedProjectRecord = {
+      id: `proj_${Date.now()}`,
+      title: draft.title || 'الفرعون الأخير',
+      year: currentYear,
+      format: draft.format,
+      episodes: draft.episodes,
+      seasonName:
+        draft.format === 'series'
+          ? draft.seriesSeason === 'ramadan'
+            ? 'موسم رمضان'
+            : ' خارج الموسم'
+          : draft.filmSeason === 'eid_adha'
+          ? 'موسم عيد الأضحى'
+          : draft.filmSeason === 'eid_fitr'
+          ? 'موسم عيد الفطر'
+          : 'موسم الصيف',
+      primaryGenre: draft.primaryGenre,
+      secondaryGenre: draft.secondaryGenre,
+      ageRating: draft.ageRating,
+      synopsis: draft.scriptSynopsis,
+      directorId: directorObj.id,
+      directorName: directorObj.name,
+      leadNames: leadActorObjs.map((a) => a.name),
+      antagonistName: antagonist?.name,
+      cameoNames: cameos.map((a) => a.name),
+      actorIdsInCast: [
+        ...draft.leadActorIds,
+        ...(draft.antagonistId ? [draft.antagonistId] : []),
+        ...draft.supportingActorIds,
+      ],
+      castCustomRoles: draft.castCustomRoles,
+      totalBudget: totalCostWithDist,
+      distributionFeesTotal: sim.distributionFeesTotal,
+      selectedDistributionMarkets: draft.selectedDistributionMarkets,
+      marketRevenueBreakdown: sim.marketRevenueBreakdown,
+      firstWeekRevenue: sim.firstWeekRevenue,
+      boxOfficeRevenue: sim.totalBoxOfficeRevenue,
+      streamingRevenue: sim.totalStreamingRevenue,
+      totalGrossRevenue: sim.totalGrossRevenue,
+      netProfit,
+      criticScore: rawCritic,
+      audienceScore: rawAudience,
+      boxOfficeRank: 1 + higherRivalsCount,
+      reviews: [
+        {
+          criticName: 'طارق الشناوي الفني',
+          publication: 'مجلة الشاشة الذهبية',
+          sentiment: rawCritic >= 7.5 ? 'positive' : 'mixed',
+          quote:
+            rawCritic >= 7.5
+              ? `عمل متكامل يجمع بين رؤية ${directorObj.name} وحضور أبطاله اللافت.`
+              : `إنتاج ضخم بصرياً مع بعض الملاحظات على إيقاع السيناريو.`,
+          score: rawCritic,
+        },
+        {
+          criticName: 'ماجدة خير الله النقدية',
+          publication: 'بوابة السينما العربية',
+          sentiment: rawAudience >= 7.5 ? 'positive' : 'mixed',
+          quote: `حقق العمل صدى جماهيرياً قوياً في صالات العرض والمنصات الرقمية.`,
+          score: rawAudience,
+        },
+      ],
+      socialPosts: [],
+      viralTrendLabel:
+        netProfit > 20_000_000
+          ? 'تصدر شباك التذاكر والتريند الأول'
+          : 'نقاشات فنية واسعة على المنصات',
+      rivalReleases,
+      awardsWon: [],
+      releaseDayStart: gameDay,
+      daysTracked: 3,
+      simulationTwists: sim.simulationTwists,
+    };
+
+    completeProjectRelease(newRecord);
+    setActiveScreen('RELEASE_SIMULATION');
   };
 
-  const firstUnresolvedIdx = draft.crises.findIndex((c) => !c.resolved);
-  const activeCrisis =
-    firstUnresolvedIdx !== -1 ? draft.crises[firstUnresolvedIdx] : null;
-  const lastAlertedCrisisRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const crisisId = activeCrisis?.id || null;
-    if (crisisId && crisisId !== lastAlertedCrisisRef.current) {
-      playCrisisAlert();
-    }
-    lastAlertedCrisisRef.current = crisisId;
-  }, [activeCrisis?.id]);
-
-  const filmingProgressPct = Math.min(
-    100,
-    Math.round(
-      (draft.filmingDaysElapsed / Math.max(1, draft.filmingDurationDays)) * 100
-    )
-  );
-  const isFilmingComplete =
-    draft.filmingDaysElapsed >= draft.filmingDurationDays;
-
-  const steps = [
-    { id: 1 as const, label: '1. الميزانيات والأسواق والمنصات' },
-    { id: 2 as const, label: '2. موقع التصوير وإدارة الأزمات' },
-  ];
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-4 py-1">
-      {/* Locked Step Header */}
-      <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/80 bg-white p-4 shadow-[0_12px_30px_-10px_rgba(99,102,241,0.14)]">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-black text-violet-700">
-              المرحلة 3 من 4 · الإنتاج والتوزيع والتصوير ({subStep}/2)
-            </div>
-            <h2 className="font-display mt-0.5 text-lg font-black text-slate-900">
-              إنتاج{' '}
-              {isSeries
-                ? `مسلسل «${draft.title || 'الفرعون الأخير'}» (${draft.episodes} حلقة)`
-                : `فيلم «${draft.title || 'الفرعون الأخير'}»`}
-            </h2>
+  // =========================================================================
+  // PHASE 1: COMPACT BUDGET, MARKETING & DISTRIBUTION SUB-TABS (NO SCROLL)
+  // =========================================================================
+  if (phase === 'budget') {
+    return (
+      <div className="space-y-2.5">
+        {/* Sub-Tabs Navigation + Total Cost Summary */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800/90 bg-slate-900/75 px-2.5 py-1.5">
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+            {[
+              { id: 'alloc', label: '1. الميزانية والتسويق', icon: Coins },
+              { id: 'markets', label: '2. الأسواق والمنصات', icon: Globe2 },
+              { id: 'schedule', label: '3. الموسم والقاعات', icon: Calendar },
+            ].map((t) => {
+              const Icon = t.icon;
+              const active = budgetTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    playTabSwitchSound();
+                    setBudgetTab(t.id as 'alloc' | 'markets' | 'schedule');
+                  }}
+                  className={`flex min-h-[28px] items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all shrink-0 ${
+                    active
+                      ? 'bg-amber-500 text-slate-950 font-black'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Icon className="h-3 w-3" />
+                  <span>{t.label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="rounded-2xl border border-indigo-100 bg-[#F4F7FF] px-3 py-1.5 text-left tabular-nums">
-            <div className="text-[10px] font-bold text-slate-500">
-              ترقب الجمهور
-            </div>
-            <div className="font-display text-sm font-black text-violet-700">
-              {draft.hypeScore}%
-            </div>
+          <div className="flex items-center gap-2 text-[10px]">
+            <span className="text-slate-400">إجمالي التكلفة:</span>
+            <span
+              className={`font-mono font-black ${
+                totalEstimatedCost > cash ? 'text-rose-400' : 'text-emerald-300'
+              }`}
+            >
+              {formatMoney(totalEstimatedCost)}
+            </span>
           </div>
         </div>
 
-        <div className="mt-3.5 grid grid-cols-2 gap-2">
-          {steps.map((s) => {
-            const active = subStep === s.id;
-            const unlocked = s.id <= maxUnlocked;
-            const done = s.id < subStep;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                disabled={!unlocked}
-                onClick={() => unlocked && setSubStep(s.id)}
-                className={`flex items-center justify-center gap-1.5 rounded-2xl border-2 py-2.5 px-2 text-xs font-black transition-all ${
-                  active
-                    ? 'border-violet-600 border-b-4 border-b-violet-800 bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-sm'
-                    : done
-                    ? 'border-emerald-200 border-b-4 border-b-emerald-300 bg-emerald-50 text-emerald-700'
-                    : unlocked
-                    ? 'border-indigo-100 bg-indigo-50/50 text-indigo-700'
-                    : 'cursor-not-allowed border-slate-100 bg-slate-100/70 text-slate-400 opacity-75'
-                }`}
-              >
-                {done ? (
-                  <Check className="h-3.5 w-3.5 shrink-0 stroke-[3]" />
-                ) : !unlocked ? (
-                  <Lock className="h-3 w-3 shrink-0" />
-                ) : null}
-                <span className="truncate">{s.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Step Content */}
-      <AnimatePresence mode="wait">
-        {subStep === 1 && (
-          <motion.div
-            key="prod-s1-all-budgets"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            className="space-y-5 rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-5 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.15)] sm:p-6"
-          >
-            {/* Section A: Production Budgets */}
-            <div>
+        {/* SUB-TAB 1: PRODUCTION BUDGET & MARKETING */}
+        {budgetTab === 'alloc' && (
+          <div className="grid grid-cols-12 gap-2.5">
+            {/* Production Budget Presets */}
+            <div className="col-span-12 md:col-span-6 rounded-xl border border-slate-800/90 bg-slate-900/75 p-2.5 space-y-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sliders className="h-5 w-5 text-violet-600" />
-                  <h3 className="font-display text-base font-black text-slate-900">
-                    أولاً: ميزانيات الإنتاج الفنية
-                  </h3>
-                </div>
-                <span className="font-display text-sm font-black text-emerald-700 tabular-nums">
-                  {formatMoney(totalProdBudget)} ج.م
+                <span className="text-xs font-black text-white">
+                  ميزانية الديكور والخدع البصرية
+                </span>
+                <span className="font-mono text-xs font-black text-amber-300">
+                  {formatMoney(prodSpendTotal)}
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {(
-                  [
-                    {
-                      key: 'setsAndLocations',
-                      label: 'الديكورات ومواقع التصوير',
-                      max: 25_000_000,
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  {
+                    label: 'إنتاج اقتصادي (14M)',
+                    alloc: {
+                      setsAndLocations: 5_000_000,
+                      costumesAndMakeup: 2_000_000,
+                      vfxAndStunts: 5_000_000,
+                      extrasAndCrowds: 2_000_000,
                     },
-                    {
-                      key: 'costumesAndMakeup',
-                      label: 'الأزياء والمكياج السينمائي',
-                      max: 15_000_000,
+                  },
+                  {
+                    label: 'إنتاج قياسي (25M)',
+                    alloc: {
+                      setsAndLocations: 8_000_000,
+                      costumesAndMakeup: 4_000_000,
+                      vfxAndStunts: 10_000_000,
+                      extrasAndCrowds: 3_000_000,
                     },
-                    {
-                      key: 'vfxAndStunts',
-                      label: 'الخدع البصرية ومشاهد الحركة',
-                      max: 30_000_000,
+                  },
+                  {
+                    label: 'إنتاج ضخم (40M)',
+                    alloc: {
+                      setsAndLocations: 13_000_000,
+                      costumesAndMakeup: 6_000_000,
+                      vfxAndStunts: 16_000_000,
+                      extrasAndCrowds: 5_000_000,
                     },
-                    {
-                      key: 'extrasAndCrowds',
-                      label: 'المجاميع الضخمة والكومبارس',
-                      max: 15_000_000,
+                  },
+                  {
+                    label: 'ملحمي عالمي (60M)',
+                    alloc: {
+                      setsAndLocations: 20_000_000,
+                      costumesAndMakeup: 8_000_000,
+                      vfxAndStunts: 24_000_000,
+                      extrasAndCrowds: 8_000_000,
                     },
-                  ] as const
-                ).map((item) => {
-                  const val = draft.budgetAllocation[item.key];
+                  },
+                ].map((preset) => {
+                  const sum =
+                    preset.alloc.setsAndLocations +
+                    preset.alloc.costumesAndMakeup +
+                    preset.alloc.vfxAndStunts +
+                    preset.alloc.extrasAndCrowds;
+                  const active = prodSpendTotal === sum;
                   return (
-                    <div
-                      key={item.key}
-                      className="rounded-2xl border-2 border-indigo-100 bg-[#F8FAFF] p-3"
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        updateDraft({ budgetAllocation: preset.alloc });
+                      }}
+                      className={`rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all ${
+                        active
+                          ? 'border-amber-400 bg-amber-500/20 text-amber-300 font-black'
+                          : 'border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700'
+                      }`}
                     >
-                      <div className="flex items-center justify-between text-xs font-black">
-                        <span className="text-slate-800">{item.label}</span>
-                        <span className="text-violet-700 tabular-nums">
-                          {formatMoney(val)} ج.م
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Marketing Campaign Budget */}
+            <div className="col-span-12 md:col-span-6 rounded-xl border border-slate-800/90 bg-slate-900/75 p-2.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1 text-xs font-black text-white">
+                  <Megaphone className="h-3.5 w-3.5 text-amber-400" />
+                  <span>ميزانية الحملة الإعلانية والترويج</span>
+                </span>
+                <span className="font-mono text-xs font-black text-emerald-300">
+                  {formatMoney(draft.marketingBudget)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { label: 'حملة رقمية (8M)', val: 8_000_000, hype: 62 },
+                  { label: 'إعلانات شوارع وقنوات (15M)', val: 15_000_000, hype: 74 },
+                  { label: 'حملة مكثفة شاملة (25M)', val: 25_000_000, hype: 86 },
+                  { label: 'طوفان إعلاني وعروض خاصة (38M)', val: 38_000_000, hype: 96 },
+                ].map((m) => {
+                  const active = draft.marketingBudget === m.val;
+                  return (
+                    <button
+                      key={m.val}
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        updateDraft({
+                          marketingBudget: m.val,
+                          hypeScore: m.hype,
+                        });
+                      }}
+                      className={`rounded-lg border px-2 py-1.5 text-[10px] font-bold transition-all ${
+                        active
+                          ? 'border-amber-400 bg-amber-500/20 text-amber-300 font-black'
+                          : 'border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SUB-TAB 2: TARGET MARKETS & STREAMING PLATFORMS */}
+        {budgetTab === 'markets' && (
+          <div className="grid grid-cols-12 gap-2.5">
+            <div className="col-span-12 md:col-span-7 rounded-xl border border-slate-800/90 bg-slate-900/75 p-2.5">
+              <span className="block text-xs font-black text-white mb-1.5">
+                أسواق التوزيع المختارة للعرض ({draft.selectedDistributionMarkets.length})
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {MARKET_CONFIGS.filter((r) =>
+                  unlockedRegions.includes(r.id)
+                ).map((region) => {
+                  const active = draft.selectedDistributionMarkets.includes(
+                    region.id
+                  );
+                  return (
+                    <button
+                      key={region.id}
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        toggleDraftDistributionMarket(region.id);
+                      }}
+                      className={`flex items-center justify-between rounded-xl border p-2 text-right transition-all ${
+                        active
+                          ? 'border-amber-400 bg-amber-500/15'
+                          : 'border-slate-800 bg-slate-950/75 opacity-70'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <span className="block text-[11px] font-black text-white truncate">
+                          {region.name}
+                        </span>
+                        <span className="text-[9px] text-emerald-300 font-bold">
+                          {region.badge}
                         </span>
                       </div>
-                      <input
-                        type="range"
-                        min={1_000_000}
-                        max={item.max}
-                        step={500_000}
-                        value={val}
-                        onChange={(e) =>
-                          updateDraft({
-                            budgetAllocation: {
-                              ...draft.budgetAllocation,
-                              [item.key]: Number(e.target.value),
-                            },
-                          })
-                        }
-                        aria-label={item.label}
-                        className="mt-2 w-full accent-violet-600"
-                      />
-                    </div>
+                    </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Section B: Marketing & Cinema Screens OR Series Broadcast */}
-            <div className="border-t border-indigo-100 pt-4">
-              <div className="flex items-center gap-2">
-                <Megaphone className="h-5 w-5 text-violet-600" />
-                <h3 className="font-display text-base font-black text-slate-900">
-                  {isSeries
-                    ? 'ثانياً: الحملة الإعلانية للمسلسل'
-                    : 'ثانياً: ميزانية التسويق وشاشات السينما'}
-                </h3>
-              </div>
-
-              <div className="mt-3 rounded-2xl border-2 border-indigo-100 bg-[#F8FAFF] p-3.5">
-                <div className="flex items-center justify-between text-xs font-black">
-                  <span className="text-slate-800">
-                    ميزانية الدعاية والإعلانات
-                  </span>
-                  <span className="text-violet-700 tabular-nums">
-                    {formatMoney(draft.marketingBudget)} ج.م
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={2_000_000}
-                  max={40_000_000}
-                  step={1_000_000}
-                  value={draft.marketingBudget}
-                  onChange={(e) =>
-                    updateDraft({ marketingBudget: Number(e.target.value) })
-                  }
-                  aria-label="ميزانية الحملة الإعلانية"
-                  className="mt-2 w-full accent-violet-600"
-                />
-
-                {!isSeries && (
-                  <div className="mt-3 border-t border-indigo-100 pt-3">
-                    <div className="flex items-center justify-between text-xs font-black">
-                      <span className="text-slate-800">
-                        عدد شاشات العرض السينمائي
-                      </span>
-                      <span className="text-cyan-700 tabular-nums">
-                        {draft.screensCount} شاشة عرض
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={40}
-                      max={250}
-                      step={10}
-                      value={draft.screensCount}
-                      onChange={(e) =>
-                        updateDraft({ screensCount: Number(e.target.value) })
-                      }
-                      aria-label="عدد شاشات العرض السينمائي"
-                      className="mt-2 w-full accent-cyan-600"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Section B-2: Interactive Global Markets Distribution (خريطة الأسواق الإقليمية والعالمية) */}
-            <div className="border-t border-indigo-100 pt-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-5 w-5 text-cyan-600" />
-                  <div>
-                    <h3 className="font-display text-base font-black text-slate-900">
-                      ثالثاً: خريطة الأسواق والتوزيع الدولي للعمل
-                    </h3>
-                    <p className="text-[11px] font-bold text-slate-500">
-                      توزيع العمل في أسواق إضافية يرفع الإيرادات العالمية مقابل رسوم توزيع ودبلجة إضافية
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded-xl bg-cyan-50 px-2.5 py-1 text-xs font-black text-cyan-800 tabular-nums border border-cyan-200">
-                  رسوم التوزيع: {formatMoney(totalDistributionFee)} ج.م
-                </span>
-              </div>
-
-              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                {MARKET_CONFIGS.map((cfg) => {
-                  const mId = cfg.id;
-                  const isUnlocked = unlockedRegions.includes(mId);
-                  const isSelected = activeDistMarkets.includes(mId);
-                  const canAffordLicense = cash >= cfg.earlyLicenseCost;
-                  const bonusPct = Math.round(cfg.revenueBonusFactor * 100);
-
+            <div className="col-span-12 md:col-span-5 rounded-xl border border-slate-800/90 bg-slate-900/75 p-2.5">
+              <span className="flex items-center gap-1 text-xs font-black text-white mb-1.5">
+                <Tv className="h-3.5 w-3.5 text-amber-400" />
+                <span>عقد منصة البث الرقمي</span>
+              </span>
+              <div className="space-y-1.5 max-h-[32dvh] overflow-y-auto scrollbar-hide">
+                {db.streaming_platforms.slice(0, 4).map((plat) => {
+                  const active = draft.selectedPlatformId === plat.id;
                   return (
-                    <div
-                      key={mId}
-                      className={`flex flex-col justify-between rounded-2xl border-2 p-3 text-right transition ${
-                        isSelected
-                          ? 'border-cyan-600 border-b-4 border-b-cyan-700 bg-cyan-50/75 shadow-xs'
-                          : isUnlocked
-                          ? 'border-indigo-100 bg-[#F8FAFF] hover:border-cyan-300'
-                          : 'border-slate-200 bg-slate-100/75'
+                    <button
+                      key={plat.id}
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        updateDraft({
+                          selectedPlatformId: plat.id,
+                          platformDealAmount: plat.budget_capacity,
+                        });
+                      }}
+                      className={`w-full flex items-center justify-between rounded-xl border px-2.5 py-1.5 text-right transition-all ${
+                        active
+                          ? 'border-amber-400 bg-amber-500/15'
+                          : 'border-slate-800 bg-slate-950/80'
                       }`}
                     >
-                      <div>
-                        <div className="flex items-center justify-between gap-1.5">
-                          <span className="font-display text-xs font-black text-slate-900">
-                            {cfg.name}
-                          </span>
-                          {isSelected ? (
-                            <span className="rounded-lg bg-cyan-600 px-2 py-0.5 text-[9px] font-black text-white">
-                              مفعل للتوزيع ✓
-                            </span>
-                          ) : isUnlocked ? (
-                            <span className="rounded-lg bg-indigo-100 px-2 py-0.5 text-[9px] font-black text-indigo-700">
-                              متاح
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-200 px-2 py-0.5 text-[9px] font-black text-slate-600">
-                              <Lock className="h-2.5 w-2.5" />
-                              مغلق
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="mt-1 text-[10px] font-bold text-slate-600">
-                          {cfg.description}
-                        </p>
-
-                        <div className="mt-2 flex items-center justify-between text-[10px] font-black tabular-nums">
-                          <span className="text-emerald-700">
-                            {mId === 'egypt'
-                              ? 'السوق الأساسي (100%)'
-                              : `عائد إضافي +${bonusPct}%`}
-                          </span>
-                          <span className="text-slate-700">
-                            {cfg.distributionFeePerProject === 0
-                              ? 'مشمول بالميزانية'
-                              : `تكلفة التوزيع: ${formatMoney(cfg.distributionFeePerProject)} ج.م`}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="mt-2.5 border-t border-indigo-100/80 pt-2">
-                        {isUnlocked ? (
-                          <button
-                            type="button"
-                            disabled={mId === 'egypt'}
-                            onClick={() => {
-                              toggleDraftDistributionMarket(mId);
-                              setMarketStatusMsg(null);
-                            }}
-                            className={`w-full rounded-xl py-1.5 px-2.5 text-[11px] font-black transition ${
-                              mId === 'egypt'
-                                ? 'bg-emerald-100 text-emerald-800 cursor-default'
-                                : isSelected
-                                ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                                : 'bg-cyan-600 text-white hover:bg-cyan-700'
-                            }`}
-                          >
-                            {mId === 'egypt'
-                              ? 'السوق المحلي مفعل دائماً'
-                              : isSelected
-                              ? 'إلغاء التوزيع في هذا السوق'
-                              : `تفعيل التوزيع (+${formatMoney(cfg.distributionFeePerProject)} ج.م)`}
-                          </button>
-                        ) : (
-                          <div className="space-y-1.5">
-                            <div className="text-[9px] font-bold text-slate-500">
-                              يفتح تلقائياً عند قيمة سوقية {formatMoney(cfg.unlockMarketValue)} ج.م (حاليًا {formatMoney(marketValue)})
-                            </div>
-                            <button
-                              type="button"
-                              disabled={!canAffordLicense}
-                              onClick={() => {
-                                const ok = unlockMarketRegionWithCash(mId);
-                                if (ok) {
-                                  setMarketStatusMsg(`تم فتح رخصة التوزيع في ${cfg.name} وتفعيلها للعمل الحالي!`);
-                                  toggleDraftDistributionMarket(mId);
-                                } else {
-                                  setMarketStatusMsg('الرصيد النقدي في الخزينة غير كافٍ لشراء رخصة التوزيع المبكر.');
-                                }
-                              }}
-                              className="w-full rounded-xl bg-violet-600 py-1.5 px-2 text-[10px] font-black text-white shadow-2xs transition hover:bg-violet-700 disabled:opacity-45"
-                            >
-                              شراء رخصة التوزيع المبكر ({formatMoney(cfg.earlyLicenseCost)} ج.م)
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      <span className="text-[11px] font-black text-white">
+                        {plat.name}
+                      </span>
+                      <span className="font-mono text-[10px] font-black text-emerald-300">
+                        {formatMoney(plat.budget_capacity)}
+                      </span>
+                    </button>
                   );
                 })}
               </div>
-
-              {marketStatusMsg && (
-                <div className="mt-2 rounded-xl bg-emerald-50 p-2 text-[11px] font-black text-emerald-800 border border-emerald-200">
-                  {marketStatusMsg}
-                </div>
-              )}
             </div>
+          </div>
+        )}
 
-            {/* Section C: Digital Platforms AND TV Broadcast Channels (for Series) */}
-            <div className="border-t border-indigo-100 pt-4 space-y-4">
-              <div>
-                <div className="mb-2.5 flex items-center gap-1.5 text-xs font-black text-slate-800">
-                  <Tv2 className="h-4 w-4 text-violet-600" />
-                  <span>
-                    {isSeries
-                      ? 'رابعاً (أ): التفاوض مع المنصة الرقمية العارضة للمسلسل:'
-                      : 'رابعاً: اختر عقد المنصة الرقمية الحصري بعد العرض السينمائي:'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {digitalPlatforms.map((plat) => {
-                    const offerAmount = Math.round(
-                      (plat.budget_capacity / 100) *
-                        (isSeries ? 26_000_000 : 28_000_000)
-                    );
-                    const isChosen =
-                      (draft.selectedPlatformId || digitalPlatforms[0]?.id) ===
-                      plat.id;
-                    return (
-                      <button
-                        key={plat.id}
-                        type="button"
-                        onClick={() => handleSelectDigitalPlatform(plat.id)}
-                        className={`flex flex-col justify-between rounded-2xl border-2 p-3 text-right transition ${
-                          isChosen
-                            ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/80 shadow-xs'
-                            : 'border-indigo-100 bg-[#F8FAFF] hover:border-violet-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-display text-xs font-black text-slate-900">
-                            {plat.name}
-                          </span>
-                          <span className="rounded-md bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700">
-                            منصة رقمية
-                          </span>
-                        </div>
-                        <div className="mt-1.5 flex items-center justify-between text-[11px] tabular-nums">
-                          <span className="text-slate-500">
-                            الانتشار: {plat.budget_capacity}%
-                          </span>
-                          <span className="font-black text-emerald-700">
-                            +{formatMoney(offerAmount)} ج.م
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {isSeries && (
-                <div>
-                  <div className="mb-2.5 flex items-center gap-1.5 text-xs font-black text-slate-800">
-                    <Tv className="h-4 w-4 text-cyan-600" />
-                    <span>
-                      رابعاً (ب): التفاوض مع القناة التلفزيونية الفضائية لبث حلقات المسلسل:
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {tvChannels.map((tv) => {
-                      const tvOffer = Math.round(
-                        (tv.budget_capacity / 100) * 22_000_000
-                      );
-                      const isChosen = selectedTvChannelId === tv.id;
-                      return (
-                        <button
-                          key={tv.id}
-                          type="button"
-                          onClick={() => handleSelectTvChannel(tv.id)}
-                          className={`flex flex-col justify-between rounded-2xl border-2 p-3 text-right transition ${
-                            isChosen
-                              ? 'border-cyan-600 border-b-4 border-b-cyan-700 bg-cyan-50/80 shadow-xs'
-                              : 'border-indigo-100 bg-[#F8FAFF] hover:border-cyan-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-display text-xs font-black text-slate-900">
-                              {tv.name}
-                            </span>
-                            <span className="rounded-md bg-cyan-100 px-1.5 py-0.5 text-[9px] font-black text-cyan-800">
-                              قناة تلفزيونية
-                            </span>
-                          </div>
-                          <div className="mt-1.5 flex items-center justify-between text-[11px] tabular-nums">
-                            <span className="text-slate-500">
-                              نسبة المشاهدة: {tv.budget_capacity}%
-                            </span>
-                            <span className="font-black text-emerald-700">
-                              +{formatMoney(tvOffer)} ج.م
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Direct Negotiation Button with Platform / TV Channel */}
-              <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/70 p-3.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="text-xs font-black text-emerald-950">
-                      إجمالي حقوق البث والعرض المتفق عليها:
-                    </div>
-                    <div className="font-display text-base font-black text-emerald-700 tabular-nums">
-                      +{formatMoney(
-                        computeCombinedDealAmount(
-                          draft.selectedPlatformId ||
-                            digitalPlatforms[0]?.id ||
-                            'plat_1',
-                          selectedTvChannelId,
-                          negotiatedBroadcastBonus
-                        )
-                      )}{' '}
-                      ج.م
-                    </div>
-                  </div>
-
-                  {!negotiatedBroadcastBonus ? (
+        {/* SUB-TAB 3: RELEASE SEASON & SCREENS COUNT */}
+        {budgetTab === 'schedule' && (
+          <div className="grid grid-cols-12 gap-2.5">
+            <div className="col-span-12 md:col-span-6 rounded-xl border border-slate-800/90 bg-slate-900/75 p-2.5 space-y-1.5">
+              <span className="block text-xs font-black text-white">
+                موسم الطرح والعرض الجماهيري
+              </span>
+              {draft.format === 'film' ? (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(
+                    [
+                      { id: 'eid_adha', label: 'موسم عيد الأضحى (+15%)' },
+                      { id: 'eid_fitr', label: 'موسم عيد الفطر (+12%)' },
+                      { id: 'summer', label: 'موسم الصيف السينمائي' },
+                      { id: 'mid_year', label: 'إجازة منتصف العام' },
+                    ] as const
+                  ).map((s) => (
                     <button
+                      key={s.id}
                       type="button"
-                      onClick={handleNegotiateBroadcastBoost}
-                      className="flex items-center gap-1.5 rounded-xl border-b-4 border-emerald-900/30 bg-emerald-600 px-3.5 py-2 text-xs font-black text-white shadow-xs transition hover:bg-emerald-700 active:translate-y-0.5"
+                      onClick={() =>
+                        updateDraft({ filmSeason: s.id as FilmReleaseSeason })
+                      }
+                      className={`rounded-xl border p-2 text-right text-[11px] font-black ${
+                        draft.filmSeason === s.id
+                          ? 'border-amber-400 bg-amber-500/15 text-white'
+                          : 'border-slate-800 bg-slate-950 text-slate-300'
+                      }`}
                     >
-                      <Handshake className="h-4 w-4" />
-                      <span>التفاوض لرفع قيمة عقد البث (+15%)</span>
+                      {s.label}
                     </button>
-                  ) : (
-                    <span className="rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white">
-                      تم رفع العقد بنسبة +15% ✓
-                    </span>
-                  )}
+                  ))}
                 </div>
-
-                {broadcastNegMessage && (
-                  <p className="mt-2 text-[11px] font-bold text-emerald-800">
-                    {broadcastNegMessage}
-                  </p>
-                )}
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(
+                    [
+                      { id: 'ramadan', label: 'الموسم الرمضاني الكبير (+18%)' },
+                      { id: 'off_season', label: 'موسم المنصات الشتوي' },
+                    ] as const
+                  ).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() =>
+                        updateDraft({ seriesSeason: s.id as SeriesSeason })
+                      }
+                      className={`rounded-xl border p-2 text-right text-[11px] font-black ${
+                        draft.seriesSeason === s.id
+                          ? 'border-amber-400 bg-amber-500/15 text-white'
+                          : 'border-slate-800 bg-slate-950 text-slate-300'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Section D: Filming Schedule & Game-Calculated Release Date */}
-            <div className="rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-violet-50/90 via-indigo-50/60 to-cyan-50/60 p-4">
-              <div className="flex items-center gap-2 text-xs font-black text-violet-900">
-                <Calendar className="h-4 w-4 text-violet-600" />
-                <span>
-                  {isSeries
-                    ? 'خامساً: موعد بدء تصوير المسلسل وموعد عرض الحلقة الأولى:'
-                    : 'خامساً: موعد بدء التصوير وموعد نزول الفيلم لدور العرض:'}
-                </span>
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {[
-                  { offset: 1 as const, label: 'غداً مباشرة', sub: '+1 يوم' },
-                  {
-                    offset: 3 as const,
-                    label: 'بعد 3 أيام',
-                    sub: 'تحضير اللوكيشن',
-                  },
-                  {
-                    offset: 7 as const,
-                    label: 'الأسبوع القادم',
-                    sub: '+7 أيام',
-                  },
-                ].map((opt) => (
+            <div className="col-span-12 md:col-span-6 rounded-xl border border-slate-800/90 bg-slate-900/75 p-2.5 space-y-1.5">
+              <span className="block text-xs font-black text-white">
+                عدد شاشات وقاعات العرض ({draft.screensCount} قاعة)
+              </span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[80, 140, 200, 280].map((cnt) => (
                   <button
-                    key={opt.offset}
+                    key={cnt}
                     type="button"
-                    onClick={() => setStartOffsetDays(opt.offset)}
-                    className={`rounded-2xl border-2 p-2.5 text-center transition ${
-                      startOffsetDays === opt.offset
-                        ? 'border-violet-600 border-b-4 border-b-violet-800 bg-violet-600 text-white shadow-sm'
-                        : 'border-indigo-100 bg-white text-slate-700 hover:border-violet-300'
+                    onClick={() => updateDraft({ screensCount: cnt })}
+                    className={`rounded-xl border py-2 font-mono text-xs font-black ${
+                      draft.screensCount === cnt
+                        ? 'border-amber-400 bg-amber-500/20 text-amber-300'
+                        : 'border-slate-800 bg-slate-950 text-slate-400'
                     }`}
                   >
-                    <div className="text-xs font-black">{opt.label}</div>
-                    <div
-                      className={`mt-0.5 text-[10px] font-bold ${
-                        startOffsetDays === opt.offset
-                          ? 'text-violet-100'
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {opt.sub}
-                    </div>
+                    {cnt}
                   </button>
                 ))}
               </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-indigo-100 bg-white p-3 text-center text-xs tabular-nums">
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400">
-                    بدء التصوير
-                  </div>
-                  <div className="mt-0.5 font-black text-slate-900">
-                    {formatGameDate(gameDay + startOffsetDays, currentYear)}
-                  </div>
-                </div>
-                <div className="border-x border-indigo-50">
-                  <div className="text-[10px] font-bold text-slate-400">
-                    مدة التصوير
-                  </div>
-                  <div className="mt-0.5 font-black text-violet-700">
-                    {calculatedDurationDays} أيام
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400">
-                    {isSeries ? 'بث الحلقة الأولى' : 'نزول السينمات'}
-                  </div>
-                  <div className="mt-0.5 font-black text-emerald-700">
-                    {formatGameDate(
-                      gameDay + startOffsetDays + calculatedDurationDays,
-                      currentYear
-                    )}
-                  </div>
-                </div>
-              </div>
             </div>
-
-            <div className="flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
-              <button
-                type="button"
-                onClick={() => setActiveScreen('CREW_CAST_CARDS')}
-                className="flex min-h-[48px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"
-              >
-                <ArrowRight className="h-4 w-4" />
-                <span>سوق الممثلين</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleLockPreProductionAndStartFilming}
-                className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 border-indigo-900/40 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-indigo-500/25 transition active:border-b-0 active:translate-y-1"
-              >
-                <span>
-                  {isSeries
-                    ? 'اعتماد العقود وبدء تصوير المسلسل!'
-                    : 'اعتماد الميزانيات وبدء تصوير الفيلم!'}
-                </span>
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            </div>
-          </motion.div>
+          </div>
         )}
 
-        {subStep === 2 && (
-          <motion.div
-            key="prod-s2-live-filming"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            className="space-y-4 rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-6 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.15)]"
+        {/* Footer Controls */}
+        <div className="flex items-center justify-between border-t border-slate-800/80 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              playClickSound();
+              setActiveScreen('CREW_CAST_CARDS');
+            }}
+            className="flex min-h-[32px] items-center gap-1 rounded-xl border border-slate-800 bg-slate-900 px-3 py-1 text-[10px] font-bold text-slate-300"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
-                  <Camera className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-display text-lg font-black text-slate-900">
-                    2. التصوير الفعلي وإدارة موقع الإنتاج
-                  </h3>
-                  <p className="text-xs font-bold text-slate-500 tabular-nums">
-                    أيام التصوير المنجزة:{' '}
-                    <span className="font-black text-violet-700">
-                      {draft.filmingDaysElapsed} من {draft.filmingDurationDays}{' '}
-                      يوم
-                    </span>{' '}
-                    ({filmingProgressPct}%)
-                  </p>
-                </div>
-              </div>
+            <ArrowRight className="h-3 w-3" />
+            <span>العودة للطاقم</span>
+          </button>
 
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-left text-[11px] font-black text-emerald-800 tabular-nums">
-                {isSeries ? 'الحلقة الأولى:' : 'موعد الطرح:'}{' '}
-                {formatGameDate(previewReleaseDay, currentYear)}
-              </div>
-            </div>
+          <button
+            type="button"
+            onClick={handleStartFilming}
+            className="flex min-h-[32px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-4 py-1 text-xs font-black text-slate-950 shadow-sm hover:brightness-110 active:scale-95"
+          >
+            <Clapperboard className="h-3.5 w-3.5" />
+            <span>بدء التصوير الفعلي في البلاتوه</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-            {/* Shooting Progress Bar */}
-            <div className="h-4 w-full overflow-hidden rounded-full bg-indigo-100 p-0.5">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-violet-600 via-indigo-500 to-emerald-500 transition-all duration-300"
-                style={{ width: `${filmingProgressPct}%` }}
-              />
-            </div>
+  // =========================================================================
+  // PHASE 2: WIDESCREEN 2-COLUMN 3D FILMING SET + LIVE CRISIS RESOLUTION
+  // =========================================================================
+  return (
+    <div className="grid grid-cols-12 gap-3 items-stretch">
+      {/* Right 5 Columns: Live 3D Soundstage Filming Set */}
+      <div className="col-span-12 lg:col-span-5 flex flex-col justify-between space-y-2">
+        <AnimatedFilmingSetGraphic
+          title={draft.title || 'الفرعون الأخير'}
+          genre={draft.primaryGenre}
+          leadName={leadActorObjs[0]?.name || 'بطل العمل'}
+          directorName={directorObj?.name || 'مخرج العمل'}
+          dayCurrent={Math.min(crisisIndex + 1, activeCrisesList.length)}
+          dayTotal={activeCrisesList.length}
+          isComplete={isFilmingDone}
+        />
 
-            {/* Interactive Animated Soundstage Filming Graphic */}
-            <AnimatedFilmingSetGraphic
-              title={draft.title || 'الفرعون الأخير'}
-              genre={draft.primaryGenre}
-              leadName={selectedLeads[0]?.name || 'بطل العمل'}
-              directorName={selectedDirector?.name || 'مخرج العمل'}
-              dayCurrent={draft.filmingDaysElapsed}
-              dayTotal={draft.filmingDurationDays}
-              isComplete={isFilmingComplete}
-            />
+        <div className="grid grid-cols-3 gap-1.5 text-center">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-1.5">
+            <span className="block text-[9px] text-slate-400">زخم الجمهور</span>
+            <span className="font-mono text-xs font-black text-amber-300">
+              {draft.hypeScore}%
+            </span>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-1.5">
+            <span className="block text-[9px] text-slate-400">معدل الإتقان</span>
+            <span className="font-mono text-xs font-black text-purple-300">
+              {draft.qualityModifier >= 0
+                ? `+${draft.qualityModifier}`
+                : draft.qualityModifier}
+            </span>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-1.5">
+            <span className="block text-[9px] text-slate-400">خزينة الاستوديو</span>
+            <span className="font-mono text-xs font-black text-emerald-300">
+              {formatMoney(cash)}
+            </span>
+          </div>
+        </div>
+      </div>
 
-            {/* Automatic Live Filming Status Box (No manual day skip!) */}
-            {!isFilmingComplete && !activeCrisis && (
-              <div className="rounded-3xl border-2 border-indigo-100 bg-gradient-to-br from-violet-50/70 to-cyan-50/50 p-4 text-center">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-sm">
-                  <Radio className="h-5 w-5 animate-pulse" />
-                </div>
-                <p className="mt-2.5 text-xs font-black text-slate-800">
-                  الكاميرات تدور الآن في موقع التصوير! يتقدم التصوير تلقائياً مع مرور الأيام في أعلى الشاشة.
-                </p>
-                <p className="mt-1 text-[11px] font-bold text-slate-500">
-                  أي خبر فني عاجل من اللوكيشن أو موقف طارئ سيظهر لك فجأة على الشاشة لاتخاذ قرارك الفوري.
-                </p>
-              </div>
-            )}
+      {/* Left 7 Columns: Crisis Decision Panel or Completion Card */}
+      <div className="col-span-12 lg:col-span-7 flex flex-col justify-between rounded-xl border border-slate-800/90 bg-slate-900/80 p-3">
+        {!isFilmingDone && currentCrisis ? (
+          <div className="space-y-2">
+            <span className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/15 px-2 py-0.5 text-[10px] font-black text-rose-300">
+              <ShieldAlert className="h-3 w-3" />
+              <span>
+                موقف طارئ في موقع التصوير ({crisisIndex + 1} /{' '}
+                {activeCrisesList.length})
+              </span>
+            </span>
 
-            {/* Active Crisis Flashcard */}
-            {activeCrisis && (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeCrisis.id}
-                  initial={{ opacity: 0, scale: 0.94, y: 12 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.94, y: -12 }}
-                  transition={{ type: 'spring', stiffness: 340, damping: 24 }}
-                  className="rounded-3xl border-2 border-rose-200 border-b-4 border-b-rose-300 bg-gradient-to-b from-rose-50/80 to-white p-5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-1 text-[10px] font-black text-white">
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      موقف طارئ في موقع التصوير ({firstUnresolvedIdx + 1} من{' '}
-                      {draft.crises.length})
-                    </span>
-                  </div>
+            <h3 className="text-xs sm:text-sm font-black text-white">
+              {currentCrisis.title}
+            </h3>
+            <p className="text-[11px] leading-relaxed text-slate-300">
+              {currentCrisis.description}
+            </p>
 
-                  <h4 className="font-display mt-2.5 text-base font-black text-slate-900">
-                    {activeCrisis.title}
-                  </h4>
-                  <p className="mt-1.5 text-xs leading-relaxed font-medium text-slate-700">
-                    {activeCrisis.description}
-                  </p>
-
-                  <div className="mt-4 space-y-2.5">
-                    <button
-                      type="button"
-                      onClick={() => resolveCrisisOption(activeCrisis.id, 'A')}
-                      className="min-h-[46px] w-full rounded-2xl border-2 border-indigo-200 border-b-4 border-b-indigo-300 bg-white p-3 text-right text-xs font-black text-slate-900 shadow-xs transition hover:border-violet-500 active:border-b-2 active:translate-y-0.5"
-                    >
-                      أ) {activeCrisis.optionA.label}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => resolveCrisisOption(activeCrisis.id, 'B')}
-                      className="min-h-[46px] w-full rounded-2xl border-2 border-slate-200 border-b-4 border-b-slate-300 bg-slate-50 p-3 text-right text-xs font-bold text-slate-700 transition hover:bg-slate-100 active:border-b-2 active:translate-y-0.5"
-                    >
-                      ب) {activeCrisis.optionB.label}
-                    </button>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-            )}
-
-            {/* Filming Completed Banner */}
-            {isFilmingComplete && !activeCrisis && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="rounded-3xl border-2 border-emerald-200 border-b-4 border-b-emerald-300 bg-emerald-50 p-5 text-center"
-              >
-                <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
-                <h4 className="font-display mt-2 text-base font-black text-emerald-950">
-                  {isSeries
-                    ? `اكتمل تصوير ومونتاج حلقات المسلسل (${draft.episodes} حلقة) في الموعد المحدد!`
-                    : `اكتمل تصوير ومونتاج الفيلم في موعده المحدد (${formatGameDate(
-                        previewReleaseDay,
-                        currentYear
-                      )})!`}
-                </h4>
-                <p className="mt-1 text-xs font-medium text-emerald-800">
-                  {isSeries
-                    ? 'المسلسل جاهز الآن لبث الحلقة الأولى عبر المنصات والقنوات التلفزيونية.'
-                    : 'الفيلم جاهز الآن للنزول في قاعات السينما لمتابعة إيرادات شباك التذاكر.'}
-                </p>
-              </motion.div>
-            )}
-
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+            <div className="space-y-1.5 pt-1">
               <button
                 type="button"
-                onClick={() => setSubStep(1)}
-                className="flex min-h-[48px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"
+                onClick={() => handleResolveChoice('A')}
+                className="w-full flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/85 px-3 py-2 text-right hover:border-amber-500/40 hover:bg-slate-900 transition-all active:scale-[0.99]"
               >
-                <ArrowRight className="h-4 w-4" />
-                <span>الميزانيات</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={Boolean(activeCrisis)}
-                onClick={() => setActiveScreen('RELEASE_SIMULATION')}
-                className="flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 border-emerald-900/40 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-6 py-3.5 text-sm font-black text-white shadow-xl shadow-emerald-500/25 transition active:border-b-0 active:translate-y-1 disabled:opacity-50"
-              >
-                <span>
-                  {activeCrisis
-                    ? 'اتخذ قرارك في الموقف الطارئ أولاً!'
-                    : isSeries
-                    ? 'بدء بث الحلقة الأولى ومتابعة عرض حلقات المسلسل!'
-                    : 'نزول الفيلم للسينمات وبدء تتبع شباك التذاكر!'}
+                <span className="text-xs font-black text-white">
+                  {currentCrisis.optionA.label}
                 </span>
-                <ArrowLeft className="h-4 w-4" />
+                <span className="font-mono text-[10px] font-bold text-amber-300 shrink-0">
+                  +{currentCrisis.optionA.qualityDelta} جودة
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleResolveChoice('B')}
+                className="w-full flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/85 px-3 py-2 text-right hover:border-amber-500/40 hover:bg-slate-900 transition-all active:scale-[0.99]"
+              >
+                <span className="text-xs font-black text-white">
+                  {currentCrisis.optionB.label}
+                </span>
+                <span className="font-mono text-[10px] font-bold text-slate-400 shrink-0">
+                  {currentCrisis.optionB.qualityDelta} جودة
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleResolveChoice('VIP')}
+                className="w-full flex items-center justify-between gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-right hover:bg-emerald-500/20 transition-all active:scale-[0.99]"
+              >
+                <span className="text-[11px] font-black text-emerald-300">
+                  دعم استثماري طارئ (إنقاذ الموقف + تمويل إضافي)
+                </span>
+                <span className="font-mono text-[10px] font-black text-emerald-300 shrink-0">
+                  +6 جودة
+                </span>
               </button>
             </div>
-          </motion.div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center py-4 space-y-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-400">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white">
+                اكتمل التصوير والمونتاج بنجاح!
+              </h3>
+              <p className="mt-0.5 text-[11px] text-slate-400 max-w-md">
+                النسخة النهائية من «{draft.title}» جاهزة الآن للعرض الأول في صالات السينما والمنصات العالمية.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleCompleteAndRelease}
+              className="flex min-h-[34px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-5 py-1.5 text-xs font-black text-slate-950 shadow-md hover:brightness-110 active:scale-95"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>إطلاق العرض الأول ومحاكاة الإيرادات</span>
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }

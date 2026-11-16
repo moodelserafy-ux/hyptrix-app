@@ -47,7 +47,7 @@ export const FACILITY_3D_COORDS: Record<
   },
 };
 
-const OVERVIEW_CAM_POS: [number, number, number] = [0, 11.2, 16.8];
+const OVERVIEW_CAM_POS: [number, number, number] = [0, 10.8, 16.4];
 const OVERVIEW_TARGET: [number, number, number] = [0, 0.8, 0.6];
 
 // Pre-allocated math helpers outside the animation loop (Zero GC)
@@ -55,7 +55,7 @@ const _targetPos = new THREE.Vector3();
 const _targetLook = new THREE.Vector3();
 
 /**
- * Generates procedural CanvasTextures for bright daytime architectural windows, studio signage, and roads
+ * Generates procedural CanvasTextures for Dark Hollywood Gold architectural windows, studio signage, and roads
  */
 function createBuildingWindowTexture(
   maxAnisotropy: number,
@@ -81,7 +81,7 @@ function createBuildingWindowTexture(
     for (let c = 0; c < cols; c++) {
       const seed = (r * 17 + c * 31) % 7;
       if (seed === 0) {
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = '#0f172a';
       } else if (seed % 2 === 0) {
         ctx.fillStyle = litHex1;
       } else {
@@ -110,23 +110,23 @@ function createStudioSignTexture(
   const ctx = canvas.getContext('2d')!;
 
   const grad = ctx.createLinearGradient(0, 0, 512, 128);
-  grad.addColorStop(0, '#111016');
-  grad.addColorStop(0.5, '#1b1820');
-  grad.addColorStop(1, '#090a0e');
+  grad.addColorStop(0, '#0A0A0C');
+  grad.addColorStop(0.5, '#16161D');
+  grad.addColorStop(1, '#0A0A0C');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 512, 128);
 
-  ctx.strokeStyle = '#d4af37';
+  ctx.strokeStyle = '#D4AF37';
   ctx.lineWidth = 8;
   ctx.strokeRect(4, 4, 504, 120);
 
-  ctx.fillStyle = '#f8e7b0';
+  ctx.fillStyle = '#F8FAFC';
   ctx.font = '900 38px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 256, 50);
 
-  ctx.fillStyle = '#e50914';
+  ctx.fillStyle = '#D4AF37';
   ctx.font = '800 22px sans-serif';
   ctx.fillText(subText, 256, 94);
 
@@ -141,16 +141,16 @@ function createRoadAsphaltTexture(maxAnisotropy: number): THREE.CanvasTexture {
   canvas.width = 256;
   canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#171920';
+  ctx.fillStyle = '#111116';
   ctx.fillRect(0, 0, 256, 256);
 
-  // Side lines
-  ctx.fillStyle = '#fbbf24';
+  // Golden boulevard side lines
+  ctx.fillStyle = '#D4AF37';
   ctx.fillRect(0, 10, 256, 6);
   ctx.fillRect(0, 240, 256, 6);
 
   // Dashed center line
-  ctx.fillStyle = '#b99a47';
+  ctx.fillStyle = '#94a3b8';
   for (let x = 16; x < 256; x += 64) {
     ctx.fillRect(x, 124, 36, 8);
   }
@@ -239,7 +239,7 @@ export function StudioCampus3D({
     const scene = new THREE.Scene();
     const skyColor = new THREE.Color(0x0a0a0c);
     scene.background = skyColor;
-    scene.fog = new THREE.FogExp2(0x0a0a0c, 0.012);
+    scene.fog = new THREE.FogExp2(0x0a0a0c, 0.018);
 
     const camera = new THREE.PerspectiveCamera(38, width / Math.max(1, height), 0.1, 160);
     camera.position.set(...OVERVIEW_CAM_POS);
@@ -258,7 +258,7 @@ export function StudioCampus3D({
     renderer.setSize(width, height);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.88;
+    renderer.toneMappingExposure = 1.15;
     renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = !isSoftwareGl;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -273,30 +273,34 @@ export function StudioCampus3D({
     scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     pmremGenerator.dispose();
 
-    // 3. Cinematic Warm-Key Lighting Rig
-    const hemiLight = new THREE.HemisphereLight(0xe9d9aa, 0x101018, 0.82);
+    // 3. Dark Hollywood Gold Night Lighting Rig
+    const hemiLight = new THREE.HemisphereLight(0xfef3c7, 0x0a0a0c, 1.0);
     hemiLight.position.set(0, 30, 0);
     scene.add(hemiLight);
 
-    const sunLight = new THREE.DirectionalLight(0xffd778, 1.45);
-    sunLight.position.set(16, 24, 14);
-    sunLight.castShadow = !isSoftwareGl;
+    const goldKeyLight = new THREE.DirectionalLight(0xffedd5, 2.3);
+    goldKeyLight.position.set(16, 24, 14);
+    goldKeyLight.castShadow = !isSoftwareGl;
     const d = 16;
-    sunLight.shadow.camera.left = -d;
-    sunLight.shadow.camera.right = d;
-    sunLight.shadow.camera.top = d;
-    sunLight.shadow.camera.bottom = -d;
-    sunLight.shadow.camera.near = 1;
-    sunLight.shadow.camera.far = 55;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
-    sunLight.shadow.bias = -0.0005;
-    sunLight.shadow.normalBias = 0.02;
-    scene.add(sunLight);
+    goldKeyLight.shadow.camera.left = -d;
+    goldKeyLight.shadow.camera.right = d;
+    goldKeyLight.shadow.camera.top = d;
+    goldKeyLight.shadow.camera.bottom = -d;
+    goldKeyLight.shadow.camera.near = 1;
+    goldKeyLight.shadow.camera.far = 55;
+    goldKeyLight.shadow.mapSize.width = 1024;
+    goldKeyLight.shadow.mapSize.height = 1024;
+    goldKeyLight.shadow.bias = -0.0005;
+    goldKeyLight.shadow.normalBias = 0.02;
+    scene.add(goldKeyLight);
 
-    const rimLight = new THREE.DirectionalLight(0x8794b5, 0.62);
-    rimLight.position.set(-16, 12, -12);
-    scene.add(rimLight);
+    const crimsonRimLight = new THREE.DirectionalLight(0xe50914, 1.1);
+    crimsonRimLight.position.set(-16, 12, -12);
+    scene.add(crimsonRimLight);
+
+    const cyanFillLight = new THREE.DirectionalLight(0x38bdf8, 0.85);
+    cyanFillLight.position.set(0, 14, -18);
+    scene.add(cyanFillLight);
 
     // Controls
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -312,99 +316,99 @@ export function StudioCampus3D({
       cameraTransitionActiveRef.current = false;
     });
 
-    // Procedural Textures (Nighttime Gold-Lit Architectural Glass)
+    // Procedural Textures (Dark Hollywood Gold Illuminated Glass)
     const windowTexCyan = createBuildingWindowTexture(
       maxAniso,
-      '#11151e',
-      '#d4af37',
-      '#8f1424'
+      '#111118',
+      '#38bdf8',
+      '#D4AF37'
     );
     const windowTexGold = createBuildingWindowTexture(
       maxAniso,
-      '#17120a',
-      '#e8bd49',
-      '#a8782c'
+      '#14141d',
+      '#D4AF37',
+      '#fde047'
     );
     const roadTex = createRoadAsphaltTexture(maxAniso);
 
-    // Shared PBR Material Library (Royal Black, Deep Navy, Gold & Cinema Red)
+    // Shared PBR Material Library (Dark Hollywood Gold Palette)
     const matCampusLawn = new THREE.MeshStandardMaterial({
-      color: 0x20251f,
-      roughness: 0.88,
-      metalness: 0.02,
+      color: 0x0c0c12,
+      roughness: 0.85,
+      metalness: 0.15,
     });
     const matPlazaStone = new THREE.MeshStandardMaterial({
-      color: 0x302d2c,
-      roughness: 0.55,
-      metalness: 0.08,
+      color: 0x16161d,
+      roughness: 0.35,
+      metalness: 0.45,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
     });
     const matRoad = new THREE.MeshStandardMaterial({
       map: roadTex,
-      roughness: 0.68,
-      metalness: 0.1,
+      roughness: 0.6,
+      metalness: 0.2,
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
     });
     const matSoundstageWall = new THREE.MeshStandardMaterial({
-      color: 0x39343c,
-      roughness: 0.42,
-      metalness: 0.1,
+      color: 0x1e1e28,
+      roughness: 0.38,
+      metalness: 0.35,
     });
     const matTowerWindows = new THREE.MeshStandardMaterial({
       map: windowTexCyan,
       roughness: 0.18,
-      metalness: 0.45,
+      metalness: 0.55,
     });
     const matExecutiveWindows = new THREE.MeshStandardMaterial({
       map: windowTexGold,
-      roughness: 0.22,
-      metalness: 0.4,
+      roughness: 0.2,
+      metalness: 0.55,
     });
     const matDarkSteel = new THREE.MeshStandardMaterial({
-      color: 0x3a333e,
-      roughness: 0.35,
-      metalness: 0.65,
+      color: 0x14141c,
+      roughness: 0.3,
+      metalness: 0.8,
     });
     const matBrushedGold = new THREE.MeshPhysicalMaterial({
       color: 0xd4af37,
-      roughness: 0.2,
-      metalness: 0.85,
-      clearcoat: 0.7,
+      roughness: 0.18,
+      metalness: 0.92,
+      clearcoat: 0.85,
     });
     const matGlass = new THREE.MeshPhysicalMaterial({
-      color: 0x28303c,
-      roughness: 0.18,
-      metalness: 0.15,
+      color: 0x38bdf8,
+      roughness: 0.1,
+      metalness: 0.2,
       transmission: isSoftwareGl ? 0 : 0.65,
       transparent: true,
-      opacity: isSoftwareGl ? 0.7 : 0.9,
+      opacity: isSoftwareGl ? 0.7 : 0.88,
       clearcoat: 1.0,
     });
     const matRedCarpet = new THREE.MeshStandardMaterial({
-      color: 0x8f1424,
-      roughness: 0.7,
-      metalness: 0.05,
+      color: 0xe50914,
+      roughness: 0.65,
+      metalness: 0.1,
     });
     const matEmissiveCyan = new THREE.MeshStandardMaterial({
-      color: 0xd4af37,
-      emissive: 0x8b6414,
-      emissiveIntensity: 0.72,
+      color: 0x38bdf8,
+      emissive: 0x0ea5e9,
+      emissiveIntensity: 1.1,
       roughness: 0.2,
     });
     const matEmissiveAmber = new THREE.MeshStandardMaterial({
-      color: 0xfbbf24,
-      emissive: 0xf59e0b,
-      emissiveIntensity: 0.9,
+      color: 0xfde047,
+      emissive: 0xd4af37,
+      emissiveIntensity: 1.3,
       roughness: 0.2,
     });
 
     // 4. Studio Campus Ground, Central Fountain Plaza & Roads
     const groundMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(32, 32, 0.5, 64),
+      new THREE.CylinderGeometry(34, 34, 0.5, 64),
       matCampusLawn
     );
     groundMesh.position.y = -0.25;
@@ -412,12 +416,21 @@ export function StudioCampus3D({
     scene.add(groundMesh);
 
     const centralPlaza = new THREE.Mesh(
-      new THREE.CylinderGeometry(11.5, 11.8, 0.08, 48),
+      new THREE.CylinderGeometry(11.8, 12.1, 0.08, 48),
       matPlazaStone
     );
     centralPlaza.position.y = 0.02;
     centralPlaza.receiveShadow = true;
     scene.add(centralPlaza);
+
+    // Golden Perimeter Plaza Ring
+    const plazaGoldRing = new THREE.Mesh(
+      new THREE.RingGeometry(11.65, 11.9, 64),
+      new THREE.MeshBasicMaterial({ color: 0xd4af37, side: THREE.DoubleSide })
+    );
+    plazaGoldRing.rotation.x = -Math.PI / 2;
+    plazaGoldRing.position.y = 0.065;
+    scene.add(plazaGoldRing);
 
     const mainAvenue = new THREE.Mesh(new THREE.BoxGeometry(22, 0.05, 2.5), matRoad);
     mainAvenue.position.set(0, 0.045, 0.8);
@@ -429,7 +442,7 @@ export function StudioCampus3D({
     crossAvenue.receiveShadow = true;
     scene.add(crossAvenue);
 
-    // Central Golden Cinema Globe Fountain at (-2.3, 0, 0.8) & (+2.3, 0, 0.8)
+    // Central Golden Cinema Globe Fountains
     for (const fx of [-2.6, 2.6]) {
       const fountainPool = new THREE.Mesh(
         new THREE.CylinderGeometry(0.85, 0.95, 0.22, 24),
@@ -449,7 +462,7 @@ export function StudioCampus3D({
     // Grand Studio Entrance Archway at the South Road (0, 0, 8.2)
     const gateGroup = new THREE.Group();
     gateGroup.position.set(0, 0, 8.2);
-    const gatePillarL = new THREE.Mesh(new THREE.BoxGeometry(0.65, 3.2, 0.65), matSoundstageWall);
+    const gatePillarL = new THREE.Mesh(new THREE.BoxGeometry(0.65, 3.2, 0.65), matDarkSteel);
     gatePillarL.position.set(-2.1, 1.6, 0);
     gatePillarL.castShadow = true;
     gateGroup.add(gatePillarL);
@@ -463,12 +476,12 @@ export function StudioCampus3D({
     gateGroup.add(gateArchBeam);
     scene.add(gateGroup);
 
-    // 5. Outdoor Perimeter Palm Trees & Studio Streetlights (InstancedMesh > 20 items)
+    // 5. Outdoor Perimeter Palm Trees & Golden Streetlights (InstancedMesh > 20 items)
     const treeCount = 32;
     const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 1.5, 8);
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
     const foliageGeo = new THREE.ConeGeometry(0.85, 1.9, 8);
-    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x183c31, roughness: 0.72 });
+    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x059669, roughness: 0.6 });
 
     const trunkInstanced = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
     const foliageInstanced = new THREE.InstancedMesh(foliageGeo, foliageMat, treeCount);
@@ -496,6 +509,25 @@ export function StudioCampus3D({
     foliageInstanced.computeBoundingSphere();
     scene.add(trunkInstanced);
     scene.add(foliageInstanced);
+
+    // Floating Golden Hollywood Dust Particles in the Night Sky
+    const particleCount = 120;
+    const particleGeo = new THREE.BufferGeometry();
+    const particlePos = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      particlePos[i * 3] = (Math.random() - 0.5) * 32;
+      particlePos[i * 3 + 1] = 1.2 + Math.random() * 11;
+      particlePos[i * 3 + 2] = (Math.random() - 0.5) * 26;
+    }
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+    const particleMat = new THREE.PointsMaterial({
+      color: 0xd4af37,
+      size: 0.16,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const studioParticles = new THREE.Points(particleGeo, particleMat);
+    scene.add(studioParticles);
 
     // Animated Studio Production Trucks driving along the main avenue
     const truck1 = new THREE.Group();
@@ -526,7 +558,7 @@ export function StudioCampus3D({
     const selectionRing = new THREE.Mesh(
       new THREE.RingGeometry(2.45, 2.75, 48),
       new THREE.MeshBasicMaterial({
-        color: 0xfbbf24,
+        color: 0xd4af37,
         side: THREE.DoubleSide,
       })
     );
@@ -554,7 +586,7 @@ export function StudioCampus3D({
       const gateSignTex = createStudioSignTexture(
         maxAniso,
         studioNameRef.current || 'استوديو الإنتاج',
-        'مدينة الإنتاج السينمائي'
+        'HYPTRIX HOLLYWOOD EMPIRE'
       );
       const gateBillboard = new THREE.Mesh(
         new THREE.BoxGeometry(4.6, 0.95, 0.18),
@@ -624,7 +656,7 @@ export function StudioCampus3D({
         const stageSignTex = createStudioSignTexture(
           maxAniso,
           `بلاتوه التصوير · م${lvl}`,
-          'القاعة السينمائية الكبرى'
+          'STAGE 01 · SOUNDSTAGE'
         );
         const signMesh = new THREE.Mesh(
           new THREE.BoxGeometry(2.3, 0.58, 0.12),
@@ -645,7 +677,7 @@ export function StudioCampus3D({
           }
         }
 
-        // Level 3+: Twin Parallel Soundstage Hangar 2 + Connecting Skybridge!
+        // Level 3+: Twin Parallel Soundstage Hangar 2 + Connecting Skybridge
         if (lvl >= 3) {
           const hangar2 = new THREE.Mesh(
             new THREE.BoxGeometry(2.6, baseH * 0.9, 2.5),
@@ -765,9 +797,9 @@ export function StudioCampus3D({
               Math.PI * 0.85
             ),
             new THREE.MeshStandardMaterial({
-              color: 0x183c31,
+              color: 0x10b981,
               emissive: 0x059669,
-              emissiveIntensity: 0.45,
+              emissiveIntensity: 0.55,
               side: THREE.DoubleSide,
             })
           );
@@ -933,10 +965,10 @@ export function StudioCampus3D({
 
         const hallH = 1.35 + lvl * 0.28;
 
-        // Stepped Circular Marble Plinth
+        // Stepped Circular Plinth
         const plinth = new THREE.Mesh(
           new THREE.CylinderGeometry(2.25, 2.45, 0.24, 36),
-          matSoundstageWall
+          matDarkSteel
         );
         plinth.position.y = 0.12;
         group.add(plinth);
@@ -1051,27 +1083,27 @@ export function StudioCampus3D({
         statue.position.set(0, palaceH + 1.25, 0);
         group.add(statue);
 
-        // Sky Searchlight Beams Sweeping the Night Sky
+        // Volumetric Sky Searchlight Beams Sweeping the Night Sky
         const beamMat = new THREE.MeshBasicMaterial({
-          color: 0xfef08a,
+          color: 0xd4af37,
           transparent: true,
-          opacity: 0.26,
+          opacity: 0.22,
           depthWrite: false,
         });
         searchlightBeam1 = new THREE.Mesh(
-          new THREE.ConeGeometry(0.8, 6.8, 18, 1, true),
+          new THREE.ConeGeometry(0.95, 8.2, 20, 1, true),
           beamMat
         );
-        searchlightBeam1.position.set(-1.2, palaceH + 2.9, 0.8);
+        searchlightBeam1.position.set(-1.2, palaceH + 3.4, 0.8);
         searchlightBeam1.rotation.z = 0.25;
         group.add(searchlightBeam1);
 
         if (lvl >= 2) {
           searchlightBeam2 = new THREE.Mesh(
-            new THREE.ConeGeometry(0.8, 6.8, 18, 1, true),
+            new THREE.ConeGeometry(0.95, 8.2, 20, 1, true),
             beamMat
           );
-          searchlightBeam2.position.set(1.2, palaceH + 2.9, 0.8);
+          searchlightBeam2.position.set(1.2, palaceH + 3.4, 0.8);
           searchlightBeam2.rotation.z = -0.25;
           group.add(searchlightBeam2);
         } else {
@@ -1187,6 +1219,9 @@ export function StudioCampus3D({
         8,
         delta
       );
+
+      // Animate floating golden particles
+      studioParticles.rotation.y = elapsed * 0.03;
 
       // Animate production trucks driving along the studio avenue
       truck1.position.x = ((elapsed * 2.2) % 20) - 10;

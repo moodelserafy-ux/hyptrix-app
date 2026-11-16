@@ -7,6 +7,7 @@ import {
   validateCustomDatabase,
   MasterDatabase,
 } from '@/lib/db-resolver';
+import { playClickSound, playContractSignedSound } from '@/lib/game-audio';
 import { Database, Upload, Link2, CheckCircle2, RotateCcw, AlertTriangle, FileJson } from 'lucide-react';
 
 const SAMPLE_MOD_PACK: Partial<MasterDatabase> = {
@@ -122,6 +123,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
   const resolvedDb = getResolvedDatabase(customDbPatch);
 
   const handleFetchFromUrl = async () => {
+    playClickSound();
     if (!urlInput.trim()) {
       setStatusMsg({ type: 'error', text: 'يرجى إدخال رابط ملف JSON صالح أولاً.' });
       return;
@@ -137,6 +139,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         setStatusMsg({ type: 'error', text: validation.error || 'ملف غير صالح' });
       } else {
         importCustomDatabase(validation.data, urlInput.trim());
+        playContractSignedSound();
         setStatusMsg({
           type: 'success',
           text: `تم تفعيل الحزمة بنجاح: ${validation.data.meta?.pack_name || 'حزمة مخصصة'}`,
@@ -164,6 +167,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
           setStatusMsg({ type: 'error', text: validation.error || 'ملف JSON غير متوافق مع هيكل Hyptrix.' });
         } else {
           importCustomDatabase(validation.data, file.name);
+          playContractSignedSound();
           setStatusMsg({
             type: 'success',
             text: `تم استيراد ودمج ملف "${validation.data.meta?.pack_name || file.name}" بنجاح!`,
@@ -177,6 +181,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
   };
 
   const handleLoadSampleMod = () => {
+    playContractSignedSound();
     importCustomDatabase(SAMPLE_MOD_PACK, 'local://arabic-cinema-2026-pack.json');
     setStatusMsg({
       type: 'success',
@@ -185,24 +190,24 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
   };
 
   return (
-    <div className="rounded-3xl border-2 border-indigo-100 bg-white p-5 text-right">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-50 pb-3">
+    <div className="rounded-3xl border border-amber-500/30 bg-[#16161D]/90 p-5 text-right text-slate-100 backdrop-blur-md">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/20 pb-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/15 text-[#D4AF37]">
             <Database className="h-5 w-5" />
           </div>
-          <h3 className="text-sm font-black text-slate-900">
+          <h3 className="text-sm font-black text-white">
             إدارة حزم البيانات الواقعية (JSON Mod Pack)
           </h3>
         </div>
-        <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[10px] font-black text-violet-700 tabular-nums">
+        <span className="rounded-full border border-amber-500/30 bg-[#0A0A0C] px-2.5 py-0.5 text-[10px] font-black text-[#D4AF37] tabular-nums">
           {resolvedDb.meta.pack_name}
         </span>
       </div>
 
       {!compact && (
-        <p className="mt-2 text-xs leading-relaxed text-slate-600">
-          الصق رابط JSON خارجي أو ارفع ملف <code className="font-bold text-violet-700">.json</code> من هاتفك لدمج الأسماء والصور الواقعية تلقائياً.
+        <p className="mt-2 text-xs leading-relaxed text-slate-300">
+          الصق رابط JSON خارجي أو ارفع ملف <code className="font-bold text-[#D4AF37]">.json</code> من جهازك لدمج الأسماء والصور الواقعية تلقائياً.
         </p>
       )}
 
@@ -215,7 +220,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
             onChange={(e) => setUrlInput(e.target.value)}
             placeholder="https://gist.githubusercontent.com/.../hyptrix_db.json"
             aria-label="رابط حزمة البيانات الخارجية JSON URL"
-            className="w-full rounded-xl border-2 border-indigo-100 bg-[#F5F7FF] py-2.5 pr-9 pl-3 text-left text-xs font-medium text-slate-900 focus:border-violet-600 focus:bg-white focus:outline-none"
+            className="w-full rounded-xl border border-amber-500/30 bg-[#0A0A0C] py-2.5 pr-9 pl-3 text-left text-xs font-medium text-slate-100 focus:border-[#D4AF37] focus:outline-none"
             dir="ltr"
           />
         </div>
@@ -223,7 +228,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
           type="button"
           onClick={handleFetchFromUrl}
           disabled={loading}
-          className="min-h-[42px] rounded-xl border-b-4 border-indigo-950/30 bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-xs font-black text-white whitespace-nowrap shrink-0"
+          className="min-h-[42px] rounded-xl bg-gradient-to-r from-[#D4AF37] to-amber-500 px-4 py-2 text-xs font-black text-[#0A0A0C] whitespace-nowrap shrink-0 shadow-md"
         >
           {loading ? 'جاري التحقق...' : 'تفعيل الرابط'}
         </button>
@@ -240,17 +245,20 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         />
         <button
           type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex min-h-[40px] items-center gap-1.5 rounded-xl border-2 border-indigo-100 bg-[#F5F7FF] px-3.5 py-2 text-xs font-black text-slate-700 hover:bg-indigo-50"
+          onClick={() => {
+            playClickSound();
+            fileInputRef.current?.click();
+          }}
+          className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-amber-500/30 bg-[#0A0A0C] px-3.5 py-2 text-xs font-black text-slate-200 hover:border-[#D4AF37]"
         >
-          <Upload className="h-3.5 w-3.5 text-violet-600" />
+          <Upload className="h-3.5 w-3.5 text-[#D4AF37]" />
           رفع ملف .json
         </button>
 
         <button
           type="button"
           onClick={handleLoadSampleMod}
-          className="flex min-h-[40px] items-center gap-1.5 rounded-xl border-2 border-violet-200 bg-violet-50 px-3.5 py-2 text-xs font-black text-violet-700 hover:bg-violet-100"
+          className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-[#D4AF37]/40 bg-[#D4AF37]/15 px-3.5 py-2 text-xs font-black text-[#D4AF37] hover:bg-[#D4AF37]/25"
         >
           <FileJson className="h-3.5 w-3.5" />
           تفعيل الحزمة الواقعية التجريبية
@@ -260,10 +268,11 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
           <button
             type="button"
             onClick={() => {
+              playClickSound();
               clearCustomDatabase();
               setStatusMsg({ type: 'success', text: 'تمت استعادة قاعدة البيانات الافتراضية.' });
             }}
-            className="flex min-h-[40px] items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
+            className="flex min-h-[40px] items-center gap-1 rounded-xl border border-rose-500/40 bg-rose-950/40 px-3 py-2 text-xs font-black text-rose-300"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             استعادة الافتراضي
@@ -275,14 +284,14 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         <div
           className={`mt-3 flex items-center gap-2 rounded-xl p-2.5 text-xs font-bold ${
             statusMsg.type === 'success'
-              ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
-              : 'border border-rose-200 bg-rose-50 text-rose-800'
+              ? 'border border-emerald-500/40 bg-emerald-950/40 text-emerald-300'
+              : 'border border-rose-500/40 bg-rose-950/40 text-rose-300'
           }`}
         >
           {statusMsg.type === 'success' ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
           ) : (
-            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400" />
           )}
           <span>{statusMsg.text}</span>
         </div>
