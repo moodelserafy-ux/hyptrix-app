@@ -345,10 +345,10 @@ export function HyptrixClientApp() {
         initial={{ y: -24, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-        className="relative z-30 shrink-0 px-2.5 pt-2 sm:px-4"
+        className="relative z-30 shrink-0 px-2 pt-1.5 sm:px-4"
       >
-        <div className="hyptrix-glass mx-auto max-w-[1480px] overflow-hidden rounded-2xl text-slate-100">
-          <div className="flex items-center justify-between gap-2 px-3 py-1.5 sm:px-4">
+        <div className="hyptrix-topbar hyptrix-glass mx-auto max-w-[1480px] overflow-hidden rounded-xl text-slate-100">
+          <div className="flex items-center justify-between gap-2 px-2.5 py-1 sm:px-3">
             {/* Zone 1: Studio Brand & Back to Studio City Button */}
             <div className="flex min-w-0 items-center gap-2">
               {isStudioActive && currentScreen !== 'STUDIO_HUB' && (
@@ -508,7 +508,7 @@ export function HyptrixClientApp() {
             className={
               isHubScreen
                 ? 'mx-auto h-full w-full max-w-none'
-                : 'hyptrix-glass mx-auto flex h-full max-h-full w-[86vw] max-w-[1480px] flex-col overflow-y-auto rounded-3xl p-2.5 sm:p-4'
+                : 'hyptrix-glass mx-auto flex h-full max-h-full w-[min(94vw,1480px)] flex-col overflow-hidden rounded-2xl p-2 sm:p-3'
             }
           >
             {!isStudioActive || currentScreen === 'STUDIO_CREATION' ? (
@@ -558,24 +558,24 @@ export function HyptrixClientApp() {
           className="relative z-30 mx-auto flex w-full shrink-0 items-center justify-center px-2 pb-[max(0.45rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-5"
           aria-label="شريط تحكم اللعبة"
         >
-          <div className="flex w-full max-w-3xl items-center justify-around gap-1.5 rounded-2xl border border-amber-500/25 bg-[#090a0e]/90 px-2 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,.4)] backdrop-blur-xl">
-            <button type="button" onClick={() => setActiveScreen('PROJECT_SETUP')} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[9px] font-black" aria-current={currentScreen === 'PROJECT_SETUP' ? 'page' : undefined}>
+          <div className="hyptrix-main-dock flex w-full max-w-3xl items-center justify-around gap-1 rounded-xl border border-white/10 bg-[#101116]/94 px-1.5 py-1 shadow-[0_8px_24px_rgba(0,0,0,.32)] backdrop-blur-xl">
+            <button type="button" onClick={() => setActiveScreen('PROJECT_SETUP')} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] font-semibold" aria-current={currentScreen === 'PROJECT_SETUP' ? 'page' : undefined}>
               <Film className="h-5 w-5" />
               <span className="truncate">عمل جديد</span>
             </button>
-            <button type="button" onClick={() => setActiveScreen('CREW_CAST_CARDS')} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[9px] font-black" aria-current={currentScreen === 'CREW_CAST_CARDS' ? 'page' : undefined}>
+            <button type="button" onClick={() => setActiveScreen('CREW_CAST_CARDS')} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] font-semibold" aria-current={currentScreen === 'CREW_CAST_CARDS' ? 'page' : undefined}>
               <Users className="h-5 w-5" />
               <span className="truncate">النجوم والطاقم</span>
             </button>
-            <button type="button" onClick={() => setActiveScreen('LEADERBOARD_SETTINGS')} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[9px] font-black" aria-current={currentScreen === 'LEADERBOARD_SETTINGS' ? 'page' : undefined}>
+            <button type="button" onClick={() => setActiveScreen('LEADERBOARD_SETTINGS')} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] font-semibold" aria-current={currentScreen === 'LEADERBOARD_SETTINGS' ? 'page' : undefined}>
               <Newspaper className="h-5 w-5" />
               <span className="truncate">غرفة الأخبار</span>
             </button>
-            <button type="button" onClick={() => setActiveScreen('FESTIVALS_AWARDS')} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[9px] font-black" aria-current={currentScreen === 'FESTIVALS_AWARDS' ? 'page' : undefined}>
+            <button type="button" onClick={() => setActiveScreen('FESTIVALS_AWARDS')} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] font-semibold" aria-current={currentScreen === 'FESTIVALS_AWARDS' ? 'page' : undefined}>
               <Trophy className="h-5 w-5" />
               <span className="truncate">المهرجانات</span>
             </button>
-            <button type="button" onClick={() => setModPackOpen(true)} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[9px] font-black">
+            <button type="button" onClick={() => setModPackOpen(true)} className="hyptrix-dock-button flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] font-semibold">
               <Database className="h-5 w-5" />
               <span className="truncate">Mod Pack</span>
             </button>
@@ -609,7 +609,7 @@ export function HyptrixClientApp() {
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+              <div className="min-h-0 flex-1 overflow-hidden p-3 sm:p-4">
                 <CustomDbLoaderPanel compact />
               </div>
             </motion.section>

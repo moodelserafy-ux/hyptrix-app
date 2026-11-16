@@ -151,9 +151,9 @@ export function StudioHubView({
   };
 
   return (
-    <div className="pointer-events-none relative flex h-full w-full flex-col justify-between overflow-hidden px-2 pb-2 pt-1 sm:px-4">
+    <div className="hyptrix-hub pointer-events-none relative flex h-full w-full flex-col justify-between overflow-hidden px-3 pb-2 pt-1 sm:px-5">
       {/* TOP LANDSCAPE HUD STRIP: Compact Studio Card (Right) + Quick Camera & Active Project Controls (Left) */}
-      <div className="pointer-events-auto flex flex-wrap items-center justify-between gap-2">
+      <div className="hyptrix-hub-top pointer-events-auto flex flex-wrap items-center justify-between gap-2">
         {/* Studio Identity Pill (Light Theme) */}
         <motion.div
           initial={{ opacity: 0, x: 16 }}
@@ -243,7 +243,7 @@ export function StudioHubView({
       </AnimatePresence>
 
       {/* CENTER AREA IS 100% OPEN TO VIEW AND CLICK THE STUDIO CITY */}
-      <div className="pointer-events-none my-auto flex items-center justify-center">
+      <div className="hyptrix-hub-hint pointer-events-none my-auto flex items-center justify-center">
         {!isFacilityInspectorOpen && !openModal && (
           <div className="rounded-full border border-indigo-100 bg-white/85 px-3.5 py-1 text-[11px] font-bold text-slate-700 shadow-xs backdrop-blur-xs">
             اضغط على أي مبنى في المدينة لتطويره أو اسحب الشاشة لتحريك الكاميرا
@@ -252,7 +252,7 @@ export function StudioHubView({
       </div>
 
       {/* BOTTOM AREA: Horizontal Building Upgrade Strip + Main Landscape Game Dock */}
-      <div className="pointer-events-none flex flex-col items-center gap-2">
+      <div className="hyptrix-hub-bottom pointer-events-none flex flex-col items-center gap-2">
         {/* Compact Horizontal Building Inspector (Light Theme, Widescreen Fitted) */}
         <AnimatePresence>
           {isFacilityInspectorOpen && !openModal && (
@@ -360,7 +360,7 @@ export function StudioHubView({
         </AnimatePresence>
 
         {/* MAIN LANDSCAPE BOTTOM ICON DOCK (Light Theme, Crisp Tactile Buttons) */}
-        <div className="pointer-events-auto mx-auto flex w-full max-w-4xl items-center justify-between gap-1.5 rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white/95 p-1.5 shadow-xl backdrop-blur-md sm:gap-2 sm:p-2">
+        <div className="hyptrix-hub-legacy-dock pointer-events-auto mx-auto flex w-full max-w-4xl items-center justify-between gap-1.5 rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white/95 p-1.5 shadow-xl backdrop-blur-md sm:gap-2 sm:p-2">
           {/* Primary Action: New Movie / Series Production */}
           <button
             type="button"
@@ -467,7 +467,7 @@ export function StudioHubView({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}
             transition={{ type: 'spring', stiffness: 330, damping: 28 }}
-            className="pointer-events-auto absolute inset-x-3 top-14 bottom-20 z-30 mx-auto flex max-w-5xl flex-col overflow-hidden rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white/98 text-slate-900 shadow-2xl backdrop-blur-xl sm:inset-x-6"
+            className="hyptrix-hub-modal pointer-events-auto absolute inset-x-3 top-12 bottom-3 z-30 mx-auto flex max-w-5xl flex-col overflow-hidden rounded-2xl border border-amber-500/20 bg-slate-950/90 text-slate-100 shadow-2xl backdrop-blur-xl sm:inset-x-6"
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-indigo-100 bg-[#F8FAFF] px-5 py-3">
