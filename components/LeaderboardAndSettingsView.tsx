@@ -144,7 +144,7 @@ export default function LeaderboardAndSettingsView() {
 
       {/* RANKING TABLE */}
       {subTab === 'ranking' && (
-        <div className="space-y-1.5 max-h-[50dvh] overflow-y-auto scrollbar-hide">
+        <div className="space-y-1.5 max-h-64 overflow-y-auto scrollbar-hide">
           {combinedLeaderboard.map((studio, index) => (
             <div
               key={studio.id}

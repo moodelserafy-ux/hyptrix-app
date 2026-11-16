@@ -1,21 +1,23 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Smartphone, RotateCcw, Maximize2, Play } from 'lucide-react';
+import { Smartphone, RotateCw, Maximize2, Sparkles } from 'lucide-react';
 import { playClickSound } from '@/lib/game-audio';
 
 export default function LandscapeGuard({ children }: { children: React.ReactNode }) {
   const [isPortrait, setIsPortrait] = useState(false);
-  const [dismissedPrompt, setDismissedPrompt] = useState(false);
+  const [showIntroFlip, setShowIntroFlip] = useState(false);
 
   useEffect(() => {
     const checkOrientation = () => {
       if (typeof window === 'undefined') return;
       const portrait = window.innerHeight > window.innerWidth;
-      setIsPortrait(portrait);
-      if (!portrait) {
-        setDismissedPrompt(false);
-      }
+      setIsPortrait((prev) => {
+        if (!prev && portrait) {
+          setShowIntroFlip(true);
+        }
+        return portrait;
+      });
     };
 
     checkOrientation();
@@ -27,8 +29,17 @@ export default function LandscapeGuard({ children }: { children: React.ReactNode
     };
   }, []);
 
-  const handleLockLandscapeAndFullscreen = async () => {
+  useEffect(() => {
+    if (!showIntroFlip) return;
+    const timer = setTimeout(() => {
+      setShowIntroFlip(false);
+    }, 2400);
+    return () => clearTimeout(timer);
+  }, [showIntroFlip]);
+
+  const handleEnterLandscapeNow = async () => {
     playClickSound();
+    setShowIntroFlip(false);
     try {
       const docEl = document.documentElement as HTMLElement & {
         webkitRequestFullscreen?: () => Promise<void>;
@@ -49,70 +60,84 @@ export default function LandscapeGuard({ children }: { children: React.ReactNode
         await screenAny.orientation.lock('landscape');
       }
     } catch {
-      // Browsers on iOS or embedded frames may disallow programmatic lock
-    } finally {
-      setDismissedPrompt(true);
+      // CSS 90deg rotation below guarantees landscape even when browser blocks orientation.lock
     }
   };
 
   return (
-    <div className="relative fixed inset-0 w-screen h-dvh overflow-hidden select-none bg-[#0A0A0C] text-slate-100">
-      {/* Main Fixed Widescreen Game Viewport */}
-      <div className="relative w-full h-full overflow-hidden">
-        {children}
-      </div>
+    <div className="fixed inset-0 w-screen h-dvh overflow-hidden select-none bg-[#0A0A0C] text-slate-100">
+      {/*
+        TRUE MANDATORY LANDSCAPE VIEWPORT:
+        When the device/window is in Portrait (height > width), this container automatically
+        flips 90 degrees with width = 100dvh and height = 100vw so the entire game runs
+        horizontally in Landscape! When already in Landscape (width >= height), it fills 100vw x 100dvh.
+      */}
+      <div
+        style={
+          isPortrait
+            ? {
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                width: '100dvh',
+                height: '100vw',
+                transform: 'translate(-50%, -50%) rotate(90deg)',
+                transformOrigin: 'center center',
+              }
+            : {
+                position: 'fixed',
+                inset: 0,
+                width: '100vw',
+                height: '100dvh',
+              }
+        }
+        className="overflow-hidden bg-[#0A0A0C]"
+      >
+        <div className="relative w-full h-full overflow-hidden">
+          {children}
+        </div>
 
-      {/* Sleek Cinematic Portrait Rotation Overlay */}
-      {isPortrait && !dismissedPrompt && (
-        <div
-          dir="rtl"
-          className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-[#0A0A0C]/95 backdrop-blur-xl p-4 text-center"
-        >
-          <div className="relative max-w-xs w-full rounded-2xl border border-amber-500/30 bg-slate-950/90 p-5 shadow-[0_20px_50px_rgba(0,0,0,0.9)]">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
-              <div className="relative flex items-center justify-center">
-                <Smartphone className="h-6 w-6 animate-[spin_3s_ease-in-out_infinite] text-amber-400" />
-                <RotateCcw className=" -right-1.5 -top-1.5 h-3.5 w-3.5 text-amber-300" />
+        {/* Animated Phone Flip Transition Splash (Auto-dismisses after 2.4s or on tap) */}
+        {isPortrait && showIntroFlip && (
+          <div
+            dir="rtl"
+            onClick={handleEnterLandscapeNow}
+            className="absolute inset-0 z-[999] flex flex-col items-center justify-center bg-[#0A0A0C]/90 backdrop-blur-xl p-4 text-center cursor-pointer animate-fade-in"
+          >
+            <div className="max-w-md w-full rounded-2xl border border-amber-500/40 bg-slate-950/95 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.95)] flex items-center gap-4">
+              <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-amber-500/40 bg-amber-500/15 text-amber-400">
+                <Smartphone className="h-7 w-7 animate-[spin_1.6s_ease-in-out_infinite] text-amber-400" />
+                <RotateCw className="absolute -top-1 -right-1 h-4 w-4 text-amber-300" />
               </div>
-            </div>
 
-            <div className="mb-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold text-amber-300">
-              تجربة سينمائية بالعرض (Landscape)
-            </div>
+              <div className="text-right flex-1 min-w-0">
+                <div className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-black text-amber-300">
+                  <Sparkles className="h-3 w-3" />
+                  <span>تم تفعيل وضع الألعاب بالعرض تلقائياً</span>
+                </div>
+                <h2 className="mt-1 text-xs sm:text-sm font-black text-white">
+                  اقلب الهاتف بالعرض للاستمتاع بمدينة الإنتاج السينمائية
+                </h2>
+                <p className="mt-0.5 text-[10px] text-slate-400">
+                  تم تدوير واجهة اللعبة بالعرض تلقائياً — اضغط في أي مكان للبدء فوراً أو ملء الشاشة.
+                </p>
+              </div>
 
-            <h2 className="mt-1.5 text-sm font-black text-white">
-              يرجى تدوير هاتفك للوضع الأفقي
-            </h2>
-
-            <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
-              صُممت مدينة الإنتاج في <span className="font-bold text-amber-400">HYPTRIX</span> لتعمل بالعرض الكامل كألعاب الاستراتيجية السينمائية.
-            </p>
-
-            <div className="mt-4 flex flex-col gap-2">
               <button
                 type="button"
-                onClick={handleLockLandscapeAndFullscreen}
-                className="flex min-h-[34px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-3 py-1.5 text-xs font-black text-slate-950 shadow-md transition-all active:scale-95"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEnterLandscapeNow();
+                }}
+                className="flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-md active:scale-95"
               >
                 <Maximize2 className="h-3.5 w-3.5" />
-                تفعيل ملء الشاشة والوضع الأفقي
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  playClickSound();
-                  setDismissedPrompt(true);
-                }}
-                className="flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-[11px] font-bold text-slate-300 hover:border-amber-500/30 hover:text-white active:scale-95 transition-all"
-              >
-                <Play className="h-3 w-3 text-amber-400" />
-                المتابعة في الشاشة الحالية
+                <span>ابدأ بالعرض</span>
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

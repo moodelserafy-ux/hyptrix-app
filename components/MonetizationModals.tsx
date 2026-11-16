@@ -6,7 +6,6 @@ import { formatMoney } from '@/lib/game-engine';
 import {
   Coins,
   Tv,
-  Sparkles,
   X,
   CheckCircle2,
   Play,
@@ -47,7 +46,7 @@ export default function MonetizationModals({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm">
       <div className="w-[88%] max-w-lg rounded-2xl border border-amber-500/35 bg-slate-950/95 p-3.5 shadow-2xl space-y-2.5">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-2">

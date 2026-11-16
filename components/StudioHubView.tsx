@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useGameStore } from '@/lib/store';
+import {
+  useGameStore,
+  getDaysRemainingUntilAnnualAwards,
+} from '@/lib/store';
 import {
   formatMoney,
   StudioFacilityId,
@@ -10,6 +13,7 @@ import {
   MARKET_CONFIGS,
   DEFAULT_FACILITIES_LEVELS,
 } from '@/lib/game-engine';
+import { getResolvedDatabase } from '@/lib/db-resolver';
 import {
   Clapperboard,
   Building2,
@@ -22,17 +26,20 @@ import {
   Lock,
   ArrowUpCircle,
   X,
-  Calendar,
   Award,
   Tv,
+  Wand2,
+  UserPlus,
+  Loader2,
 } from 'lucide-react';
 import {
   playClickSound,
   playTabSwitchSound,
   playContractSignedSound,
+  playAwardFanfareSound,
 } from '@/lib/game-audio';
 
-type HubDrawerTab = 'none' | 'facilities' | 'markets' | 'archive';
+type HubDrawerTab = 'none' | 'facilities' | 'markets' | 'archive' | 'ai_world';
 
 interface StudioHubViewProps {
   selectedFacility: StudioFacilityId | null;
@@ -44,22 +51,36 @@ export default function StudioHubView({
   onSelectFacility,
 }: StudioHubViewProps) {
   const {
+    studioName,
+    ceoName,
     cash,
     marketValue,
+    currentYear,
+    gameDay,
     facilitiesLevels,
     upgradeStudioFacility,
     unlockedRegions,
     unlockMarketRegionWithCash,
     releasedProjects,
     worldHistory,
+    aiMemoryLog,
+    aiGeneratedActors,
+    emergingCompetitors,
+    customDbPatch,
+    groqApiKeyClient,
+    preferredGroqModel,
     activeScreen,
     setActiveScreen,
     resetDraftForNewProject,
-    advanceGameDay,
+    triggerAnnualAwardsCeremonyNow,
+    addAiDiscoveredActor,
+    addAiEmergingStudio,
+    pushAiContextualNewsEvent,
   } = useGameStore();
 
   const [hubModalTab, setHubModalTab] = useState<HubDrawerTab>('none');
   const [showNewsDrawer, setShowNewsDrawer] = useState(false);
+  const [aiLoadingMode, setAiLoadingMode] = useState<string | null>(null);
 
   const lvls = facilitiesLevels || DEFAULT_FACILITIES_LEVELS;
   const selectedFacilityMeta = selectedFacility
@@ -67,9 +88,13 @@ export default function StudioHubView({
     : null;
   const currentFacilityLevel = selectedFacility ? lvls[selectedFacility] || 1 : 1;
   const nextFacilityCost =
-    selectedFacility && selectedFacilityMeta && currentFacilityLevel < selectedFacilityMeta.maxLevel
+    selectedFacility &&
+    selectedFacilityMeta &&
+    currentFacilityLevel < selectedFacilityMeta.maxLevel
       ? getFacilityUpgradeCost(selectedFacility, currentFacilityLevel)
       : null;
+
+  const daysToGala = getDaysRemainingUntilAnnualAwards(gameDay);
 
   const handleUpgrade = (facId: StudioFacilityId) => {
     const res = upgradeStudioFacility(facId);
@@ -80,84 +105,200 @@ export default function StudioHubView({
     }
   };
 
+  const handleDiscoverAiStarNow = async () => {
+    if (aiLoadingMode) return;
+    playClickSound();
+    setAiLoadingMode('star');
+    try {
+      const db = getResolvedDatabase(customDbPatch);
+      const existingNames = [
+        ...db.actors.map((a) => a.name),
+        ...aiGeneratedActors.map((a) => a.name),
+      ];
+      const res = await fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'discover_ai_rising_star',
+          groqKeyOverride: groqApiKeyClient,
+          preferredModel: preferredGroqModel,
+          payload: {
+            studioName,
+            ceoName,
+            gameDay,
+            currentYear,
+            existingNames,
+            aiMemoryLog,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data && data.actor) {
+        playContractSignedSound();
+        addAiDiscoveredActor(data.actor, data.headline, data.detail);
+      }
+    } catch {
+      // Handled gracefully
+    } finally {
+      setAiLoadingMode(null);
+    }
+  };
+
+  const handleDiscoverAiStudioNow = async () => {
+    if (aiLoadingMode) return;
+    playClickSound();
+    setAiLoadingMode('studio');
+    try {
+      const db = getResolvedDatabase(customDbPatch);
+      const existingStudios = [
+        ...db.competitor_studios.map((s) => s.name),
+        ...emergingCompetitors.map((s) => s.name),
+      ];
+      const res = await fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'discover_ai_emerging_studio',
+          groqKeyOverride: groqKeyClientOrDefault(groqApiKeyClient),
+          preferredModel: preferredGroqModel,
+          payload: {
+            studioName,
+            ceoName,
+            gameDay,
+            currentYear,
+            existingStudios,
+            aiMemoryLog,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data && data.studio) {
+        playContractSignedSound();
+        addAiEmergingStudio(data.studio, data.headline, data.detail);
+      }
+    } catch {
+      // Handled gracefully
+    } finally {
+      setAiLoadingMode(null);
+    }
+  };
+
+  const handleGenerateAiNewsNow = async () => {
+    if (aiLoadingMode) return;
+    playClickSound();
+    setAiLoadingMode('news');
+    try {
+      const res = await fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'generate_ai_memory_news',
+          groqKeyOverride: groqApiKeyClient,
+          preferredModel: preferredGroqModel,
+          payload: {
+            studioName,
+            ceoName,
+            gameDay,
+            currentYear,
+            marketValue,
+            cash,
+            aiMemoryLog,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data && data.headline) {
+        playContractSignedSound();
+        pushAiContextualNewsEvent(data);
+      }
+    } catch {
+      // Handled gracefully
+    } finally {
+      setAiLoadingMode(null);
+    }
+  };
+
   return (
     <>
       {/* ===================================================================
           BUILDING INSPECTOR DRAWER (Left Side Floating Drawer over 3D City)
       =================================================================== */}
-      {selectedFacility && selectedFacilityMeta && activeScreen === 'STUDIO_HUB' && (
-        <div className="fixed left-3 top-11 z-20 w-64 rounded-2xl border border-amber-500/30 bg-slate-950/85 p-3 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.85)]">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black text-amber-300">
-                {selectedFacilityMeta.categoryLabel} • م{currentFacilityLevel}/{selectedFacilityMeta.maxLevel}
-              </span>
-              <h3 className="mt-1 text-xs font-black text-white">
-                {selectedFacilityMeta.name}
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => onSelectFacility(null)}
-              className="rounded-lg border border-slate-800 bg-slate-900 p-1 text-slate-400 hover:text-white"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-
-          <p className="mt-1 text-[10px] leading-relaxed text-slate-300">
-            {selectedFacilityMeta.description}
-          </p>
-
-          <p className="mt-1 rounded-lg bg-amber-500/10 border border-amber-500/20 px-2 py-1 text-[9px] font-bold text-amber-300">
-            {selectedFacilityMeta.impactSummary(currentFacilityLevel)}
-          </p>
-
-          {/* Level Bars */}
-          <div className="mt-2 flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((lvl) => (
-              <div
-                key={lvl}
-                className={`h-1.5 flex-1 rounded-full ${
-                  lvl <= currentFacilityLevel
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                    : 'bg-slate-800'
-                }`}
-              />
-            ))}
-          </div>
-
-          <div className="mt-2.5">
-            {currentFacilityLevel >= selectedFacilityMeta.maxLevel ? (
-              <div className="flex min-h-[32px] items-center justify-center gap-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black text-emerald-300">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>الحد الأقصى للتطوير مكتمل</span>
+      {selectedFacility &&
+        selectedFacilityMeta &&
+        activeScreen === 'STUDIO_HUB' && (
+          <div className="absolute left-3 top-11 z-20 w-64 rounded-2xl border border-amber-500/30 bg-slate-950/85 p-3 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.85)]">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black text-amber-300">
+                  {selectedFacilityMeta.categoryLabel} • م{currentFacilityLevel}/
+                  {selectedFacilityMeta.maxLevel}
+                </span>
+                <h3 className="mt-1 text-xs font-black text-white">
+                  {selectedFacilityMeta.name}
+                </h3>
               </div>
-            ) : (
               <button
                 type="button"
-                disabled={nextFacilityCost !== null && cash < nextFacilityCost}
-                onClick={() => handleUpgrade(selectedFacility)}
-                className="flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-3 py-1.5 text-[10px] font-black text-slate-950 shadow-sm transition-all hover:brightness-110 active:scale-95 disabled:opacity-40"
+                onClick={() => onSelectFacility(null)}
+                className="rounded-lg border border-slate-800 bg-slate-900 p-1 text-slate-400 hover:text-white"
               >
-                <ArrowUpCircle className="h-3.5 w-3.5" />
-                <span>ترقية للمستوى {currentFacilityLevel + 1}</span>
-                {nextFacilityCost !== null && (
-                  <span className="rounded bg-black/20 px-1.5 py-0.5 font-mono text-[9px]">
-                    {formatMoney(nextFacilityCost)}
-                  </span>
-                )}
+                <X className="h-3 w-3" />
               </button>
-            )}
+            </div>
+
+            <p className="mt-1 text-[10px] leading-relaxed text-slate-300">
+              {selectedFacilityMeta.description}
+            </p>
+
+            <p className="mt-1 rounded-lg bg-amber-500/10 border border-amber-500/20 px-2 py-1 text-[9px] font-bold text-amber-300">
+              {selectedFacilityMeta.impactSummary(currentFacilityLevel)}
+            </p>
+
+            {/* Level Bars */}
+            <div className="mt-2 flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((lvl) => (
+                <div
+                  key={lvl}
+                  className={`h-1.5 flex-1 rounded-full ${
+                    lvl <= currentFacilityLevel
+                      ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                      : 'bg-slate-800'
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="mt-2.5">
+              {currentFacilityLevel >= selectedFacilityMeta.maxLevel ? (
+                <div className="flex min-h-[32px] items-center justify-center gap-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black text-emerald-300">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>الحد الأقصى للتطوير مكتمل</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={nextFacilityCost !== null && cash < nextFacilityCost}
+                  onClick={() => handleUpgrade(selectedFacility)}
+                  className="flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-3 py-1.5 text-[10px] font-black text-slate-950 shadow-sm transition-all hover:brightness-110 active:scale-95 disabled:opacity-40"
+                >
+                  <ArrowUpCircle className="h-3.5 w-3.5" />
+                  <span>ترقية للمستوى {currentFacilityLevel + 1}</span>
+                  {nextFacilityCost !== null && (
+                    <span className="rounded bg-black/20 px-1.5 py-0.5 font-mono text-[9px]">
+                      {formatMoney(nextFacilityCost)}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* ===================================================================
           QUICK 3D BUILDING SELECTOR PILLS (Right Top Floating Strip in City Mode)
       =================================================================== */}
       {activeScreen === 'STUDIO_HUB' && hubModalTab === 'none' && (
-        <div className="fixed right-2.5 top-11 z-20 flex flex-col gap-1">
+        <div className="absolute right-2.5 top-11 z-20 flex flex-col gap-1">
           {STUDIO_FACILITY_CONFIGS.map((cfg) => {
             const lvl = lvls[cfg.id] || 1;
             const isSelected = selectedFacility === cfg.id;
@@ -185,11 +326,11 @@ export default function StudioHubView({
       )}
 
       {/* ===================================================================
-          CENTER MODAL FOR FACILITIES / MARKETS / ARCHIVE
+          CENTER MODAL FOR FACILITIES / MARKETS / ARCHIVE / AI WORLD
       =================================================================== */}
       {hubModalTab !== 'none' && activeScreen === 'STUDIO_HUB' && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center pt-9 pb-11 px-2 sm:px-4 pointer-events-none">
-          <div className="pointer-events-auto flex flex-col w-[88%] sm:w-[85%] max-w-5xl max-h-[80dvh] rounded-2xl border border-amber-500/25 bg-slate-950/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.85)] overflow-hidden">
+        <div className="absolute inset-0 z-30 flex items-center justify-center pt-9 pb-11 px-2 sm:px-4 pointer-events-none">
+          <div className="pointer-events-auto flex flex-col w-[90%] sm:w-[86%] max-w-5xl max-h-[82%] rounded-2xl border border-amber-500/25 bg-slate-950/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.85)] overflow-hidden">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800/80 bg-slate-900/80 px-3 py-1.5 shrink-0">
               <div className="flex items-center gap-2">
@@ -214,6 +355,14 @@ export default function StudioHubView({
                     <Film className="h-3.5 w-3.5 text-amber-400" />
                     <h2 className="text-xs font-black text-white">
                       أرشيف الأفلام والمسلسلات المنتجة ({releasedProjects.length})
+                    </h2>
+                  </>
+                )}
+                {hubModalTab === 'ai_world' && (
+                  <>
+                    <Wand2 className="h-3.5 w-3.5 text-amber-400" />
+                    <h2 className="text-xs font-black text-white">
+                      مركز الذكاء الاصطناعي التوليدي ومحاكاة العالم الحي
                     </h2>
                   </>
                 )}
@@ -283,7 +432,7 @@ export default function StudioHubView({
                             }}
                             className="min-h-[30px] rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] font-bold text-slate-300 hover:border-amber-500/30 hover:text-white"
                           >
-                            معاينة
+                            معاينة 3D
                           </button>
 
                           {lvl >= cfg.maxLevel ? (
@@ -342,11 +491,13 @@ export default function StudioHubView({
 
                           <div className="mt-1.5 flex flex-wrap gap-1 text-[9px] font-bold">
                             <span className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">
-                              قيمة سوقية للفتح المجاني: {formatMoney(region.unlockMarketValue)}
+                              قيمة سوقية للفتح المجاني:{' '}
+                              {formatMoney(region.unlockMarketValue)}
                             </span>
                             {region.distributionFeePerProject > 0 && (
                               <span className="rounded bg-slate-800 px-1.5 py-0.5 text-amber-300">
-                                رسوم التوزيع للفيلم: {formatMoney(region.distributionFeePerProject)}
+                                رسوم التوزيع للفيلم:{' '}
+                                {formatMoney(region.distributionFeePerProject)}
                               </span>
                             )}
                           </div>
@@ -372,7 +523,9 @@ export default function StudioHubView({
                               <span>
                                 {meetsVal
                                   ? 'فتح السوق مجاناً'
-                                  : `ترخيص مبكر (${formatMoney(region.earlyLicenseCost)})`}
+                                  : `ترخيص مبكر (${formatMoney(
+                                      region.earlyLicenseCost
+                                    )})`}
                               </span>
                             </button>
                           )}
@@ -380,6 +533,99 @@ export default function StudioHubView({
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {/* TAB: AI WORLD & GENERATIVE ENGINE */}
+              {hubModalTab === 'ai_world' && (
+                <div className="grid grid-cols-12 gap-2.5">
+                  <div className="col-span-12 lg:col-span-6 space-y-2">
+                    <div className="rounded-xl border border-amber-500/30 bg-slate-900/80 p-2.5 space-y-2">
+                      <h3 className="text-xs font-black text-white flex items-center gap-1.5">
+                        <Wand2 className="h-3.5 w-3.5 text-amber-400" />
+                        <span>أوامر التوليد الحي بالذكاء الاصطناعي</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-300 leading-relaxed">
+                        يقوم محرك الذكاء الاصطناعي تلقائياً مع مرور الأيام بتوليد مواهب صاعدة جديدة وشركات منافسة وأخبار صحفية مبنية على ذاكرة أعمالك، ويمكنك أيضاً استدعاؤه فوراً:
+                      </p>
+
+                      <div className="grid grid-cols-1 gap-1.5">
+                        <button
+                          type="button"
+                          disabled={Boolean(aiLoadingMode)}
+                          onClick={handleDiscoverAiStarNow}
+                          className="flex min-h-[32px] items-center justify-between rounded-xl border border-amber-500/35 bg-amber-500/15 px-3 py-1.5 text-[10px] font-black text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {aiLoadingMode === 'star' ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <UserPlus className="h-3.5 w-3.5" />
+                            )}
+                            <span>اكتشاف موهبة صاعدة جديدة بالذكاء الاصطناعي</span>
+                          </span>
+                          <span className="rounded bg-black/30 px-1.5 py-0.5 text-[9px]">
+                            تم اكتشاف {aiGeneratedActors.length}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={Boolean(aiLoadingMode)}
+                          onClick={handleDiscoverAiStudioNow}
+                          className="flex min-h-[32px] items-center justify-between rounded-xl border border-purple-500/35 bg-purple-500/15 px-3 py-1.5 text-[10px] font-black text-purple-300 hover:bg-purple-500/25 disabled:opacity-50"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {aiLoadingMode === 'studio' ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Building2 className="h-3.5 w-3.5" />
+                            )}
+                            <span>توليد شركة إنتاج منافسة جديدة بالذكاء الاصطناعي</span>
+                          </span>
+                          <span className="rounded bg-black/30 px-1.5 py-0.5 text-[9px]">
+                            شركات جديدة {emergingCompetitors.length}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={Boolean(aiLoadingMode)}
+                          onClick={handleGenerateAiNewsNow}
+                          className="flex min-h-[32px] items-center justify-between rounded-xl border border-emerald-500/35 bg-emerald-500/15 px-3 py-1.5 text-[10px] font-black text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {aiLoadingMode === 'news' ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Newspaper className="h-3.5 w-3.5" />
+                            )}
+                            <span>توليد تقرير صحفي عاجل من ذاكرة العالم</span>
+                          </span>
+                          <span className="rounded bg-black/30 px-1.5 py-0.5 text-[9px]">
+                            تفاعل حي
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Memory Log & Discovered Stars */}
+                  <div className="col-span-12 lg:col-span-6 rounded-xl border border-slate-800/90 bg-slate-900/80 p-2.5 space-y-1.5">
+                    <span className="block text-xs font-black text-white">
+                      ذاكرة الذكاء الاصطناعي لعالمك ({aiMemoryLog.length})
+                    </span>
+                    <div className="max-h-40 space-y-1 overflow-y-auto scrollbar-hide">
+                      {aiMemoryLog.map((mem, i) => (
+                        <div
+                          key={i}
+                          className="rounded-lg border border-slate-800 bg-slate-950/80 px-2.5 py-1 text-[10px] text-slate-300 leading-relaxed"
+                        >
+                          • {mem}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -393,7 +639,7 @@ export default function StudioHubView({
                         لم يقم الاستوديو بإصدار أي أعمال بعد
                       </p>
                       <p className="text-[10px] text-slate-500 mt-0.5">
-                        ابدأ إنتاج عملك الأول ليظهر في الأرشيف السينمائي
+                        ابدأ إنتاج عملك الأول ليظهر في الأرشيف السينمائي وينافس في الحفل السنوي
                       </p>
                     </div>
                   ) : (
@@ -411,7 +657,8 @@ export default function StudioHubView({
                                 ) : (
                                   <Tv className="h-2.5 w-2.5" />
                                 )}
-                                {proj.format === 'film' ? 'فيلم' : 'مسلسل'} • #{proj.boxOfficeRank}
+                                {proj.format === 'film' ? 'فيلم' : 'مسلسل'} • #
+                                {proj.boxOfficeRank}
                               </span>
                               <span className="text-[9px] font-bold text-slate-400">
                                 عام {proj.year}
@@ -465,7 +712,7 @@ export default function StudioHubView({
           COMPACT NEWS POPOVER (Optional Mini Drawer from Bottom Dock)
       =================================================================== */}
       {showNewsDrawer && (
-        <div className="fixed bottom-12 left-3 z-30 w-72 sm:w-80 rounded-2xl border border-amber-500/30 bg-slate-950/90 p-2.5 backdrop-blur-xl shadow-2xl">
+        <div className="absolute bottom-12 left-3 z-30 w-72 sm:w-80 rounded-2xl border border-amber-500/30 bg-slate-950/90 p-2.5 backdrop-blur-xl shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-1.5">
             <div className="flex items-center gap-1.5 text-[11px] font-black text-amber-300">
               <Newspaper className="h-3.5 w-3.5" />
@@ -480,7 +727,7 @@ export default function StudioHubView({
             </button>
           </div>
           <div className="max-h-36 space-y-1.5 overflow-y-auto scrollbar-hide">
-            {worldHistory.slice(0, 6).map((item, idx) => (
+            {worldHistory.slice(0, 8).map((item, idx) => (
               <div
                 key={idx}
                 className="rounded-lg border border-slate-800/80 bg-slate-900/75 px-2 py-1 text-[10px] text-slate-300 leading-relaxed"
@@ -498,7 +745,7 @@ export default function StudioHubView({
       {/* ===================================================================
           LAYER 3: FLOATING BOTTOM GAME DOCK (z-20)
       =================================================================== */}
-      <nav className="fixed bottom-1.5 inset-x-0 z-20 flex items-center justify-center px-2 pointer-events-none">
+      <nav className="absolute bottom-1.5 inset-x-0 z-20 flex items-center justify-center px-2 pointer-events-none">
         <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 rounded-2xl border border-amber-500/25 bg-slate-950/80 px-2 py-1 backdrop-blur-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] overflow-x-auto scrollbar-hide max-w-full">
           {/* Primary CTA: Start / Continue Production */}
           <button
@@ -544,7 +791,9 @@ export default function StudioHubView({
             onClick={() => {
               playTabSwitchSound();
               setActiveScreen('STUDIO_HUB');
-              setHubModalTab(hubModalTab === 'facilities' ? 'none' : 'facilities');
+              setHubModalTab(
+                hubModalTab === 'facilities' ? 'none' : 'facilities'
+              );
             }}
             className={`flex min-h-[32px] items-center gap-1 rounded-xl px-2.5 py-1 text-[10px] font-bold transition-all active:scale-95 shrink-0 ${
               hubModalTab === 'facilities' && activeScreen === 'STUDIO_HUB'
@@ -574,6 +823,24 @@ export default function StudioHubView({
             <span>الأسواق ({unlockedRegions.length})</span>
           </button>
 
+          {/* AI World Tab */}
+          <button
+            type="button"
+            onClick={() => {
+              playTabSwitchSound();
+              setActiveScreen('STUDIO_HUB');
+              setHubModalTab(hubModalTab === 'ai_world' ? 'none' : 'ai_world');
+            }}
+            className={`flex min-h-[32px] items-center gap-1 rounded-xl px-2.5 py-1 text-[10px] font-bold transition-all active:scale-95 shrink-0 ${
+              hubModalTab === 'ai_world' && activeScreen === 'STUDIO_HUB'
+                ? 'border border-amber-500/40 bg-amber-500/15 text-amber-300'
+                : 'text-slate-300 hover:bg-slate-900/80 hover:text-white'
+            }`}
+          >
+            <Wand2 className="h-3 w-3 text-amber-400" />
+            <span>الذكاء الاصطناعي</span>
+          </button>
+
           {/* Archive Tab */}
           <button
             type="button"
@@ -592,6 +859,20 @@ export default function StudioHubView({
             <span>الأرشيف ({releasedProjects.length})</span>
           </button>
 
+          {/* Annual Awards Gala Button */}
+          <button
+            type="button"
+            onClick={() => {
+              playAwardFanfareSound();
+              triggerAnnualAwardsCeremonyNow();
+            }}
+            className="flex min-h-[32px] items-center gap-1 rounded-xl border border-amber-500/35 bg-amber-500/10 px-2.5 py-1 text-[10px] font-black text-amber-300 hover:bg-amber-500/20 active:scale-95 shrink-0"
+            title={`متبقي ${daysToGala} يوم على الحفل السنوي (اضغط لإقامة حفل جوائز العام الآن)`}
+          >
+            <Award className="h-3 w-3 text-amber-400" />
+            <span>الحفل السنوي ({daysToGala}ي)</span>
+          </button>
+
           {/* Leaderboard Tab */}
           <button
             type="button"
@@ -608,20 +889,6 @@ export default function StudioHubView({
           >
             <Trophy className="h-3 w-3 text-amber-400" />
             <span>التصنيف</span>
-          </button>
-
-          {/* Advance Days Button */}
-          <button
-            type="button"
-            onClick={() => {
-              playClickSound();
-              advanceGameDay(5);
-            }}
-            className="flex min-h-[32px] items-center gap-1 rounded-xl border border-slate-700 bg-slate-900/90 px-2.5 py-1 text-[10px] font-bold text-slate-300 hover:border-amber-500/40 hover:text-amber-300 active:scale-95 shrink-0"
-            title="تقدم 5 أيام في التقويم"
-          >
-            <Calendar className="h-3 w-3 text-amber-400" />
-            <span className="hidden md:inline">+5 أيام</span>
           </button>
 
           {/* News Toggle Button */}
@@ -644,4 +911,8 @@ export default function StudioHubView({
       </nav>
     </>
   );
+}
+
+function groqKeyClientOrDefault(key: string): string {
+  return key || '';
 }

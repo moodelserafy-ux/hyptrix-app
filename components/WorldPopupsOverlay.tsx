@@ -29,8 +29,8 @@ export default function WorldPopupsOverlay() {
   // =========================================================================
   if (currentCeremony) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-md">
-        <div className="w-[88%] max-w-4xl max-h-[84dvh] flex flex-col rounded-2xl border border-amber-500/40 bg-slate-950/95 p-3 sm:p-4 shadow-[0_20px_60px_rgba(0,0,0,0.95)] overflow-hidden">
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-md">
+        <div className="w-[90%] max-w-4xl max-h-[86%] flex flex-col rounded-2xl border border-amber-500/40 bg-slate-950/95 p-3 sm:p-4 shadow-[0_20px_60px_rgba(0,0,0,0.95)] overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2.5 shrink-0">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 text-slate-950">
@@ -118,7 +118,7 @@ export default function WorldPopupsOverlay() {
   if (!currentNews) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border border-amber-500/35 bg-slate-950/95 p-3.5 shadow-2xl space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-300">

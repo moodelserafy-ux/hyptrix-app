@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   useGameStore,
   formatGameDate,
@@ -12,6 +12,7 @@ import {
   StudioFacilityId,
   DEFAULT_FACILITIES_LEVELS,
 } from '@/lib/game-engine';
+import { getResolvedDatabase } from '@/lib/db-resolver';
 import { StudioLogoSvg } from './StudioLogoSvg';
 import { StudioCampus3D } from './StudioCampus3D';
 import StudioHubView from './StudioHubView';
@@ -44,10 +45,14 @@ import {
   BarChart3,
   Trophy,
   TrendingUp,
+  Play,
+  Pause,
+  FastForward,
 } from 'lucide-react';
 import {
   playClickSound,
   playTabSwitchSound,
+  playAwardFanfareSound,
   toggleGameAudioMuted,
   getGameAudioMuted,
 } from '@/lib/game-audio';
@@ -56,6 +61,7 @@ export function HyptrixClientApp() {
   const {
     studioCreated,
     studioName,
+    ceoName,
     logo,
     cash,
     marketValue,
@@ -66,11 +72,24 @@ export function HyptrixClientApp() {
     activeScreen,
     draft,
     facilitiesLevels,
+    aiMemoryLog,
+    aiGeneratedActors,
+    emergingCompetitors,
+    breakingNewsQueue,
+    festivalModalQueue,
+    customDbPatch,
+    groqApiKeyClient,
+    preferredGroqModel,
     setActiveScreen,
     advanceGameDay,
+    triggerAnnualAwardsCeremonyNow,
+    addAiDiscoveredActor,
+    addAiEmergingStudio,
+    pushAiContextualNewsEvent,
   } = useGameStore();
 
   const [mounted, setMounted] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
   const [selectedFacility, setSelectedFacility] =
     useState<StudioFacilityId | null>(null);
   const [cameraMode, setCameraMode] = useState<'overview' | 'focus'>('overview');
@@ -79,12 +98,33 @@ export function HyptrixClientApp() {
   const [audioMuted, setAudioMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Automatic Real-Time Calendar Clock State
+  const [clockPaused, setClockPaused] = useState(false);
+  const [clockSpeed, setClockSpeed] = useState<1 | 2>(1);
+  const lastAiTriggeredDayRef = useRef<number>(0);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setMounted(true);
       setAudioMuted(getGameAudioMuted());
+      if (typeof window !== 'undefined') {
+        setIsPortrait(window.innerHeight > window.innerWidth);
+      }
     }, 0);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (typeof window === 'undefined') return;
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -94,6 +134,165 @@ export function HyptrixClientApp() {
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
+
+  // =========================================================================
+  // AUTOMATIC GAME CALENDAR PROGRESSION (Real Strategy Game Clock)
+  // =========================================================================
+  useEffect(() => {
+    if (!mounted || !studioCreated || clockPaused) return;
+    // Pause automatic day tick while a festival ceremony modal is open so the player doesn't miss it
+    if (festivalModalQueue.length > 0) return;
+
+    const intervalMs = clockSpeed === 2 ? 3200 : 6200;
+    const interval = setInterval(() => {
+      advanceGameDay(1);
+    }, intervalMs);
+
+    return () => clearInterval(interval);
+  }, [
+    mounted,
+    studioCreated,
+    clockPaused,
+    clockSpeed,
+    festivalModalQueue.length,
+    advanceGameDay,
+  ]);
+
+  // =========================================================================
+  // BACKGROUND AI WORLD SIMULATION ENGINE (Rising Stars, Emerging Studios & AI News)
+  // =========================================================================
+  useEffect(() => {
+    if (!mounted || !studioCreated) return;
+    if (gameDay <= 3 || lastAiTriggeredDayRef.current === gameDay) return;
+    if (breakingNewsQueue.length > 0 || festivalModalQueue.length > 0) return;
+
+    const shouldDiscoverRisingStar = gameDay % 18 === 0;
+    const shouldDiscoverEmergingStudio = gameDay % 25 === 0;
+    const shouldGenerateMemoryNews = gameDay % 21 === 0;
+
+    if (
+      !shouldDiscoverRisingStar &&
+      !shouldDiscoverEmergingStudio &&
+      !shouldGenerateMemoryNews
+    ) {
+      return;
+    }
+
+    lastAiTriggeredDayRef.current = gameDay;
+    const db = getResolvedDatabase(customDbPatch);
+
+    if (shouldDiscoverRisingStar) {
+      const existingNames = [
+        ...db.actors.map((a) => a.name),
+        ...aiGeneratedActors.map((a) => a.name),
+      ];
+      fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'discover_ai_rising_star',
+          groqKeyOverride: groqApiKeyClient,
+          preferredModel: preferredGroqModel,
+          payload: {
+            studioName,
+            ceoName,
+            gameDay,
+            currentYear,
+            existingNames,
+            aiMemoryLog,
+          },
+        }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.actor) {
+            addAiDiscoveredActor(data.actor, data.headline, data.detail);
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+
+    if (shouldDiscoverEmergingStudio) {
+      const existingStudios = [
+        ...db.competitor_studios.map((s) => s.name),
+        ...emergingCompetitors.map((s) => s.name),
+      ];
+      fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'discover_ai_emerging_studio',
+          groqKeyOverride: groqApiKeyClient,
+          preferredModel: preferredGroqModel,
+          payload: {
+            studioName,
+            ceoName,
+            gameDay,
+            currentYear,
+            existingStudios,
+            aiMemoryLog,
+          },
+        }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.studio) {
+            addAiEmergingStudio(data.studio, data.headline, data.detail);
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+
+    if (shouldGenerateMemoryNews) {
+      fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'generate_ai_memory_news',
+          groqKeyOverride: groqApiKeyClient,
+          preferredModel: preferredGroqModel,
+          payload: {
+            studioName,
+            ceoName,
+            gameDay,
+            currentYear,
+            marketValue,
+            cash,
+            aiMemoryLog,
+          },
+        }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.headline) {
+            pushAiContextualNewsEvent(data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [
+    mounted,
+    studioCreated,
+    gameDay,
+    currentYear,
+    studioName,
+    ceoName,
+    marketValue,
+    cash,
+    aiMemoryLog,
+    aiGeneratedActors,
+    emergingCompetitors,
+    breakingNewsQueue.length,
+    festivalModalQueue.length,
+    customDbPatch,
+    groqApiKeyClient,
+    preferredGroqModel,
+    addAiDiscoveredActor,
+    addAiEmergingStudio,
+    pushAiContextualNewsEvent,
+  ]);
 
   const handleToggleFullscreen = async () => {
     playClickSound();
@@ -129,37 +328,37 @@ export function HyptrixClientApp() {
     switch (screen) {
       case 'PROJECT_SETUP':
         return {
-          title: 'تطوير العمل السينمائي والسيناريو',
+          title: 'تطوير العمل السينمائي والسيناريو بالذكاء الاصطناعي',
           badge: 'المرحلة 1 / 5',
           icon: Clapperboard,
         };
       case 'CREW_CAST_CARDS':
         return {
-          title: 'التعاقد مع المخرج وطاقم النجوم',
+          title: 'التعاقد مع المخرج وطاقم النجوم ومفاوضات الوكلاء',
           badge: 'المرحلة 2 / 5',
           icon: Users,
         };
       case 'PRODUCTION_CRISES':
         return {
-          title: 'الميزانية وبلاتوه التصوير',
+          title: 'الميزانية التفصيلية وبلاتوه التصوير',
           badge: 'المرحلة 3 / 5',
           icon: AlertTriangle,
         };
       case 'RELEASE_SIMULATION':
         return {
-          title: 'العرض الأول وشباك التذاكر',
+          title: 'العرض الأول وتتبع شباك التذاكر والمنصات',
           badge: 'المرحلة 4 / 5',
           icon: BarChart3,
         };
       case 'FESTIVALS_AWARDS':
         return {
-          title: 'السجادة الحمراء والمهرجانات',
+          title: 'السجادة الحمراء والمهرجانات والجوائز السنوية',
           badge: 'المرحلة 5 / 5',
           icon: Award,
         };
       case 'LEADERBOARD_SETTINGS':
         return {
-          title: 'تصنيف الإمبراطوريات والمنافسين',
+          title: 'تصنيف الإمبراطوريات والشركات المنافسة',
           badge: 'التصنيف العالمي',
           icon: Trophy,
         };
@@ -179,12 +378,12 @@ export function HyptrixClientApp() {
   return (
     <div
       dir="rtl"
-      className="relative fixed inset-0 w-screen h-dvh overflow-hidden select-none bg-[#0A0A0C] text-slate-100"
+      className="relative w-full h-full overflow-hidden select-none bg-[#0A0A0C] text-slate-100"
     >
       {/* =====================================================================
           LAYER 1: 3D STUDIO CITY CANVAS (z-0, Fullscreen Interactive WebGL)
       ===================================================================== */}
-      <div className="fixed inset-0 z-0">
+      <div className="absolute inset-0 z-0">
         <StudioCampus3D
           studioName={studioName || 'HYPTRIX'}
           facilitiesLevels={facilitiesLevels || DEFAULT_FACILITIES_LEVELS}
@@ -197,6 +396,7 @@ export function HyptrixClientApp() {
           }}
           isFilmingActive={activeScreen === 'PRODUCTION_CRISES'}
           fullScreenBackground
+          isRotated90={isPortrait}
         />
       </div>
 
@@ -204,8 +404,8 @@ export function HyptrixClientApp() {
           LAYER 2: TOP COMPACT FLOATING HUD BAR (z-20)
       ===================================================================== */}
       {studioCreated && (
-        <header className="fixed top-0 inset-x-0 z-20 h-9 px-2.5 backdrop-blur-md bg-slate-950/75 border-b border-amber-500/25 flex items-center justify-between gap-1.5 shadow-[0_4px_20px_rgba(0,0,0,0.65)]">
-          {/* Right Section: Studio Identity & Return to 3D City */}
+        <header className="absolute top-0 inset-x-0 z-20 h-9 px-2.5 backdrop-blur-md bg-slate-950/75 border-b border-amber-500/25 flex items-center justify-between gap-1.5 shadow-[0_4px_20px_rgba(0,0,0,0.65)]">
+          {/* Right Section: Studio Identity & Active Project */}
           <div className="flex items-center gap-1.5 min-w-0">
             <button
               type="button"
@@ -223,7 +423,6 @@ export function HyptrixClientApp() {
               </span>
             </button>
 
-            {/* Quick Active Project Chip */}
             {draft.title && (
               <button
                 type="button"
@@ -238,12 +437,12 @@ export function HyptrixClientApp() {
                 className="hidden sm:flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20 transition-all active:scale-95"
               >
                 <Clapperboard className="h-3 w-3" />
-                <span className="truncate max-w-[100px]">«{draft.title}»</span>
+                <span className="truncate max-w-[95px]">«{draft.title}»</span>
               </button>
             )}
           </div>
 
-          {/* Center Section: Core Game Resources */}
+          {/* Center Section: Core Game Resources + Live Automatic Calendar + Annual Awards Countdown */}
           <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-hide">
             {/* Treasury Cash */}
             <button
@@ -314,21 +513,62 @@ export function HyptrixClientApp() {
               </span>
             </button>
 
-            {/* Calendar Date + Advance Day */}
+            {/* Live Calendar + Play/Pause & Speed Control */}
+            <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/90 px-2 py-0.5 text-[10px] font-bold text-slate-200 shrink-0">
+              <Calendar className="h-3 w-3 text-amber-400" />
+              <span>{formatGameDate(gameDay, currentYear)}</span>
+              <span className="text-[9px] text-slate-400 font-mono">
+                (يوم #{gameDay})
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playClickSound();
+                  setClockPaused((p) => !p);
+                }}
+                className="ml-0.5 rounded bg-slate-800 p-0.5 text-amber-300 hover:bg-slate-700"
+                title={clockPaused ? 'استئناف مرور الأيام التلقائي' : 'إيقاف مرور الأيام مؤقتاً'}
+              >
+                {clockPaused ? (
+                  <Play className="h-2.5 w-2.5" />
+                ) : (
+                  <Pause className="h-2.5 w-2.5" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  playClickSound();
+                  setClockSpeed((s) => (s === 1 ? 2 : 1));
+                  setClockPaused(false);
+                }}
+                className={`rounded px-1 text-[8px] font-mono font-black ${
+                  clockSpeed === 2
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'bg-slate-800 text-slate-300'
+                }`}
+                title="تغيير سرعة مرور الأيام التلقائية"
+              >
+                <FastForward className="inline h-2 w-2 mr-0.5" />
+                {clockSpeed}x
+              </button>
+            </div>
+
+            {/* Annual Awards Gala Countdown & Instant Trigger */}
             <button
               type="button"
               onClick={() => {
-                playClickSound();
-                advanceGameDay(3);
+                playAwardFanfareSound();
+                triggerAnnualAwardsCeremonyNow();
               }}
-              className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900/85 px-2 py-0.5 text-[10px] font-bold text-slate-200 hover:border-amber-500/40 transition-all active:scale-95 shrink-0"
-              title={`اضغط لتقديم الوقت (${daysToGala} يوم متبقٍ على الحفل السنوي)`}
+              className="flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-300 hover:bg-amber-500/25 transition-all active:scale-95 shrink-0"
+              title="موعد الحفل السنوي لتوزيع جوائز السينما والدراما (اضغط لإقامة الحفل السنوي الآن)"
             >
-              <Calendar className="h-3 w-3 text-amber-400" />
-              <span>{formatGameDate(gameDay, currentYear)}</span>
-              <span className="rounded bg-amber-500/20 px-1 text-[8px] font-black text-amber-300">
-                +3ي
-              </span>
+              <Trophy className="h-3 w-3 text-amber-400" />
+              <span className="hidden sm:inline">الحفل السنوي:</span>
+              <span className="font-mono">{daysToGala} يوم</span>
             </button>
           </div>
 
@@ -367,7 +607,7 @@ export function HyptrixClientApp() {
                 setSettingsOpen(true);
               }}
               className="flex h-6.5 w-6.5 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/85 text-slate-300 hover:border-amber-500/40 hover:text-amber-300 transition-all active:scale-95"
-              title="الإعدادات والحفظ"
+              title="الإعدادات ومحرك الذكاء الاصطناعي والحفظ"
             >
               <Settings className="h-3 w-3" />
             </button>
@@ -393,15 +633,15 @@ export function HyptrixClientApp() {
           LAYER 4: STAGE 1 CREATION OR FLOATING STAGE MODALS (z-30)
       ===================================================================== */}
       {!studioCreated || activeScreen === 'STUDIO_CREATION' ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center p-2 sm:p-3 bg-black/55 backdrop-blur-sm">
-          <div className="w-[88%] max-w-4xl max-h-[88dvh] overflow-y-auto scrollbar-hide">
+        <div className="absolute inset-0 z-30 flex items-center justify-center p-2 sm:p-3 bg-black/55 backdrop-blur-sm">
+          <div className="w-[90%] max-w-4xl max-h-[88%] overflow-y-auto scrollbar-hide">
             <Stage1StudioCreation />
           </div>
         </div>
       ) : (
         isStageModalOpen && (
-          <div className="fixed inset-0 z-30 flex items-center justify-center pt-9 pb-11 px-2 sm:px-4 pointer-events-none">
-            <div className="pointer-events-auto relative flex flex-col w-[88%] sm:w-[85%] max-w-5xl max-h-[80dvh] rounded-2xl border border-amber-500/25 bg-slate-950/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.85)] overflow-hidden">
+          <div className="absolute inset-0 z-30 flex items-center justify-center pt-9 pb-11 px-2 sm:px-4 pointer-events-none">
+            <div className="pointer-events-auto relative flex flex-col w-[90%] sm:w-[86%] max-w-5xl max-h-[82%] rounded-2xl border border-amber-500/25 bg-slate-950/85 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.85)] overflow-hidden">
               {/* Modal Top Bar */}
               <div className="flex items-center justify-between border-b border-slate-800/80 bg-slate-900/80 px-3 py-1.5 shrink-0">
                 <div className="flex items-center gap-2">
@@ -425,9 +665,9 @@ export function HyptrixClientApp() {
                   <div className="hidden md:flex items-center gap-1">
                     {(
                       [
-                        { id: 'PROJECT_SETUP', label: '1. الإعداد' },
+                        { id: 'PROJECT_SETUP', label: '1. السيناريو' },
                         { id: 'CREW_CAST_CARDS', label: '2. النجوم' },
-                        { id: 'PRODUCTION_CRISES', label: '3. التصوير' },
+                        { id: 'PRODUCTION_CRISES', label: '3. الميزانية والتصوير' },
                         { id: 'RELEASE_SIMULATION', label: '4. الإيرادات' },
                         { id: 'FESTIVALS_AWARDS', label: '5. الجوائز' },
                       ] as const
@@ -499,4 +739,3 @@ export function HyptrixClientApp() {
 }
 
 export default HyptrixClientApp;
-
