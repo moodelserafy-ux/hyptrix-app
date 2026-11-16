@@ -14,14 +14,6 @@ export async function POST(req: NextRequest) {
     const { mode, payload, groqKeyOverride, preferredModel } = body;
     const p = (payload || {}) as Record<string, unknown>;
 
-    if (mode === 'generate_script_idea') {
-      return await handleGenerateScriptIdea(p, groqKeyOverride, preferredModel);
-    }
-
-    if (mode === 'analyze_script_synopsis') {
-      return await handleAnalyzeScriptSynopsis(p, groqKeyOverride, preferredModel);
-    }
-
     if (mode === 'evaluate_talent_offer') {
       return await handleEvaluateTalentOffer(p, groqKeyOverride, preferredModel);
     }
@@ -210,131 +202,6 @@ function extractSynopsisHighlights(synopsis: string, title: string) {
 }
 
 /**
- * Stage 2 Mode A: Generate an original movie/series title and full dramatic synopsis
- */
-async function handleGenerateScriptIdea(
-  payload: Record<string, unknown>,
-  groqKeyOverride?: string,
-  preferredModel?: string
-) {
-  const format = String(payload.format || 'film');
-  const primaryGenre = String(payload.primaryGenreName || payload.primaryGenre || 'أكشن');
-  const secondaryGenre = String(payload.secondaryGenreName || payload.secondaryGenre || '');
-  const ageRating = String(payload.ageRating || '+12');
-  const seedTitle = String(payload.currentTitle || '').trim();
-
-  const systemPrompt = `أنت سيناريست ومؤلف سينمائي ودرامي مصري محترف.
-المطلوب منك تأليف فكرة وسيناريو جذاب جداً ومبتكر لـ ${format === 'film' ? 'فيلم سينمائي' : 'مسلسل درامي'} مصري:
-- التصنيف الأساسي: ${primaryGenre} ${secondaryGenre ? `مع تصنيف فرعي: ${secondaryGenre}` : ''}
-- التصنيف العمري: ${ageRating}
-${seedTitle ? `- عنوان مقترح من المنتج لبناء القصة عليه: "${seedTitle}"` : ''}
-
-اكتب بأسلوب سينمائي مصري سلس وطبيعي ومشوق (من 3 إلى 4 جمل تصف البطل، الصراع الرئيسي، والمفاجأة الدرامية في النهاية) بدون أي مبالغة أو ألفاظ سوقية.
-أرجع كائن JSON فقط يحتوي على:
-- title: اسم الفيلم أو المسلسل (عنوان سينمائي مصري جذاب)
-- synopsis: ملخص القصة والحبكة والصراع والنهاية المفاجئة`;
-
-  const userPrompt = `ولّد عنوان وسيناريو جديد ومميز الآن بصيغة JSON.`;
-
-  const groqRes = await callGroqJson(systemPrompt, userPrompt, groqKeyOverride, preferredModel);
-  if (groqRes && typeof groqRes.data.title === 'string' && typeof groqRes.data.synopsis === 'string') {
-    return NextResponse.json({
-      source: 'ورشة تطوير السيناريو',
-      title: groqRes.data.title,
-      synopsis: groqRes.data.synopsis,
-    });
-  }
-
-  const ideas = [
-    {
-      title: seedTitle || 'شفرة باب الخلق',
-      synopsis: `خبير فك شفرات يعثر على خريطة سرية داخل ساعة أثرية في خان الخليلي، فيدخل في مطاردة خطيرة عبر شوارع القاهرة مع شبكة دولية، قبل أن يكتشف في المشهد الأخير أن شريكه المقرب هو العقل المدبر للعملية.`,
-    },
-    {
-      title: seedTitle || 'العقد الأخير في الزمالك',
-      synopsis: `محامٍ شهير يتولى الدفاع في قضية ميراث غامضة داخل قصر قديم بالزمالك، ومع كل جلسة تتكشف أسرار عائلية تقلب الرأي العام، حتى يفجر مفاجأة غير متوقعة أمام المحكمة في المشهد الختامي.`,
-    },
-    {
-      title: seedTitle || 'ليلة سقوط الكينج',
-      synopsis: `ضابط عمليات خاصة متقاعد يضطر للعودة في مهمة سرية لمدة 48 ساعة لإحباط صفقة تهريب كبرى في الميناء، ليجد نفسه في مواجهة مباشرة مع خصمه القديم في معركة حاسمة تحبس الأنفاس.`,
-    },
-    {
-      title: seedTitle || 'المسار المفقود',
-      synopsis: `طبيبة نفسية تحقق في اختفاء غامض لركاب قطار ليلي متجه إلى أسوان، وتكتشف أن كل راكب يخفي سراً يربطه بحادث قديم وقع قبل عشر سنوات، وتنتهي القصة بمواجهة كاشفة فوق السد العالي.`,
-    },
-    {
-      title: seedTitle || 'مزاد منتصف الليل',
-      synopsis: `تاجر تحف شاب يدخل مزاداً سرياً لبيع لوحة نادرة، ليكتشف أن اللوحة تحتوي على ميكروفيلم يفضح شبكة فساد كبرى، فيخوض سباقاً مع الزمن للنجاة بحياته وكشف الحقيقة.`,
-    },
-  ];
-  const chosen = ideas[Math.floor(Math.random() * ideas.length)];
-  return NextResponse.json({
-    source: 'ورشة تطوير السيناريو',
-    ...chosen,
-  });
-}
-
-/**
- * Stage 2 Mode B: Analyze the player's written script synopsis
- */
-async function handleAnalyzeScriptSynopsis(
-  payload: Record<string, unknown>,
-  groqKeyOverride?: string,
-  preferredModel?: string
-) {
-  const title = String(payload.title || 'الفرعون الأخير');
-  const synopsis = String(payload.synopsis || '');
-  const primaryGenre = String(payload.primaryGenreName || payload.primaryGenre || 'دراما');
-  const format = String(payload.format || 'film');
-
-  const { openingClause, conflictClause, wordCount } = extractSynopsisHighlights(synopsis, title);
-
-  const systemPrompt = `أنت مستشار سيناريو وناقد درامي مصري محترف.
-المنتج كتب سيناريو ${format === 'film' ? 'فيلم' : 'مسلسل'} بعنوان "${title}" (النوع: ${primaryGenre}):
-"${synopsis}"
-
-قيّم السيناريو بصدق وموضوعية وبأسلوب مصري احترافي طبيعي (بدون مبالغة في العامية وبدون فصحى جامدة):
-- لو السيناريو قصير أو سطحي، اعطِه تقييماً متوسطاً (55 إلى 70) ووضح بهدوء ما يحتاجه.
-- لو السيناريو فيه حبكة وصراع واضح ونهاية مشوقة، اعطِه تقييماً قوياً (75 إلى 92).
-
-أرجع JSON فقط يحتوي على:
-- score: رقم من 45 إلى 95 يعبر عن قوة السيناريو
-- verdict: رأيك الفني في القصة (جملتان تذكران تفاصيل من القصة نفسها)
-- castingAdvice: نصيحة للمنتج عن نوعية النجوم والمخرجين المناسبين لهذا الورق.`;
-
-  const userPrompt = `حلل سيناريو «${title}» الآن بصيغة JSON.`;
-
-  const groqRes = await callGroqJson(systemPrompt, userPrompt, groqKeyOverride, preferredModel);
-  if (
-    groqRes &&
-    typeof groqRes.data.verdict === 'string' &&
-    typeof groqRes.data.castingAdvice === 'string'
-  ) {
-    const score = Math.min(96, Math.max(45, Number(groqRes.data.score || 78)));
-    return NextResponse.json({
-      source: 'لجنة القراءة الدرامية',
-      score,
-      verdict: groqRes.data.verdict,
-      castingAdvice: groqRes.data.castingAdvice,
-    });
-  }
-
-  const baseScore = wordCount >= 22 ? 86 : wordCount >= 12 ? 76 : 63;
-  return NextResponse.json({
-    source: 'لجنة القراءة الدرامية',
-    score: baseScore,
-    verdict:
-      wordCount >= 14
-        ? `معالجة «${title}» متماسكة درامياً، وخاصة البداية عند "${openingClause}" وتصاعد الصراع في "${conflictClause}"، ما يمنح العمل جاذبية حقيقية لدى الجمهور.`
-        : `فكرة «${title}» عند "${openingClause}" مبشرة كبداية، لكن الورق يحتاج تفصيلاً أعمق في نقطة التحول والنهاية لإقناع نجوم الصف الأول.`,
-    castingAdvice:
-      wordCount >= 14
-        ? `نجوم تصنيف (${primaryGenre}) سيتحمسون للدور، لكن النجوم الكبار سيطالبون بأجرهم الكامل أو نسبة من عوائد العرض.`
-        : `نظراً لاختصار المعالجة الدرامية، قد يتردد بعض النجوم الكبار إلا في حال تقديم عرض مالي قوي ومغري.`,
-  });
-}
-
-/**
  * Stage 3: Evaluate Talent Offer (Actor / Director / Crew) — Non-repetitive, natural Egyptian professional tone
  */
 async function handleEvaluateTalentOffer(
@@ -343,6 +210,7 @@ async function handleEvaluateTalentOffer(
   preferredModel?: string
 ) {
   const talentName = String(payload.talentName || 'النجم');
+  const talentKind = String(payload.talentKind || 'actor');
   const roleLabel = String(payload.roleLabel || 'البطولة');
   const ego = Number(payload.ego || 78);
   const baseSalary = Number(payload.baseSalary || 20_000_000);
@@ -350,20 +218,31 @@ async function handleEvaluateTalentOffer(
   const offeredSalary = Number(payload.offeredSalary || baseSalary);
   const backendPoints = Number(payload.backendPoints || 0);
   const vipDinner = Boolean(payload.vipDinner);
+  const roleSlot = String(payload.roleSlot || 'lead');
+  const roleFitScore = Math.max(0, Math.min(100, Number(payload.roleFitScore || 72)));
   const title = String(payload.projectTitle || payload.title || 'الفرعون الأخير');
   const synopsis = String(payload.synopsis || '');
   const genreName = String(payload.primaryGenre || payload.genreName || 'دراما');
   const genreMasteryScore = Number(payload.genreMasteryScore || 75);
   const studioReputation = Number(payload.studioReputation || 65);
 
-  const { openingClause, conflictClause, endingClause, wordCount } =
+  const { openingClause, conflictClause, endingClause } =
     extractSynopsisHighlights(synopsis, title);
 
-  const effectiveValue =
-    offeredSalary * (1 + backendPoints * 0.018 + (vipDinner ? 0.08 : 0));
+  const effectiveValue = offeredSalary * (1 + backendPoints * 0.018);
   const financialRatio = effectiveValue / Math.max(1, expectedMinSalary);
 
-  const scriptFactor = wordCount >= 18 ? 0.06 : wordCount < 8 ? -0.14 : 0;
+  const roleFitFactor = (roleFitScore - 72) / 100;
+  const roleScopeFactor = talentKind !== 'actor'
+    ? 0
+    : roleSlot === 'lead'
+      ? 0.04
+      : roleSlot === 'supporting'
+        ? (baseSalary >= 60_000_000 ? -0.14 : baseSalary >= 35_000_000 ? -0.07 : 0)
+        : roleSlot === 'cameo'
+          ? (baseSalary >= 60_000_000 ? -0.20 : baseSalary >= 35_000_000 ? -0.12 : baseSalary >= 18_000_000 ? -0.05 : 0)
+          : 0;
+  const relationshipFactor = vipDinner ? 0.035 : 0;
   const genreFactor =
     genreMasteryScore >= 88
       ? 0.08
@@ -374,19 +253,20 @@ async function handleEvaluateTalentOffer(
   const seed = hashSeed(`${talentName}_${title}_${offeredSalary}_${backendPoints}`);
   const personalityStrictness = ((seed % 9) - 4) * 0.022;
 
-  const totalScore = financialRatio + scriptFactor + genreFactor - personalityStrictness;
+  const totalScore = financialRatio + genreFactor + roleFitFactor + roleScopeFactor + relationshipFactor - personalityStrictness;
   const requiredThreshold = ego >= 90 ? 1.05 : ego >= 82 ? 0.99 : 0.93;
-
-  const baselineShouldAccept = totalScore >= requiredThreshold;
+  const baselineShouldAccept = totalScore >= requiredThreshold &&
+    (roleFitScore >= 42 || financialRatio >= 1.6) &&
+    (roleScopeFactor > -0.19 || financialRatio >= 1.7);
   const isUnderpaid = offeredSalary < expectedMinSalary * 0.95;
-  const isWeakGenreFit = genreMasteryScore < 78;
-  const isWeakScript = wordCount < 10;
+  const isWeakGenreFit = genreMasteryScore < 64 || roleFitScore < 56;
 
   const systemPrompt = `أنت الفنان/المخرج المصري "${talentName}".
 تلقيت عرضاً للمشاركة في دور "${roleLabel}" بعمل فني عنوانه "${title}" (التصنيف: ${genreName}).
 ملخص السيناريو: "${synopsis}".
-أجرك المتوقع في السوق: ${(expectedMinSalary / 1_000_000).toFixed(1)} مليون ج.م، والعرض المالي المقدم لك: ${(offeredSalary / 1_000_000).toFixed(1)} مليون ج.م + ${backendPoints}% نسبة من الأرباح ${vipDinner ? '+ جلسة عمل خاصة' : ''}.
-درجة ملاءمة الدور لتخصصك (${genreName}): ${genreMasteryScore}/100، ومكانة شركة الإنتاج: ${studioReputation}/100.
+أجرك المتوقع في السوق: ${(expectedMinSalary / 1_000_000).toFixed(1)} مليون ج.م، والعرض المالي المقدم لك: ${(offeredSalary / 1_000_000).toFixed(1)} مليون ج.م + ${backendPoints}% نسبة من الأرباح ${vipDinner ? '+ جلسة عمل وعشاء مدفوعة منفصلة' : ''}.
+درجة ملاءمة الدور وحجمه لخبرتك: ${roleFitScore}/100، وملاءمتك للتصنيف (${genreName}): ${genreMasteryScore}/100، ومكانة شركة الإنتاج: ${studioReputation}/100. الدور المعروض: ${roleSlot}. نوع الموهبة: ${talentKind}.
+راعِ مكانة الفنان السوقية وحجم الظهور: نجم مرتفع الأجر قد يرفض دوراً مساعداً أو ظهوراً قصيراً إذا لم يكن المقابل أو القيمة الفنية مناسبين، بينما قد يقبلها فنان صاعد كفرصة مهمة. لا تجعل الأجر وحده يلغي عدم ملاءمة الدور.
 توصية المحرك المالي والفني: ${baselineShouldAccept ? 'موافقة على العرض (accepted: true)' : 'الاعتذار عن العرض (accepted: false)'}.
 
 قواعد الأسلوب (مهمة جداً):
@@ -403,9 +283,7 @@ async function handleEvaluateTalentOffer(
   if (groqRes && typeof groqRes.data.reason === 'string') {
     const finalAccepted =
       typeof groqRes.data.accepted === 'boolean'
-        ? financialRatio < 0.82
-          ? false
-          : groqRes.data.accepted
+        ? baselineShouldAccept && financialRatio >= 0.82 && groqRes.data.accepted
         : baselineShouldAccept;
     return NextResponse.json({
       source: 'وكيل أعمال الفنان',
@@ -434,14 +312,14 @@ async function handleEvaluateTalentOffer(
         `بصراحة معالجة «${title}» محترمة، لكن شروط العقد المالي أقل من الحد الأدنى اللي بقبل بيه (${(expectedMinSalary / 1_000_000).toFixed(1)}M ج.م)، ياريت تراجعوا الميزانية ونعيد التفاوض.`,
       ];
       egyptianReason = underpaidVariants[seed % underpaidVariants.length];
+    } else if (roleScopeFactor <= -0.1) {
+      egyptianReason = `أقدّر العرض، لكن حجم الظهور في دور «${roleLabel}» أصغر من المناسب لمكانتي والتزاماتي الحالية. ممكن نعيد التفاوض على حجم الدور أو المقابل أو نبحث عن شخصية أكثر تأثيراً في العمل.`;
     } else if (isWeakGenreFit) {
       const genreVariants = [
         `قريت سيناريو «${title}» بالكامل، لكن حاسس إن تصنيف (${genreName}) وتفاصيل "${openingClause}" بعيدة عن المنطقة الفنية اللي بفضل أقدمها لجمهوري في المرحلة دي.`,
         `أعتذر عن الدور في «${title}» لأن تركيبة الشخصية في إطار الـ (${genreName}) لا تشبه اختياراتي الحالية، إلا لو كان هناك عرض استثنائي يعوض هذه المجازفة الفنية.`,
       ];
       egyptianReason = genreVariants[seed % genreVariants.length];
-    } else if (isWeakScript) {
-      egyptianReason = `ملخص سيناريو «${title}» لا يزال مختصراً ولا يوضح أبعاد الشخصية أو تطور الصراع الدرامي الكافي؛ أفضل الانتظار حتى تكتمل المعالجة الدرامية بشكل أوضح.`;
     } else {
       const generalRejectVariants = [
         `رغم إن خط "${conflictClause}" في «${title}» فكرته واعدة، إلا أن بنود التعاقد الحالية لا تتناسب مع جدول ارتباطاتي الفنية وأجري في السوق حالياً.`,
@@ -713,7 +591,7 @@ async function handleGenerateCrises(
 البطل: "${leadName}"، الخصم: "${antagonistName}"، التصنيف العمري: "${ageRating}"، توتر بين النجوم: ${hasEgoClash}.
 يجب أن تكون المواقف مرتبطة بأحداث سيناريو اللاعب ("${openingClause}" و "${conflictClause}") ومكتوبة بلغة مصرية طبيعية واحترافية.
 أرجع JSON فقط يحتوي على مصفوفة crises من 3 عناصر، كل عنصر يحتوي على:
-id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB (label, cost, hypeDelta, qualityDelta).`;
+id, title, description, optionA وoptionB، وكل اختيار يحتوي label وcost وhypeDelta وqualityDelta وreputationDelta وmarketValueDelta وdelayDays. اجعل القرارات ذات مفاضلات حقيقية: المال والسمعة والجودة والحماس وموعد العرض.`;
 
   const userPrompt = `ولّد 3 مواقف إنتاجية أثناء تصوير «${title}» بصيغة JSON الآن.`;
 
@@ -735,12 +613,18 @@ id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB 
         cost: 3_500_000,
         hypeDelta: 6,
         qualityDelta: 5,
+        reputationDelta: 1,
+        marketValueDelta: 1_000_000,
+        delayDays: 1,
       },
       optionB: {
         label: 'الاكتفاء بالتجهيزات الحالية التزاماً بسقف الميزانية',
         cost: 0,
         hypeDelta: -4,
         qualityDelta: -5,
+        reputationDelta: -1,
+        marketValueDelta: -1_500_000,
+        delayDays: 0,
       },
     },
     {
@@ -756,12 +640,18 @@ id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB 
         cost: 2_500_000,
         hypeDelta: 10,
         qualityDelta: 4,
+        reputationDelta: 2,
+        marketValueDelta: 1_500_000,
+        delayDays: 0,
       },
       optionB: {
         label: 'تشديد الحراسة على اللوكيشن واستكمال الجدول كما هو (0.5M ج.م)',
         cost: 500_000,
         hypeDelta: -3,
         qualityDelta: -2,
+        reputationDelta: -1,
+        marketValueDelta: -500_000,
+        delayDays: 0,
       },
     },
     {
@@ -773,12 +663,18 @@ id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB 
         cost: 1_800_000,
         hypeDelta: 4,
         qualityDelta: 3,
+        reputationDelta: 1,
+        marketValueDelta: 750_000,
+        delayDays: 1,
       },
       optionB: {
         label: 'حذف اللقطات مباشرة في غرفة المونتاج دون إعادة تصوير',
         cost: 0,
         hypeDelta: -3,
         qualityDelta: -6,
+        reputationDelta: -2,
+        marketValueDelta: -1_000_000,
+        delayDays: 0,
       },
     },
   ];

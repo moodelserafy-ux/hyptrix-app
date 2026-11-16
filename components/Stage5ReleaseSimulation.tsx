@@ -1029,7 +1029,7 @@ export function Stage5ReleaseSimulation() {
               )}
             </div>
 
-            <div className="flex items-center gap-3 pt-2">
+            <div className="step-navigation flex items-center gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setActiveScreen('PRODUCTION_CRISES')}

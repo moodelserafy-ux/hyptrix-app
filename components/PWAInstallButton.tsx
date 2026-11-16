@@ -65,11 +65,10 @@ export function PWAInstallButton() {
       <button
         type="button"
         onClick={handleInstallClick}
-        className="flex min-h-[38px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-2.5 py-1.5 text-xs font-black text-indigo-700 transition active:border-b-2 active:translate-y-0.5 whitespace-nowrap shrink-0"
+        className="flex h-8 w-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-indigo-100 bg-white px-1.5 py-1.5 text-xs font-black text-indigo-700 transition hover:bg-indigo-50 sm:h-[38px] sm:w-auto sm:rounded-2xl sm:border-2 sm:border-b-4 sm:border-b-indigo-200 sm:px-2.5"
       >
         <Download className="h-3.5 w-3.5 shrink-0 text-violet-600" />
         <span className="hidden sm:inline">تطبيق الموبايل</span>
-        <span className="sm:hidden">APP</span>
       </button>
 
       {showModal && (

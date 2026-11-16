@@ -155,6 +155,8 @@ export interface TalentOfferRecord {
   offeredSalary: number;
   backendPoints: number;
   vipDinner: boolean;
+  vipDinnerCost?: number;
+  roleFitScore?: number;
   submittedDay: number;
   responseDueDay: number;
   status: TalentOfferStatus;
@@ -238,12 +240,18 @@ export interface CrisisEventItem {
     cost: number;
     hypeDelta: number;
     qualityDelta: number;
+    reputationDelta?: number;
+    marketValueDelta?: number;
+    delayDays?: number;
   };
   optionB: {
     label: string;
     cost: number;
     hypeDelta: number;
     qualityDelta: number;
+    reputationDelta?: number;
+    marketValueDelta?: number;
+    delayDays?: number;
   };
   resolved?: boolean;
   chosenOption?: 'A' | 'B' | 'VIP_BAILOUT';
@@ -351,12 +359,6 @@ export interface ActiveDraftProject {
   scheduledReleaseDay: number | null;
   filmingDaysElapsed: number;
   productionNews: DailyAiNewsItem[];
-  aiScriptAnalysis?: {
-    score: number;
-    verdict: string;
-    castingAdvice: string;
-    modelUsed: string;
-  } | null;
 }
 
 export type GroqModelId =
@@ -512,16 +514,16 @@ function applyAcceptedOfferToDraft(
       next.cameoActorIds.includes(id);
 
     if (!alreadyInCast) {
-      if (slot === 'antagonist' && !next.antagonistId) {
+      // The signed performer is assigned to the exact role negotiated by the player.
+      // Never silently turn a cameo/supporting offer into a lead contract.
+      if (slot === 'lead' && next.leadActorIds.length < 2) {
+        next.leadActorIds = [...next.leadActorIds, id];
+      } else if (slot === 'antagonist' && !next.antagonistId) {
         next.antagonistId = id;
+      } else if (slot === 'supporting' && next.supportingActorIds.length < 4) {
+        next.supportingActorIds = [...next.supportingActorIds, id];
       } else if (slot === 'cameo' && next.cameoActorIds.length < 2) {
         next.cameoActorIds = [...next.cameoActorIds, id];
-      } else if (next.leadActorIds.length < 2) {
-        next.leadActorIds = [...next.leadActorIds, id];
-      } else if (!next.antagonistId) {
-        next.antagonistId = id;
-      } else {
-        next.supportingActorIds = [...next.supportingActorIds, id];
       }
     }
   }
@@ -986,11 +988,10 @@ const DEFAULT_DRAFT: ActiveDraftProject = {
   seriesSeason: 'ramadan',
   filmSeason: 'eid_adha',
   primaryGenre: 'action',
-  secondaryGenre: 'popular_drama',
+  secondaryGenre: null,
   ageRating: '+12',
-  title: 'الفرعون الأخير',
-  scriptSynopsis:
-    'ضابط عمليات خاصة سابق يكتشف شبكة دولية لتهريب الآثار تحت شوارع القاهرة القديمة، فيخوض معركة شرسة ضد إمبراطور الجريمة لإنقاذ كنز فرعوني مفقود قبل فوات الأوان.',
+  title: '',
+  scriptSynopsis: '',
   directorId: null,
   writerIds: ['wri_1'],
   dopId: null,
@@ -1508,15 +1509,27 @@ export const useGameStore = create<HyptrixGameState>()(
         }),
 
       submitTalentOffer: (offer) =>
-        set((state) => ({
-          draft: {
-            ...state.draft,
-            talentOffers: {
-              ...state.draft.talentOffers,
-              [offer.talentId]: offer,
+        set((state) => {
+          const previousOffer = state.draft.talentOffers[offer.talentId];
+          const dinnerAlreadyPaidForPendingOffer =
+            previousOffer?.status === 'pending' &&
+            previousOffer.vipDinner &&
+            (previousOffer.vipDinnerCost || 0) > 0;
+          const dinnerCost = offer.vipDinner && dinnerAlreadyPaidForPendingOffer
+            ? 0
+            : Math.max(0, offer.vipDinnerCost || 0);
+          if (state.cash < dinnerCost) return state;
+          return {
+            cash: state.cash - dinnerCost,
+            draft: {
+              ...state.draft,
+              talentOffers: {
+                ...state.draft.talentOffers,
+                [offer.talentId]: offer,
+              },
             },
-          },
-        })),
+          };
+        }),
 
       confirmMultiAcceptedChoice: (slot, chosenTalentIds) =>
         set((state) => {
@@ -1668,16 +1681,56 @@ export const useGameStore = create<HyptrixGameState>()(
           const crisis = state.draft.crises.find((c) => c.id === crisisId);
           if (!crisis || crisis.resolved) return state;
           const opt = choice === 'A' ? crisis.optionA : crisis.optionB;
+          const cost = Math.max(0, Number(opt.cost) || 0);
+          const hypeDelta = Math.max(-25, Math.min(25, Number(opt.hypeDelta) || 0));
+          const qualityDelta = Math.max(-15, Math.min(15, Number(opt.qualityDelta) || 0));
+          const reputationDelta = Math.max(-5, Math.min(5, Number(opt.reputationDelta) || 0));
+          const marketDelta = Math.max(-5_000_000, Math.min(5_000_000, Number(opt.marketValueDelta) || 0));
+          const delayDays = Math.max(0, Math.min(5, Number(opt.delayDays) || 0));
+          if (state.cash < cost) return state;
+
+          const nextCash = state.cash - cost;
+          const nextReputation = Math.max(
+            15,
+            Math.min(100, state.reputation + reputationDelta)
+          );
+          const nextMarketModifier =
+            (state.marketValueModifier || 0) + marketDelta;
+          const nextDraft: ActiveDraftProject = {
+            ...state.draft,
+            hypeScore: Math.max(10, Math.min(100, state.draft.hypeScore + hypeDelta)),
+            qualityModifier: state.draft.qualityModifier + qualityDelta,
+            filmingDurationDays: Math.max(1, state.draft.filmingDurationDays + delayDays),
+            scheduledReleaseDay: state.draft.scheduledReleaseDay === null
+              ? null
+              : state.draft.scheduledReleaseDay + delayDays,
+            crises: state.draft.crises.map((c) =>
+              c.id === crisisId ? { ...c, resolved: true, chosenOption: choice } : c
+            ),
+            productionNews: [
+              ...(state.draft.productionNews || []),
+              {
+                id: `decision_${crisisId}_${choice}_${state.gameDay}`,
+                day: state.gameDay,
+                headline: `قرار إنتاجي: ${crisis.title}`,
+                detail: `اختيارك: ${opt.label}. أثر القرار سيظهر في جودة العمل وترقب الجمهور والجدول والسمعة والميزانية.`,
+                impactType: hypeDelta >= 0 ? 'positive' : 'drama',
+                hypeDelta,
+              },
+            ],
+          };
+          const nextMarketValue = calculateStudioMarketValue({
+            cash: nextCash,
+            reputation: nextReputation,
+            releasedProjects: state.releasedProjects,
+            marketValueModifier: nextMarketModifier,
+          });
           return {
-            cash: state.cash - opt.cost,
-            draft: {
-              ...state.draft,
-              hypeScore: Math.max(10, Math.min(100, state.draft.hypeScore + opt.hypeDelta)),
-              qualityModifier: state.draft.qualityModifier + opt.qualityDelta,
-              crises: state.draft.crises.map((c) =>
-                c.id === crisisId ? { ...c, resolved: true, chosenOption: choice } : c
-              ),
-            },
+            cash: nextCash,
+            reputation: nextReputation,
+            marketValueModifier: nextMarketModifier,
+            marketValue: nextMarketValue,
+            draft: nextDraft,
           };
         }),
 

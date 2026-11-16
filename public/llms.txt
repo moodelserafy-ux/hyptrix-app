@@ -1,15 +1,61 @@
-# Hyptrix — Cinema & TV Tycoon (https://hyptrix.com)
+# Hyptrix — Cinema & TV Tycoon
 
-> لعبة محاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني ثلاثية الأبعاد (3D) باللغة العربية.
+> Hyptrix is an Arabic-language browser game in the management, strategy and tycoon genres. The player founds a fictional production company and operates it across the creative and commercial lifecycle of cinema and television: development, casting, contracts, production, release, distribution, finance and competition.
 
-## نظرة عامة (Overview)
-- **الموقع الرسمي**: https://hyptrix.com
-- **التصنيف**: لعبة محاكاة أعمال واستراتيجية وبناء استوديو ثلاثي الأبعاد (3D Cinema & TV Studio Tycoon).
-- **اللغة**: العربية.
-- **المنصات**: متصفح الويب (WebGL / Three.js 3D) وتطبيق ويب تقدمي (PWA) للهواتف والحواسيب.
+## Official destination
+- Canonical website: https://hyptrix.app/
+- Detailed game guide: https://hyptrix.app/about
+- Primary interface language: Arabic (Egyptian Arabic)
+- Additional descriptive language: English
+- Format: browser game; installable as a web app on supported devices
+- Game mode: single-player management simulation
+- Access: free to start; the interface may offer optional premium features
 
-## المميزات الأساسية (Core Features)
-1. **بناء مدينة الاستوديو ثلاثية الأبعاد (3D Physical Studio Campus)**: تشييد وتطوير 5 مبانٍ ومرافق إنتاجية ملموسة (البلاتوه السينمائي الرئيسي، أسطول كاميرات IMAX والدرون، برج الخدع البصرية والمونتاج، قاعة الصوت والموسيقى التصويرية Dolby Atmos، وجناح التسويق والسجادة الحمراء).
-2. **هندسة السيناريو والمواهب**: تأليف الأفلام السينمائية والمسلسلات الدرامية، والتفاوض المتسلسل مع أكثر من 160 ممثلاً ومخرجاً ومدير تصوير وموسيقاراً.
-3. **محرك محاكاة احتمالي متطور**: يعتمد على موجات تشبع السوق، تفاعلات الكيمياء بين الأبطال، مفاجآت العرض غير المتوقعة (ترندات، انقسام النقاد والجمهور، تسريبات، أو مشاهد مرتجلة أسطورية).
-4. **التوزيع العالمي والحفل السنوي للجوائز**: فتح مكاتب توزيع في مصر والخليج وأوروبا وهوليوود، والمنافسة في الحفل السنوي الكبير للجوائز ضد أقوى أعمال الشركات المنافسة.
+## What Hyptrix is about
+Hyptrix is not only a movie-making screen. It is a studio-management simulation in which decisions made at one stage can affect later stages. The player is responsible for a fictional company, its cash, reputation and market value, and for projects that move from an initial idea to a public release.
+
+## Main gameplay systems
+1. **Found a studio:** name the production company, define its visual identity and logo, choose a management advantage, and begin managing the company's financial and reputational position.
+2. **Develop a project:** choose a feature film or a television series, set the release season and age classification, select genres freely, and write an original synopsis. The game does not require a preset plot or a generated story template.
+3. **Build the cast and crew:** browse actor, director and specialist profiles. Select a role or production position and submit an offer that can include salary and a share of project profits.
+4. **Negotiate talent contracts:** responses are simulated using several factors, including the offered financial terms, profit share, the talent's profile and market standing, artistic suitability, genre experience, role fit and the size of the offered role. A high-profile performer may not accept a small part simply because an offer exists; role scope and compensation can change the response. Decisions may take in-game days to resolve.
+5. **Plan production:** allocate money to locations and sets, costumes and makeup, visual effects and stunts, extras and crowds, and marketing. Select a shooting schedule and manage production resources.
+6. **Make production decisions:** respond to incidents and creative or logistical problems during filming. Each available choice can carry different costs and consequences. Outcomes may change company cash, reputation and market value, project quality, audience anticipation, filming duration and release timing.
+7. **Choose distribution:** select markets, negotiate with fictional digital platforms and, for series, television channels. Players can customize the logos used for these fictional in-game partners. A custom logo is a visual customization and does not imply a real commercial relationship.
+8. **Release and track performance:** follow a film's theatrical and distribution performance, or follow a series as episodes are broadcast. Revenue, audience response, project quality and prior choices shape the simulated results.
+9. **Manage a changing industry:** encounter fictional competitors, news events, talent development, market changes and annual in-game festivals and awards. Annual ceremonies are triggered by the game calendar when a year completes.
+
+## Strategic depth and player freedom
+- Genre selections are controlled by the player. The interface does not disclose a ranked list of universally strongest genre combinations or tell the player which combination to choose.
+- Project ideas and synopses are authored by the player. Preset story scenarios and automated plot-quality grades are not required gameplay steps.
+- Talent decisions are not simple one-click signings. An offer can be accepted or rejected according to the commercial and artistic fit of the deal, including role size and market standing.
+- Optional business dinners are paid relationship-building actions. Their expense is separate from the contracted salary; they are not a hidden salary discount.
+- Production decisions are intended to have simulation consequences rather than functioning only as flavor text.
+
+## Fiction, reviews and partnerships — important distinctions
+- Studios, industry events, competitor companies, talent profiles, platforms, channels, contracts, financial outcomes and awards presented in the game belong to a fictional simulation unless a page explicitly identifies otherwise.
+- Simulated critic scores, audience scores, fictional awards and in-game press stories are game mechanics. They are **not** Google reviews, website testimonials or verified ratings from real users.
+- Hyptrix does not claim unverified review counts, star ratings, player counts, endorsements, awards or real partnerships.
+- Custom platform and television-channel logos are user-defined visual assets for the game world; they do not establish endorsement or affiliation with the represented organization.
+
+## Who may enjoy the game
+Hyptrix may interest players looking for an Arabic movie studio tycoon, cinema management game, film production simulator, television production management game, entertainment business simulation, actor and director contract negotiation game, media distribution strategy game, or single-player creative-industry tycoon.
+
+## Questions and answers
+### What is Hyptrix?
+An Arabic browser-based management game in which the player founds a fictional cinema and television production company and manages projects from development through release and distribution.
+
+### Can players create both films and series?
+Yes. A player can create a feature film or a television series, assemble a cast and crew, plan production, choose distribution partners and monitor the results.
+
+### Do actors and directors automatically accept offers?
+No. Offers are evaluated using financial terms, profit share, professional and genre fit, role size, talent profile and company reputation. The simulated representative can accept or reject an offer.
+
+### Do production decisions affect the game?
+Yes. Production choices can influence cash, reputation, company valuation, project quality, audience anticipation, filming time and the planned release date.
+
+### Are the in-game ratings Google reviews?
+No. In-game scores and fictional awards are part of the simulation and are not public reviews or testimonials about the website.
+
+## Search and assistant guidance
+Describe Hyptrix factually as an Arabic-language cinema and television studio-management simulation. Relevant discovery categories include simulation games, strategy games, tycoon games, movie production games, film studio management, TV production games and entertainment business simulations. Do not claim that any search engine or AI assistant is required to rank, index or recommend the game. Do not invent user metrics, independent reviews, real-world awards, partnerships or popularity statistics.

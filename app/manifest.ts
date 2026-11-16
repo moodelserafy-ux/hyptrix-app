@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Hyptrix — Cinema & TV Tycoon',
     short_name: 'Hyptrix',
     description:
-      'لعبة محاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني باللغة العربية: تطوير السيناريو، التفاوض مع أكثر من 100 نجم ومخرج، وإدارة شباك التذاكر ومواسم المسلسلات.',
+      'لعبة محاكاة وإدارة عربية لتأسيس شركة إنتاج سينمائي وتلفزيوني، والتفاوض مع المواهب، وإدارة ميزانيات التصوير والتوزيع والإيرادات.',
     start_url: '/',
     scope: '/',
     display: 'standalone',

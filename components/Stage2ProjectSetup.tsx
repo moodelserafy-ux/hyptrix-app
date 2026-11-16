@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useGameStore } from '@/lib/store';
 import { GENRES, GenreId } from '@/lib/db-resolver';
 import {
-  calculateGenreSynergy,
   ProjectFormat,
   SeriesEpisodes,
   SeriesSeason,
@@ -17,7 +16,6 @@ import {
 import {
   Film,
   Tv,
-  Sparkles,
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
@@ -37,30 +35,6 @@ import {
   Compass,
   Ban,
 } from 'lucide-react';
-
-const PRESET_SCRIPTS: { title: string; primary: GenreId; secondary: GenreId; synopsis: string }[] = [
-  {
-    title: 'الفرعون الأخير',
-    primary: 'action',
-    secondary: 'popular_drama',
-    synopsis:
-      'ضابط عمليات خاصة سابق يكتشف شبكة دولية لتهريب الآثار تحت شوارع القاهرة القديمة، فيخوض معركة شرسة ضد إمبراطور الجريمة لإنقاذ كنز فرعوني مفقود قبل فوات الأوان.',
-  },
-  {
-    title: 'همس الغرفة 404',
-    primary: 'crime_mystery',
-    secondary: 'psychological_horror',
-    synopsis:
-      'طبيب نفسي جنائي يحقق في سلسلة جرائم غامضة داخل فندق مهجور بالإسكندرية، ليكتشف في النهاية أن القاتل يترك رسائل مشفرة مرتبطة بماضي الطبيب نفسه.',
-  },
-  {
-    title: 'خزينة المليار',
-    primary: 'heist',
-    secondary: 'comedy',
-    synopsis:
-      'مهندس عبقري مفلس يجمع فريقاً من الهواة غريبي الأطوار لتنفيذ أكبر عملية سطو ذكية على خزينة رقمية، لكن الخطة تنقلب إلى مطاردات كوميدية ومفاجأة غير متوقعة في المشهد الأخير.',
-  },
-];
 
 const GENRE_VISUAL_META: Record<
   GenreId,
@@ -192,16 +166,10 @@ export function Stage2ProjectSetup() {
     draft,
     updateDraft,
     setActiveScreen,
-    groqApiKeyClient,
-    preferredGroqModel,
   } = useGameStore();
   const [subStep, setSubStep] = useState<1 | 2 | 3 | 4>(1);
   const [genrePickTab, setGenrePickTab] = useState<'primary' | 'secondary'>('primary');
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [generatingIdea, setGeneratingIdea] = useState(false);
-  const [analyzingScript, setAnalyzingScript] = useState(false);
-
-  const synergy = calculateGenreSynergy(draft.primaryGenre, draft.secondaryGenre, 88, 88);
 
   const primaryGenreName =
     GENRES.find((g) => g.id === draft.primaryGenre)?.name || draft.primaryGenre;
@@ -214,85 +182,6 @@ export function Stage2ProjectSetup() {
     setSubStep(next);
   };
 
-  const handleGenerateScriptIdea = async () => {
-    setGeneratingIdea(true);
-    setValidationError(null);
-    try {
-      const res = await fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'generate_script_idea',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            format: draft.format,
-            primaryGenre: draft.primaryGenre,
-            primaryGenreName,
-            secondaryGenreName,
-            ageRating: draft.ageRating,
-            currentTitle: draft.title,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (data.title && data.synopsis) {
-        updateDraft({
-          title: data.title,
-          scriptSynopsis: data.synopsis,
-          aiScriptAnalysis: null,
-        });
-      }
-    } catch {
-      // Fallback handled
-    } finally {
-      setGeneratingIdea(false);
-    }
-  };
-
-  const handleAnalyzeScriptSynopsis = async () => {
-    if (!draft.title.trim() || draft.scriptSynopsis.trim().length < 15) {
-      setValidationError(
-        'اكتب اسم العمل وملخص القصة أولاً (15 حرفاً على الأقل) لتقييم قوة السيناريو.'
-      );
-      return;
-    }
-    setAnalyzingScript(true);
-    setValidationError(null);
-    try {
-      const res = await fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'analyze_script_synopsis',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            title: draft.title,
-            synopsis: draft.scriptSynopsis,
-            format: draft.format,
-            primaryGenreName,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (data.verdict) {
-        updateDraft({
-          aiScriptAnalysis: {
-            score: Number(data.score || 78),
-            verdict: data.verdict,
-            castingAdvice: data.castingAdvice || '',
-            modelUsed: 'لجنة القراءة الدرامية',
-          },
-        });
-      }
-    } catch {
-      // Fallback handled
-    } finally {
-      setAnalyzingScript(false);
-    }
-  };
-
   const handleProceedToCrew = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!draft.title.trim()) {
@@ -301,7 +190,7 @@ export function Stage2ProjectSetup() {
     }
     if (draft.scriptSynopsis.trim().length < 15) {
       setValidationError(
-        'يرجى كتابة ملخص القصة والحبكة وتفاصيل النهاية (15 حرفاً على الأقل) قبل الانتقال للتفاوض مع النجوم.'
+        'اكتب نبذة عن فكرة المشروع (15 حرفاً على الأقل) قبل الانتقال للتفاوض مع المواهب.'
       );
       return;
     }
@@ -317,7 +206,7 @@ export function Stage2ProjectSetup() {
           <div className="min-w-0">
             <span className="text-[10px] font-black text-violet-700">غرفة تطوير المشروع</span>
             <h2 className="font-display truncate text-base font-black text-slate-900 sm:text-lg">
-              {['شكل العمل الفني', 'موعد العرض', 'التصنيف العمري', 'السيناريو'][subStep - 1]}
+              {['شكل العمل الفني', 'موعد العرض', 'التصنيف العمري', 'فكرة المشروع'][subStep - 1]}
             </h2>
           </div>
           <span className="shrink-0 rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black tabular-nums text-violet-800">
@@ -410,7 +299,7 @@ export function Stage2ProjectSetup() {
               </div>
             )}
 
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setActiveScreen('STUDIO_HUB')}
@@ -533,7 +422,7 @@ export function Stage2ProjectSetup() {
               </div>
             </div>
 
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setSubStep(1)}
@@ -709,29 +598,9 @@ export function Stage2ProjectSetup() {
               })}
             </div>
 
-            {/* Live Synergy Indicator */}
-            <div
-              className={`mt-4 flex items-center gap-3 rounded-2xl border-2 p-4 text-xs ${
-                synergy.isHarmonious
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                  : 'border-rose-200 bg-rose-50 text-rose-900'
-              }`}
-            >
-              {synergy.isHarmonious ? (
-                <Sparkles className="h-5 w-5 shrink-0 text-emerald-600" />
-              ) : (
-                <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600" />
-              )}
-              <div>
-                <div className="font-black">
-                  مؤشر التناغم الدرامي ({primaryGenreName}
-                  {secondaryGenreName ? ` + ${secondaryGenreName}` : ''}):
-                </div>
-                <div className="mt-0.5 font-medium">{synergy.label}</div>
-              </div>
-            </div>
 
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+
+            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setSubStep(2)}
@@ -768,46 +637,10 @@ export function Stage2ProjectSetup() {
                 <div>
                   <span className="text-[11px] font-black text-violet-600">الخطوة 4 من 4</span>
                   <h3 className="font-display text-lg font-black text-slate-900">
-                    عنوان العمل وتطوير السيناريو
+                    عنوان العمل وفكرة المشروع
                   </h3>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={handleGenerateScriptIdea}
-                disabled={generatingIdea}
-                className="flex items-center gap-1.5 rounded-xl border-b-4 border-indigo-900/30 bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-2 text-[11px] font-black text-white shadow-sm transition hover:brightness-105 active:border-b-0 active:translate-y-0.5 disabled:opacity-60"
-              >
-                <Sparkles className={`h-3.5 w-3.5 ${generatingIdea ? 'animate-spin' : ''}`} />
-                <span>
-                  {generatingIdea
-                    ? 'جاري صياغة معالجة درامية جديدة...'
-                    : 'اقتراح فكرة وسيناريو من ورشة الكتابة'}
-                </span>
-              </button>
-            </div>
-
-            {/* 1-Tap Quick Script Chips */}
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {PRESET_SCRIPTS.map((preset, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() =>
-                    updateDraft({
-                      title: preset.title,
-                      primaryGenre: preset.primary,
-                      secondaryGenre: preset.secondary,
-                      scriptSynopsis: preset.synopsis,
-                      aiScriptAnalysis: null,
-                    })
-                  }
-                  className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-black text-violet-700 transition hover:bg-violet-100"
-                >
-                  ✨ سيناريو جاهز: {preset.title}
-                </button>
-              ))}
             </div>
 
             <div className="mt-4 space-y-4">
@@ -828,55 +661,24 @@ export function Stage2ProjectSetup() {
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <label htmlFor="script-synopsis-input" className="block text-xs font-black text-slate-700">
-                    ملخص القصة والصراع الدرامي وتفاصيل النهاية
+                    ملخص فكرة المشروع
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleAnalyzeScriptSynopsis}
-                    disabled={analyzingScript}
-                    className="rounded-lg bg-cyan-50 px-2.5 py-1 text-[10px] font-black text-cyan-800 border border-cyan-200 hover:bg-cyan-100 disabled:opacity-50"
-                  >
-                    {analyzingScript ? 'جاري التقييم...' : 'تقييم قوة السيناريو والحبكة'}
-                  </button>
+
                 </div>
                 <textarea
                   id="script-synopsis-input"
                   rows={3}
                   value={draft.scriptSynopsis}
                   onChange={(e) => updateDraft({ scriptSynopsis: e.target.value })}
-                  placeholder="اكتب قصة العمل، الصراع الدرامي، والمفاجأة في النهاية..."
+                  placeholder="اكتب الفكرة الأساسية للعمل والشخصيات أو العالم الذي تدور فيه الأحداث..."
                   className="mt-1.5 w-full rounded-2xl border-2 border-indigo-100 bg-[#F5F7FF] p-3.5 text-xs leading-relaxed font-medium text-slate-900 focus:border-violet-600 focus:bg-white focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* Script Consultant Evaluation Card */}
-            {draft.aiScriptAnalysis && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-4 rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-4 text-xs"
-              >
-                <div className="flex items-center justify-between border-b border-violet-100 pb-2">
-                  <span className="font-black text-violet-800">
-                    تقرير مستشار السيناريو ولجنة القراءة
-                  </span>
-                  <span className="rounded-full bg-violet-600 px-2.5 py-0.5 text-[11px] font-black text-white tabular-nums">
-                    قوة الورق: {draft.aiScriptAnalysis.score}/100
-                  </span>
-                </div>
-                <p className="mt-2 font-bold leading-relaxed text-slate-800">
-                  {draft.aiScriptAnalysis.verdict}
-                </p>
-                {draft.aiScriptAnalysis.castingAdvice && (
-                  <p className="mt-1.5 text-[11px] font-semibold text-indigo-700">
-                    💡 توصية اختيار الأبطال: {draft.aiScriptAnalysis.castingAdvice}
-                  </p>
-                )}
-              </motion.div>
-            )}
 
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+
+            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setSubStep(3)}

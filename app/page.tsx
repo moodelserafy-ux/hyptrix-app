@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import Link from 'next/link';
 import {
   useGameStore,
   formatGameDate,
@@ -33,6 +34,43 @@ import {
 } from 'lucide-react';
 
 const SECONDS_PER_GAME_DAY = 15;
+
+const homeFaqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: [
+    {
+      '@type': 'Question',
+      name: 'ما هي Hyptrix؟',
+      acceptedAnswer: { '@type': 'Answer', text: 'Hyptrix لعبة محاكاة وإدارة عربية تتيح لك تأسيس شركة إنتاج سينمائي وتلفزيوني، وإنشاء أفلام ومسلسلات، وإدارة المواهب والميزانيات والتصوير والتوزيع والإيرادات.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'هل يمكن إنشاء فيلم ومسلسل داخل اللعبة؟',
+      acceptedAnswer: { '@type': 'Answer', text: 'نعم. يمكنك بدء مشروع فيلم أو مسلسل، واختيار تصنيفاته وموسمه وتصنيفه العمري وكتابة فكرته، ثم تكوين طاقم العمل وإدارة الإنتاج والعرض.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'ما القرارات التي يديرها اللاعب؟',
+      acceptedAnswer: { '@type': 'Answer', text: 'تدير التعاقدات والأجور ونسب الأرباح والميزانيات وتوقيت التصوير وقرارات الأزمات والأسواق والمنصات والقنوات، ثم تتابع أثرها على الجودة وترقب الجمهور والنتائج المالية.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'هل تتغير نتائج القرارات أثناء التصوير؟',
+      acceptedAnswer: { '@type': 'Answer', text: 'نعم. قرارات الأزمات والإنتاج يمكن أن تغيّر رصيد الشركة وسمعتها وقيمتها السوقية وجودة المشروع وترقب الجمهور ومدة التصوير وموعد الإصدار.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'هل تقييمات اللعبة مراجعات حقيقية للموقع؟',
+      acceptedAnswer: { '@type': 'Answer', text: 'لا. التقييمات والأخبار والجوائز التي تظهر داخل عالم اللعبة نتائج محاكاة خيالية، وليست مراجعات Google أو شهادات من جهات خارجية.' },
+    },
+    {
+      '@type': 'Question',
+      name: 'هل الممثلون يقبلون كل العروض؟',
+      acceptedAnswer: { '@type': 'Answer', text: 'لا. قبول العرض أو رفضه يتأثر بالأجر ونسبة الأرباح والملاءمة الفنية للتصنيف وحجم الدور ومكانة الفنان وشروط المشروع.' },
+    },
+  ],
+};
 
 export default function HyptrixMainPage() {
   const {
@@ -274,20 +312,6 @@ export default function HyptrixMainPage() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [mounted, studioCreated, activeScreen]);
 
-  if (!mounted) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F2F5FF] text-slate-900">
-        <div className="text-center">
-          <div className="font-display text-3xl font-black tracking-widest text-violet-600">
-            HYPTRIX
-          </div>
-          <div className="mt-1.5 text-xs font-bold text-slate-500">
-            جاري تجهيز مقر الاستوديو...
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const isVipActive = Boolean(vipPassExpiresAt);
   const daysUntilAnnualGala = getDaysRemainingUntilAnnualAwards(gameDay);
@@ -319,8 +343,8 @@ export default function HyptrixMainPage() {
           }`}
         >
           <div className="h-0.5 w-full bg-gradient-to-l from-cyan-400 via-violet-500 to-fuchsia-500" />
-          <div className="flex min-h-[58px] items-center justify-between gap-2 px-2.5 py-2 sm:px-4">
-            <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-h-[62px] items-center justify-between gap-1.5 px-2.5 py-2.5 sm:gap-3 sm:px-5">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <button
                 type="button"
                 onClick={() => setActiveScreen(studioCreated ? 'STUDIO_HUB' : 'STUDIO_CREATION')}
@@ -340,28 +364,28 @@ export default function HyptrixMainPage() {
                       </span>
                     )}
                   </div>
-                  <div className="max-w-[118px] truncate text-[10px] font-black text-slate-800 sm:max-w-[180px] sm:text-[11px]">
-                    {studioCreated ? studioName : 'تأسيس الاستوديو'}
+                  <div className="max-w-[56px] truncate text-[9px] font-black text-slate-800 sm:max-w-[180px] sm:text-[11px]">
+                    {studioCreated ? 'إدارة الاستوديو' : 'تأسيس استوديوك'}
                   </div>
                 </div>
               </button>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1 sm:gap-1.5 tabular-nums">
+            <div className="flex shrink-0 flex-nowrap items-center justify-end gap-1 tabular-nums sm:gap-2">
               {studioCreated && (
                 <>
                   <div
                     data-testid="hud-cash-pill"
                     title="الخزينة النقدية المتاحة للإنتاج والأجور"
-                    className="flex h-8 items-center gap-1 rounded-xl border border-emerald-100 bg-emerald-50/85 px-1.5 text-[9px] font-black text-emerald-800 sm:px-2 sm:text-[10px]"
+                    className="flex h-8 max-w-[76px] min-w-0 items-center gap-1 rounded-xl border border-emerald-100 bg-emerald-50/85 px-2 text-[9px] font-black text-emerald-800 sm:max-w-none sm:text-[10px]"
                   >
                     <Wallet className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                    <span>{formatMoney(cash)}</span>
+                    <span className="truncate">{formatMoney(cash)}</span>
                   </div>
                   <div
                     data-testid="hud-market-value-pill"
                     title="القيمة السوقية الإجمالية للشركة"
-                    className="hidden h-8 items-center gap-1 rounded-xl border border-violet-100 bg-violet-50/85 px-1.5 text-[9px] font-black text-violet-800 sm:flex sm:px-2 sm:text-[10px]"
+                    className="hidden h-8 items-center gap-1 rounded-xl border border-violet-100 bg-violet-50/85 px-2 text-[9px] font-black text-violet-800 md:flex sm:text-[10px]"
                   >
                     <TrendingUp className="h-3.5 w-3.5 shrink-0 text-violet-600" />
                     <span>{formatMoney(marketValue)}</span>
@@ -386,14 +410,14 @@ export default function HyptrixMainPage() {
                 type="button"
                 onClick={() => setVipModalOpen(true)}
                 aria-label="عضوية VIP"
-                className={`flex h-8 items-center gap-1 rounded-xl px-2 text-[10px] font-black text-white shadow-sm transition hover:brightness-105 ${
+                className={`flex h-8 w-8 shrink-0 items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-black text-white shadow-sm transition hover:brightness-105 sm:w-auto sm:px-2 ${
                   vipPassExpiresAt
                     ? 'bg-emerald-500'
                     : 'bg-gradient-to-l from-amber-500 via-fuchsia-600 to-violet-600'
                 }`}
               >
                 <Crown className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline">VIP</span>
+                <span className="hidden sm:inline">VIP</span>
               </button>
             </div>
           </div>
@@ -437,7 +461,7 @@ export default function HyptrixMainPage() {
 
       {/* Main Mobile Game Viewport with top spacing for the floating navbar */}
       <main
-        className={`mx-auto max-w-xl px-3 pb-8 sm:px-4 ${
+        className={`mx-auto max-w-4xl px-3 pb-8 sm:px-5 ${
           studioCreated ? 'pt-28' : 'pt-20'
         }`}
       >
@@ -469,6 +493,111 @@ export default function HyptrixMainPage() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <section aria-labelledby="game-overview-title" className="mx-auto mt-10 max-w-5xl px-4 pb-12 sm:px-6" dir="rtl">
+        <div className="rounded-[28px] border border-violet-100 bg-white/90 p-5 shadow-[0_18px_55px_-32px_rgba(79,70,229,0.34)] sm:p-8">
+          <p className="text-xs font-black tracking-wide text-violet-700">لعبة محاكاة وإدارة صناعة الترفيه</p>
+          <h1 id="game-overview-title" className="font-display mt-2 text-2xl font-black leading-tight text-slate-950 sm:text-3xl">
+            Hyptrix — لعبة إدارة استوديو سينمائي وتلفزيوني
+          </h1>
+          <p className="mt-4 max-w-4xl text-sm leading-8 text-slate-700">
+            Hyptrix لعبة إدارة ومحاكاة تضع اللاعب في موقع مؤسس شركة إنتاج فني. يبدأ ببناء الاستوديو وهويته، ثم يطوّر مشروعاً سينمائياً أو تلفزيونياً، ويحدد نوع العمل وتصنيفاته وميزانيته وموعده، ويكتب فكرته بنفسه، ويتفاوض مع الممثلين والمخرجين وأفراد الطاقم. تستمر التجربة بعد التعاقد إلى التخطيط للتصوير، والتعامل مع الأزمات والقرارات الإنتاجية، ثم إطلاق الفيلم أو بث حلقات المسلسل ومتابعة الإيرادات والمنافسة والجوائز.
+          </p>
+          <Link href="/about" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3.5 py-2 text-xs font-black text-violet-800 transition hover:bg-violet-100">
+            اقرأ الدليل الكامل عن اللعبة وأنظمتها
+          </Link>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <article className="rounded-2xl bg-violet-50/80 p-4">
+              <h2 className="font-display text-sm font-black text-violet-950">تأسيس شركة الإنتاج</h2>
+              <p className="mt-2 text-xs leading-7 text-slate-700">اختيار اسم الاستوديو وشعاره، تحديد هوية الشركة، وإدارة الخزينة والقيمة السوقية والسمعة.</p>
+            </article>
+            <article className="rounded-2xl bg-cyan-50/80 p-4">
+              <h2 className="font-display text-sm font-black text-cyan-950">تطوير الأفلام والمسلسلات</h2>
+              <p className="mt-2 text-xs leading-7 text-slate-700">إنشاء فيلم أو مسلسل، اختيار التصنيفات الدرامية بحرية، تحديد الموسم والتصنيف العمري، وكتابة ملخص العمل.</p>
+            </article>
+            <article className="rounded-2xl bg-fuchsia-50/80 p-4">
+              <h2 className="font-display text-sm font-black text-fuchsia-950">سوق المواهب والتفاوض</h2>
+              <p className="mt-2 text-xs leading-7 text-slate-700">التفاوض على أجور الممثلين والمخرجين والطاقم، توزيع الأدوار، ومراعاة خبرة الفنان وملاءمة الدور وشروط العقد.</p>
+            </article>
+            <article className="rounded-2xl bg-emerald-50/80 p-4">
+              <h2 className="font-display text-sm font-black text-emerald-950">الميزانيات والإنتاج</h2>
+              <p className="mt-2 text-xs leading-7 text-slate-700">توزيع ميزانية مواقع التصوير والديكور والملابس والمؤثرات والحشود، وضبط الجدول الزمني والتعامل مع الأزمات.</p>
+            </article>
+            <article className="rounded-2xl bg-amber-50/80 p-4">
+              <h2 className="font-display text-sm font-black text-amber-950">التوزيع والإيرادات</h2>
+              <p className="mt-2 text-xs leading-7 text-slate-700">اختيار أسواق التوزيع والمنصات الرقمية والقنوات التلفزيونية، ثم متابعة شباك التذاكر أو أداء حلقات المسلسل.</p>
+            </article>
+            <article className="rounded-2xl bg-sky-50/80 p-4">
+              <h2 className="font-display text-sm font-black text-sky-950">المنافسة والتطور</h2>
+              <p className="mt-2 text-xs leading-7 text-slate-700">متابعة الشركات المنافسة والأخبار وتطور المواهب، وبناء سجل للأعمال والإنجازات والمشاركة في المهرجانات والجوائز السنوية.</p>
+            </article>
+          </div>
+          <div className="mt-7 border-t border-slate-100 pt-5">
+            <h2 className="font-display text-lg font-black text-slate-950">كيف تلعب Hyptrix؟</h2>
+            <ol className="mt-3 grid gap-2 text-xs leading-7 text-slate-700 sm:grid-cols-2">
+              <li>١. أسّس الاستوديو وحدد هويته وموارده.</li>
+              <li>٢. أنشئ مشروع فيلم أو مسلسل وحدد مواصفاته.</li>
+              <li>٣. قدّم عروض التعاقد واختر طاقم العمل المناسب.</li>
+              <li>٤. خصص الميزانية واتخذ قرارات الإنتاج والتصوير.</li>
+              <li>٥. اختر قنوات ومنصات التوزيع وابدأ العرض.</li>
+              <li>٦. تابع النتائج المالية والمنافسة والجوائز مع مرور وقت اللعبة.</li>
+            </ol>
+            <p className="mt-4 text-[11px] leading-7 text-slate-500">
+              جميع الأسماء والكيانات والأحداث داخل المحاكاة يمكن أن تكون خيالية أو مولّدة لأغراض اللعب، ولا تمثل بالضرورة شركات أو اتفاقات أو تقييمات حقيقية خارج اللعبة.
+            </p>
+          </div>
+          <div className="mt-7 border-t border-slate-100 pt-5">
+            <h2 className="font-display text-lg font-black text-slate-950">أسئلة شائعة عن اللعبة</h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">ما هي Hyptrix؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">Hyptrix لعبة محاكاة وإدارة عربية تتيح لك تأسيس شركة إنتاج سينمائي وتلفزيوني، وإنشاء أفلام ومسلسلات، وإدارة المواهب والميزانيات والتصوير والتوزيع والإيرادات.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">هل يمكن إنشاء فيلم ومسلسل داخل اللعبة؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">نعم. يمكنك بدء مشروع فيلم أو مسلسل، واختيار تصنيفاته وموسمه وتصنيفه العمري وكتابة فكرته، ثم تكوين طاقم العمل وإدارة الإنتاج والعرض.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">ما القرارات التي يديرها اللاعب؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">تدير التعاقدات والأجور ونسب الأرباح والميزانيات وتوقيت التصوير وقرارات الأزمات والأسواق والمنصات والقنوات، ثم تتابع أثرها على الجودة وترقب الجمهور والنتائج المالية.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">هل تتغير نتائج القرارات أثناء التصوير؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">نعم. قرارات الأزمات والإنتاج يمكن أن تغيّر رصيد الشركة وسمعتها وقيمتها السوقية وجودة المشروع وترقب الجمهور ومدة التصوير وموعد الإصدار.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">هل تقييمات اللعبة مراجعات حقيقية للموقع؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">لا. التقييمات والأخبار والجوائز التي تظهر داخل عالم اللعبة نتائج محاكاة خيالية، وليست مراجعات Google أو شهادات من جهات خارجية.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">هل الممثلون يقبلون كل العروض؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">لا. قبول العرض أو رفضه يتأثر بالأجر ونسبة الأرباح والملاءمة الفنية للتصنيف وحجم الدور ومكانة الفنان وشروط المشروع.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">هل Hyptrix لعبة أفلام فقط؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">لا، يمكنك إدارة إنتاج فيلم سينمائي أو مسلسل تلفزيوني، واختيار طريقة العرض والتوزيع المناسبة لكل مشروع.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">هل الممثلون يقبلون كل العروض؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">لا. قرار التعاقد يتأثر بالأجر ونسبة الأرباح والملاءمة الفنية للتصنيف وحجم الدور ومكانة الفنان وشروط المشروع.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">هل قرارات التصوير شكلية؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">لا. الخيارات الإنتاجية قد تغيّر الميزانية والجودة والسمعة وترقب الجمهور والجدول الزمني وموعد الإصدار.</p>
+              </article>
+              <article className="rounded-2xl bg-slate-50 p-4">
+                <h3 className="text-sm font-black text-slate-900">هل توجد مراجعات Google أو شراكات حقيقية؟</h3>
+                <p className="mt-2 text-xs leading-7 text-slate-700">لا تُعرض تقييمات خارجية مصطنعة. أسماء المنصات والقنوات والأحداث داخل اللعبة عناصر محاكاة ما لم يُذكر خلاف ذلك بوضوح.</p>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homeFaqSchema) }}
+      />
 
       {/* Sudden World Breaking News & Automatic Festival Ceremonies Popups */}
       <WorldPopupsOverlay />

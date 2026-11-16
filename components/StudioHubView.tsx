@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { StepModalFrame } from './StepModalFrame';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -449,23 +450,27 @@ export function StudioHubView({
         </button>
       )}
 
-      {/* Focused Slide-Up Mobile Game Modal Sheet */}
+      {/* Market and archive sheets live in a body portal so the animated hub cannot
+          trap fixed positioning or clip their independent scrolling area. */}
       <AnimatePresence>
-        {activeSheet && (
+        {activeSheet && typeof document !== 'undefined' && createPortal(
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+            className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           >
             <motion.div
               initial={{ y: 80, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 80, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-              className="max-h-[86vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl border-2 border-indigo-100 bg-[#F4F7FF] p-5 shadow-2xl sm:rounded-3xl sm:p-6"
+              className="flex h-[min(88dvh,900px)] max-h-[88dvh] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border-2 border-indigo-100 bg-[#F4F7FF] shadow-2xl sm:rounded-3xl"
+              role="dialog"
+              aria-modal="true"
+              aria-label="نافذة تفاصيل الاستوديو"
             >
-              <div className="mb-4 flex items-center justify-between border-b border-indigo-100 pb-3">
+              <div className="flex shrink-0 items-center justify-between border-b border-indigo-100 bg-[#F4F7FF] px-5 py-4 sm:px-6">
                 <h2 className="font-display text-lg font-black text-slate-900">
                   {activeSheet === 'markets' && 'خريطة التوزيع الإقليمية والعالمية'}
                   {activeSheet === 'archive' && 'أرشيف الأفلام والمسلسلات المنتجة'}
@@ -482,6 +487,7 @@ export function StudioHubView({
                 </button>
               </div>
 
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-5 pb-6 pt-4 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] sm:px-6">
               {activeSheet === 'markets' && (
                 <div className="space-y-3">
                   <div className="rounded-2xl border border-indigo-100 bg-white p-3.5 text-xs font-bold text-slate-600">
@@ -662,8 +668,10 @@ export function StudioHubView({
               )}
 
               {activeSheet === 'leaderboard' && <LeaderboardAndSettingsView embedded />}
+              </div>
             </motion.div>
-          </motion.div>
+          </motion.div>,
+          document.body
         )}
       </AnimatePresence>
       </div>

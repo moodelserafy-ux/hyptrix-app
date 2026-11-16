@@ -64,7 +64,7 @@ export function VipSweatPassModal({
           </div>
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-violet-600" />
-            <span>فتح أسرار تناغم التصنيفات وقدرات النجوم المخفية.</span>
+            <span>مزايا إدارية إضافية وأدوات متابعة موسعة لتطوير الاستوديو.</span>
           </div>
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-violet-600" />

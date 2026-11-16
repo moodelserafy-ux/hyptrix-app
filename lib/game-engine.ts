@@ -287,9 +287,8 @@ export function calculateNegotiatedSalary(
   if (founderPerk === 'shark_negotiator') {
     salary = salary * 0.85;
   }
-  if (vipDinnerDiscount) {
-    salary = salary * 0.8;
-  }
+  // A hosted dinner is a paid relationship-building action, not a salary discount.
+  void vipDinnerDiscount;
   return Math.round(salary);
 }
 

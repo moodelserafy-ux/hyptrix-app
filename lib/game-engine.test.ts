@@ -84,7 +84,7 @@ test('Cast Chemistry triggers severe ego clash when 2+ stars have ego >= 90', ()
   assert.ok(chemistry.warningMessage?.includes(highEgoStars[0].name));
 });
 
-test('Negotiated salary and expected salary account for perks, ego, and genre mastery', () => {
+test('Negotiated salary accounts for contract perks; paid dinner is a separate relationship cost', () => {
   const baseSalary = 10_000_000;
   const normalOffer = calculateNegotiatedSalary(baseSalary, 0, 'visionary_director', false);
   assert.equal(normalOffer, 10_000_000);
@@ -93,7 +93,7 @@ test('Negotiated salary and expected salary account for perks, ego, and genre ma
   assert.equal(sharkOffer, 8_500_000);
 
   const vipDinnerOffer = calculateNegotiatedSalary(baseSalary, 0, 'visionary_director', true);
-  assert.equal(vipDinnerOffer, 8_000_000);
+  assert.equal(vipDinnerOffer, 10_000_000);
 
   // Out-of-genre + high ego increases expected salary demand
   const highDemand = calculateTalentExpectedSalary({

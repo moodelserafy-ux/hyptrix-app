@@ -34,6 +34,9 @@ import {
   Handshake,
   Radio,
   Globe,
+  Upload,
+  Save,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 export function Stage4ProductionCrises() {
@@ -45,6 +48,7 @@ export function Stage4ProductionCrises() {
     gameDay,
     currentYear,
     customDbPatch,
+    importCustomDatabase,
     aiGeneratedActors,
     actorDynamicState,
     groqApiKeyClient,
@@ -71,6 +75,9 @@ export function Stage4ProductionCrises() {
     null
   );
   const [marketStatusMsg, setMarketStatusMsg] = useState<string | null>(null);
+  const [logoTargetId, setLogoTargetId] = useState('plat_1');
+  const [logoUrlInput, setLogoUrlInput] = useState('');
+  const [logoEditorMessage, setLogoEditorMessage] = useState<string | null>(null);
   const prevElapsedRef = useRef<number>(draft.filmingDaysElapsed);
 
   const liveActors = getLiveActorsWithEvolution({
@@ -121,6 +128,59 @@ export function Stage4ProductionCrises() {
   const tvChannels = db.streaming_platforms.filter(
     (p) => p.platform_type === 'tv_channel' || p.id.startsWith('tv_')
   );
+  const selectedLogoPartner = db.streaming_platforms.find((p) => p.id === logoTargetId)
+    || digitalPlatforms[0]
+    || tvChannels[0]
+    || null;
+
+  useEffect(() => {
+    if (!selectedLogoPartner) return;
+    if (selectedLogoPartner.id !== logoTargetId) setLogoTargetId(selectedLogoPartner.id);
+    setLogoUrlInput(selectedLogoPartner.logo_url || '');
+  }, [logoTargetId, selectedLogoPartner?.id, selectedLogoPartner?.logo_url]);
+
+  const persistPartnerLogo = (nextLogoUrl: string) => {
+    if (!selectedLogoPartner) {
+      setLogoEditorMessage('لا توجد منصة أو قناة متاحة لتخصيص شعارها.');
+      return;
+    }
+    const cleanUrl = nextLogoUrl.trim();
+    const isHttpsUrl = /^https:\/\//i.test(cleanUrl);
+    const isSafeImageData = /^data:image\/(png|jpeg|webp);base64,/i.test(cleanUrl);
+    if (cleanUrl && !isHttpsUrl && !isSafeImageData) {
+      setLogoEditorMessage('استخدم رابط HTTPS أو ملف صورة PNG / JPG / WebP.');
+      return;
+    }
+    const updatedPlatforms = db.streaming_platforms.map((partner) =>
+      partner.id === selectedLogoPartner.id ? { ...partner, logo_url: cleanUrl } : partner
+    );
+    importCustomDatabase({
+      ...(customDbPatch || {}),
+      streaming_platforms: updatedPlatforms,
+    });
+    setLogoUrlInput(cleanUrl);
+    setLogoEditorMessage(cleanUrl ? 'تم حفظ الشعار في بيانات اللعبة.' : 'تم حذف الشعار المخصص والعودة إلى الرمز الافتراضي.');
+  };
+
+  const handlePartnerLogoFile = (file?: File) => {
+    if (!file) return;
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setLogoEditorMessage('صيغة الصورة غير مدعومة. استخدم PNG أو JPG أو WebP.');
+      return;
+    }
+    if (file.size > 250 * 1024) {
+      setLogoEditorMessage('حجم الصورة يجب ألا يتجاوز 250 كيلوبايت حتى تظل بيانات اللعبة خفيفة.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      persistPartnerLogo(result);
+    };
+    reader.onerror = () => setLogoEditorMessage('تعذر قراءة الصورة. جرّب ملفاً آخر.');
+    reader.readAsDataURL(file);
+  };
 
   const chosenDigitalPlat =
     digitalPlatforms.find((p) => p.id === draft.selectedPlatformId) ||
@@ -233,11 +293,12 @@ export function Stage4ProductionCrises() {
         }
       }
 
+      const effectiveDurationDays = draft.filmingDurationDays || calculatedDurationDays;
       const isMilestoneDay =
         forceMilestoneNews ||
         elapsedDays === 2 ||
         elapsedDays === 5 ||
-        elapsedDays >= calculatedDurationDays;
+        elapsedDays >= effectiveDurationDays;
 
       const alreadyHasNewsForDay = (draft.productionNews || []).some(
         (n) => n.day === currentDay
@@ -684,6 +745,51 @@ export function Stage4ProductionCrises() {
                   </span>
                 </div>
 
+                <details className="mb-4 overflow-hidden rounded-2xl border border-violet-200 bg-violet-50/70">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-xs font-black text-violet-950">
+                    <span className="flex items-center gap-2"><ImageIcon className="h-4 w-4 text-violet-700" /> تخصيص شعارات المنصات والقنوات التلفزيونية</span>
+                    <span className="text-[10px] font-bold text-violet-700">فتح محرر الشعارات</span>
+                  </summary>
+                  <div className="space-y-3 border-t border-violet-100 bg-white/90 p-3.5">
+                    <p className="text-[10px] leading-6 text-slate-600">أضف شعاراً مخصصاً للهوية البصرية داخل عالم لعبتك. هذه الشعارات لتخصيص المحاكاة فقط ولا تعني وجود شراكة حقيقية مع أي جهة.</p>
+                    <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr]">
+                      <div>
+                        <label htmlFor="partner-logo-target" className="mb-1.5 block text-[10px] font-black text-slate-700">المنصة أو القناة</label>
+                        <select
+                          id="partner-logo-target"
+                          value={selectedLogoPartner?.id || ''}
+                          onChange={(event) => { setLogoTargetId(event.target.value); setLogoEditorMessage(null); }}
+                          className="w-full rounded-xl border border-indigo-100 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-violet-400"
+                        >
+                          {[...digitalPlatforms, ...tvChannels].map((partner) => (
+                            <option key={partner.id} value={partner.id}>{partner.name} · {partner.platform_type === 'tv_channel' || partner.id.startsWith('tv_') ? 'قناة' : 'منصة'}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="partner-logo-url" className="mb-1.5 block text-[10px] font-black text-slate-700">رابط صورة HTTPS</label>
+                        <input
+                          id="partner-logo-url"
+                          type="url"
+                          value={logoUrlInput.startsWith('data:') ? '' : logoUrlInput}
+                          onChange={(event) => setLogoUrlInput(event.target.value)}
+                          placeholder="https://example.com/logo.png"
+                          className="w-full rounded-xl border border-indigo-100 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-violet-400"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={() => persistPartnerLogo(logoUrlInput)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-violet-600 px-3.5 py-2 text-[11px] font-black text-white transition hover:bg-violet-700"><Save className="h-3.5 w-3.5" /> حفظ الشعار</button>
+                      <label className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-[11px] font-black text-indigo-800 transition hover:bg-indigo-100">
+                        <Upload className="h-3.5 w-3.5" /> رفع صورة
+                        <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { handlePartnerLogoFile(event.target.files?.[0]); event.currentTarget.value = ''; }} />
+                      </label>
+                      <button type="button" onClick={() => { setLogoUrlInput(''); persistPartnerLogo(''); }} className="rounded-xl border border-rose-100 px-3 py-2 text-[10px] font-black text-rose-700 hover:bg-rose-50">إزالة الشعار</button>
+                    </div>
+                    {logoEditorMessage && <p role="status" className="text-[10px] font-bold text-violet-800">{logoEditorMessage}</p>}
+                    {selectedLogoPartner?.logo_url && <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-2"><img src={selectedLogoPartner.logo_url} alt={`معاينة شعار ${selectedLogoPartner.name}`} className="h-10 w-10 rounded-lg border border-slate-200 bg-white object-contain p-1" /><span className="text-[10px] font-bold text-slate-600">معاينة الشعار المحفوظ: {selectedLogoPartner.name}</span></div>}
+                  </div>
+                </details>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {digitalPlatforms.map((plat) => {
                     const offerAmount = Math.round(
@@ -704,13 +810,16 @@ export function Stage4ProductionCrises() {
                             : 'border-indigo-100 bg-[#F8FAFF] hover:border-violet-300'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-display text-xs font-black text-slate-900">
-                            {plat.name}
-                          </span>
-                          <span className="rounded-md bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700">
-                            منصة رقمية
-                          </span>
+                        <div className="flex items-center gap-3">
+                          {plat.logo_url ? (
+                            <img src={plat.logo_url} alt={`شعار ${plat.name}`} loading="lazy" className="h-9 w-9 shrink-0 rounded-xl border border-slate-200 bg-white object-contain p-1" />
+                          ) : (
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-sm font-black text-violet-700">{plat.name.slice(0, 1)}</span>
+                          )}
+                          <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                          <span className="font-display text-xs font-black text-slate-900">{plat.name}</span>
+                          <span className="rounded-md bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700">منصة رقمية</span>
+                          </div>
                         </div>
                         <div className="mt-1.5 flex items-center justify-between text-[11px] tabular-nums">
                           <span className="text-slate-500">
@@ -752,13 +861,16 @@ export function Stage4ProductionCrises() {
                               : 'border-indigo-100 bg-[#F8FAFF] hover:border-cyan-300'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="font-display text-xs font-black text-slate-900">
-                              {tv.name}
-                            </span>
-                            <span className="rounded-md bg-cyan-100 px-1.5 py-0.5 text-[9px] font-black text-cyan-800">
-                              قناة تلفزيونية
-                            </span>
+                          <div className="flex items-center gap-3">
+                            {tv.logo_url ? (
+                              <img src={tv.logo_url} alt={`شعار ${tv.name}`} loading="lazy" className="h-9 w-9 shrink-0 rounded-xl border border-slate-200 bg-white object-contain p-1" />
+                            ) : (
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-sm font-black text-cyan-700">{tv.name.slice(0, 1)}</span>
+                            )}
+                            <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                            <span className="font-display text-xs font-black text-slate-900">{tv.name}</span>
+                            <span className="rounded-md bg-cyan-100 px-1.5 py-0.5 text-[9px] font-black text-cyan-800">قناة تلفزيونية</span>
+                            </div>
                           </div>
                           <div className="mt-1.5 flex items-center justify-between text-[11px] tabular-nums">
                             <span className="text-slate-500">
@@ -1018,16 +1130,18 @@ export function Stage4ProductionCrises() {
                   <div className="mt-4 space-y-2.5">
                     <button
                       type="button"
+                      disabled={cash < activeCrisis.optionA.cost}
                       onClick={() => resolveCrisisOption(activeCrisis.id, 'A')}
-                      className="min-h-[46px] w-full rounded-2xl border-2 border-indigo-200 border-b-4 border-b-indigo-300 bg-white p-3 text-right text-xs font-black text-slate-900 shadow-xs transition hover:border-violet-500 active:border-b-2 active:translate-y-0.5"
+                      className="min-h-[46px] w-full rounded-2xl border-2 border-indigo-200 border-b-4 border-b-indigo-300 bg-white p-3 text-right text-xs font-black text-slate-900 shadow-xs transition hover:border-violet-500 active:border-b-2 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       أ) {activeCrisis.optionA.label}
                     </button>
 
                     <button
                       type="button"
+                      disabled={cash < activeCrisis.optionB.cost}
                       onClick={() => resolveCrisisOption(activeCrisis.id, 'B')}
-                      className="min-h-[46px] w-full rounded-2xl border-2 border-slate-200 border-b-4 border-b-slate-300 bg-slate-50 p-3 text-right text-xs font-bold text-slate-700 transition hover:bg-slate-100 active:border-b-2 active:translate-y-0.5"
+                      className="min-h-[46px] w-full rounded-2xl border-2 border-slate-200 border-b-4 border-b-slate-300 bg-slate-50 p-3 text-right text-xs font-bold text-slate-700 transition hover:bg-slate-100 active:border-b-2 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       ب) {activeCrisis.optionB.label}
                     </button>
@@ -1060,7 +1174,7 @@ export function Stage4ProductionCrises() {
               </motion.div>
             )}
 
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setSubStep(1)}

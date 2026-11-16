@@ -61,6 +61,65 @@ interface ActiveNegotiationTarget {
   roleSlot: OfferRoleSlot;
 }
 
+const ROLE_CAPACITY: Partial<Record<OfferRoleSlot, number>> = {
+  lead: 2,
+  antagonist: 1,
+  supporting: 4,
+  cameo: 2,
+};
+
+function roleSalaryFactor(slot: OfferRoleSlot, kind: 'actor' | 'crew') {
+  if (kind === 'crew') return 1;
+  if (slot === 'lead') return 1.14;
+  if (slot === 'antagonist') return 0.96;
+  if (slot === 'supporting') return 0.64;
+  if (slot === 'cameo') return 1; // cameo reduction is applied by calculateTalentExpectedSalary
+  return 1;
+}
+
+function roleScopeAcceptanceAdjustment(slot: OfferRoleSlot, baseSalary: number, kind: 'actor' | 'crew') {
+  if (kind !== 'actor') return 0;
+  if (slot === 'lead') return 0.04;
+  if (slot === 'supporting') return baseSalary >= 60_000_000 ? -0.14 : baseSalary >= 35_000_000 ? -0.07 : 0;
+  if (slot === 'cameo') return baseSalary >= 60_000_000 ? -0.20 : baseSalary >= 35_000_000 ? -0.12 : baseSalary >= 18_000_000 ? -0.05 : 0;
+  return 0;
+}
+
+function calculateRoleFit(
+  talent: ActorItem | CrewItem,
+  kind: 'actor' | 'crew',
+  slot: OfferRoleSlot,
+  genreMasteryScore: number
+) {
+  if (kind === 'actor') {
+    const actor = talent as ActorItem;
+    const { overall, acting, charisma, box_office_pull } = actor.stats;
+    const weights = slot === 'lead'
+      ? [0.16, 0.30, 0.14, 0.22, 0.18]
+      : slot === 'antagonist'
+      ? [0.16, 0.38, 0.20, 0.08, 0.18]
+      : slot === 'supporting'
+      ? [0.20, 0.38, 0.16, 0.10, 0.16]
+      : [0.22, 0.28, 0.16, 0.10, 0.24];
+    return Math.max(0, Math.min(100, Math.round(
+      overall * weights[0] + acting * weights[1] + charisma * weights[2] +
+      box_office_pull * weights[3] + genreMasteryScore * weights[4]
+    )));
+  }
+  const crew = talent as CrewItem;
+  const roleStat = slot === 'director'
+    ? (crew.stats.vision * 0.55 + (crew.stats.control || 70) * 0.45)
+    : slot === 'cinematographer'
+    ? (crew.stats.vision * 0.65 + crew.stats.efficiency * 0.35)
+    : slot === 'composer'
+    ? (crew.stats.pacing * 0.65 + crew.stats.overall * 0.35)
+    : (crew.stats.pacing * 0.55 + crew.stats.efficiency * 0.45);
+  const genreFit = genreMasteryScore;
+  return Math.max(0, Math.min(100, Math.round(
+    crew.stats.overall * 0.35 + roleStat * 0.45 + genreFit * 0.20
+  )));
+}
+
 const SEQUENTIAL_STEPS: {
   id: SequentialTeamStep;
   stepNum: number;
@@ -114,6 +173,7 @@ const SEQUENTIAL_STEPS: {
 export function Stage3CrewCastCards() {
   const {
     draft,
+    cash,
     founderPerk,
     reputation,
     gameDay,
@@ -143,6 +203,7 @@ export function Stage3CrewCastCards() {
   const [currentTeamStep, setCurrentTeamStep] =
     useState<SequentialTeamStep>('actors');
   const [actorSearchQuery, setActorSearchQuery] = useState<string>('');
+  const [crewSearchQuery, setCrewSearchQuery] = useState<string>('');
   const [actorTierFilter, setActorTierFilter] =
     useState<ActorTierFilter>('ALL');
   const [visibleActorCount, setVisibleActorCount] = useState<number>(16);
@@ -192,6 +253,18 @@ export function Stage3CrewCastCards() {
     signedActorIds.includes(a.id)
   );
 
+  const getRoleCount = (slot: OfferRoleSlot) => {
+    const signedCount = slot === 'lead' ? draft.leadActorIds.length
+      : slot === 'antagonist' ? Number(Boolean(draft.antagonistId))
+      : slot === 'supporting' ? draft.supportingActorIds.length
+      : slot === 'cameo' ? draft.cameoActorIds.length : 0;
+    const pendingCount = Object.values(draft.talentOffers).filter((offer) =>
+      offer.roleSlot === slot && offer.status === 'pending' &&
+      !signedActorIds.includes(offer.talentId)
+    ).length;
+    return signedCount + pendingCount;
+  };
+
   const chemistry = evaluateCastChemistry(
     allSelectedActors,
     selectedDirector?.stats.control || 80
@@ -220,8 +293,14 @@ export function Stage3CrewCastCards() {
   ) => {
     const existingOffer = draft.talentOffers[talent.id];
     const defaultBase = talent.base_salary;
+    const availableActorSlot = kind === 'actor'
+      ? (['lead', 'antagonist', 'supporting', 'cameo'] as OfferRoleSlot[]).find((slot) =>
+          getRoleCount(slot) < (ROLE_CAPACITY[slot] || 0) || existingOffer?.roleSlot === slot
+        ) || roleSlot
+      : roleSlot;
+    const initialRoleSlot = availableActorSlot;
 
-    setNegotiationTarget({ talent, kind, roleSlot });
+    setNegotiationTarget({ talent, kind, roleSlot: initialRoleSlot });
     setCustomRoleInput(
       existingOffer?.customRoleName ||
         (draft.castCustomRoles || {})[talent.id] ||
@@ -229,8 +308,8 @@ export function Stage3CrewCastCards() {
     );
     setOfferedSalary(
       existingOffer && existingOffer.status === 'rejected'
-        ? Math.round(defaultBase * 1.12)
-        : Math.round(defaultBase * 0.94)
+        ? Math.round(defaultBase * roleSalaryFactor(initialRoleSlot, kind) * 1.12)
+        : Math.round(defaultBase * roleSalaryFactor(initialRoleSlot, kind) * 0.94 * (initialRoleSlot === 'cameo' ? 0.22 : 1))
     );
     setBackendPoints(existingOffer?.backendPoints ?? 0);
     setVipDinner(existingOffer?.vipDinner ?? false);
@@ -263,13 +342,31 @@ export function Stage3CrewCastCards() {
 
     const egoScore = actorItem ? actorItem.stats.ego : 76;
 
-    const { expectedMinimumSalary } = calculateTalentExpectedSalary({
+    const salaryRoleFactor = roleSalaryFactor(roleSlot, kind);
+    const { expectedMinimumSalary: rawExpectedMinimumSalary } = calculateTalentExpectedSalary({
       baseSalary: talent.base_salary,
       ego: egoScore,
       genreMasteryScore,
       studioReputation: reputation,
-      isCameo: false,
+      isCameo: isActor && roleSlot === 'cameo',
     });
+    const expectedMinimumSalary = Math.round(rawExpectedMinimumSalary * salaryRoleFactor);
+    const roleFitScore = calculateRoleFit(talent, kind, roleSlot, genreMasteryScore);
+    const vipDinnerCost = vipDinner
+      ? Math.max(150_000, Math.min(1_500_000, Math.round(talent.base_salary * 0.015)))
+      : 0;
+    if (vipDinner && cash < vipDinnerCost) {
+      setErrorMsg(`رصيد الخزينة غير كافٍ لجلسة العشاء المدفوعة. التكلفة ${formatMoney(vipDinnerCost)} ج.م.`);
+      setSendingOffer(false);
+      return;
+    }
+    const roleCapacity = ROLE_CAPACITY[roleSlot];
+    if (isActor && roleCapacity !== undefined && getRoleCount(roleSlot) >= roleCapacity &&
+      !(draft.talentOffers[talent.id]?.status === 'accepted')) {
+      setErrorMsg(`اكتمل عدد المتعاقدين في فئة ${SLOT_ARABIC_NAMES[roleSlot]}. اختار فئة دور أخرى.`);
+      setSendingOffer(false);
+      return;
+    }
 
     const genreName =
       GENRES.find((g) => g.id === draft.primaryGenre)?.name ||
@@ -292,6 +389,7 @@ export function Stage3CrewCastCards() {
           preferredModel: preferredGroqModel,
           payload: {
             talentName: talent.name,
+            talentKind: kind,
             roleLabel: roleDescription,
             ego: egoScore,
             baseSalary: talent.base_salary,
@@ -299,6 +397,9 @@ export function Stage3CrewCastCards() {
             offeredSalary,
             backendPoints,
             vipDinner,
+            vipDinnerCost,
+            roleSlot,
+            roleFitScore,
             projectTitle: draft.title || 'الفرعون الأخير',
             title: draft.title || 'الفرعون الأخير',
             synopsis: draft.scriptSynopsis,
@@ -319,6 +420,8 @@ export function Stage3CrewCastCards() {
         offeredSalary,
         backendPoints,
         vipDinner,
+        vipDinnerCost,
+        roleFitScore,
         submittedDay: gameDay,
         responseDueDay: gameDay + waitDays,
         status: 'pending',
@@ -334,7 +437,12 @@ export function Stage3CrewCastCards() {
       submitTalentOffer(newOffer);
       setNegotiationTarget(null);
     } catch {
-      const fallbackAccept = offeredSalary >= expectedMinimumSalary * 0.95;
+      const roleFitAdjustment = (roleFitScore - 72) / 100;
+      const roleScopeAdjustment = roleScopeAcceptanceAdjustment(roleSlot, talent.base_salary, kind);
+      const relationshipBonus = vipDinner ? 0.035 : 0;
+      const fallbackScore = offeredSalary * (1 + backendPoints * 0.018) / Math.max(1, expectedMinimumSalary) + roleFitAdjustment + roleScopeAdjustment + relationshipBonus;
+      const fallbackThreshold = egoScore >= 90 ? 1.07 : egoScore >= 82 ? 1.00 : 0.94;
+      const fallbackAccept = fallbackScore >= fallbackThreshold && (roleFitScore >= 42 || offeredSalary >= expectedMinimumSalary * 1.6) && (roleScopeAdjustment > -0.19 || offeredSalary >= expectedMinimumSalary * 1.7);
       submitTalentOffer({
         talentId: talent.id,
         talentName: talent.name,
@@ -343,6 +451,8 @@ export function Stage3CrewCastCards() {
         offeredSalary,
         backendPoints,
         vipDinner,
+        vipDinnerCost,
+        roleFitScore,
         submittedDay: gameDay,
         responseDueDay: gameDay + waitDays,
         status: 'pending',
@@ -369,8 +479,9 @@ export function Stage3CrewCastCards() {
         setErrorMsg('لازم تتعاقد مع ممثل واحد على الأقل وتنتظر موافقته قبل الانتقال للخطوة التالية.');
         return;
       }
+      setCrewSearchQuery('');
       setCurrentTeamStep('director');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (currentTeamStep === 'director') {
@@ -378,18 +489,21 @@ export function Stage3CrewCastCards() {
         setErrorMsg('اختيار المخرج والتأكد من موافقته خطوة أساسية قبل استكمال تكوين الطاقم.');
         return;
       }
+      setCrewSearchQuery('');
       setCurrentTeamStep('cinematographer');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (currentTeamStep === 'cinematographer') {
+      setCrewSearchQuery('');
       setCurrentTeamStep('composer');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (currentTeamStep === 'composer') {
+      setCrewSearchQuery('');
       setCurrentTeamStep('editor_vfx');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -415,7 +529,8 @@ export function Stage3CrewCastCards() {
     setErrorMsg(null);
     if (currentStepIndex > 0) {
       setCurrentTeamStep(SEQUENTIAL_STEPS[currentStepIndex - 1].id);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setCrewSearchQuery('');
+      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       setActiveScreen('PROJECT_SETUP');
     }
@@ -564,7 +679,7 @@ export function Stage3CrewCastCards() {
             className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.14)] sm:p-5"
           >
             {/* Search & Filter Bar */}
-            <div className="mb-4 space-y-2.5 rounded-2xl border border-indigo-100 bg-[#F8FAFF] p-3">
+            <div className="step-search-bar mb-4 space-y-2.5 rounded-2xl border border-indigo-100 bg-[#F8FAFF]/95 p-3 backdrop-blur-md">
               <div className="relative">
                 <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -708,9 +823,23 @@ export function Stage3CrewCastCards() {
               )}
             </div>
 
+            <div className="step-search-bar mb-4 rounded-2xl border border-indigo-100 bg-[#F8FAFF]/95 p-3 backdrop-blur-md">
+              <label htmlFor="crew-market-search" className="mb-2 block text-[11px] font-black text-slate-700">ابحث داخل سوق المتخصصين</label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="crew-market-search"
+                  type="search"
+                  value={crewSearchQuery}
+                  onChange={(e) => setCrewSearchQuery(e.target.value)}
+                  placeholder="اسم المخرج أو مدير التصوير أو المتخصص..."
+                  className="w-full rounded-xl border border-indigo-100 bg-white py-2.5 pr-9 pl-3 text-xs font-bold text-slate-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               {db.crew
-                .filter((c) => c.role === currentTeamStep)
+                .filter((c) => c.role === currentTeamStep && c.name.toLowerCase().includes(crewSearchQuery.trim().toLowerCase()))
                 .map((member) => {
                   const isSelected =
                     (currentTeamStep === 'director' &&
@@ -760,7 +889,7 @@ export function Stage3CrewCastCards() {
       </AnimatePresence>
 
       {/* Bottom Sequential Wizard Navigation Bar */}
-      <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-4 shadow-md">
+      <div className="step-navigation rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-4 shadow-md">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-600">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-violet-600" />
@@ -800,7 +929,7 @@ export function Stage3CrewCastCards() {
         </div>
       </div>
 
-      {/* Negotiation Modal with Free-Text Role Input (No Pre-set Role Dropdowns!) */}
+      {/* Negotiation Modal: custom character pitch, role size and contract terms */}
       <AnimatePresence>
         {negotiationTarget && (
           <motion.div
@@ -829,16 +958,19 @@ export function Stage3CrewCastCards() {
                 const egoScore = actorItem ? actorItem.stats.ego : 76;
                 const waitDays = egoScore >= 88 ? 3 : 2;
 
-                const {
-                  expectedMinimumSalary,
-                  acceptanceDifficultyLabel,
-                } = calculateTalentExpectedSalary({
+                const roleFitScore = calculateRoleFit(talent, kind, roleSlot, genreMasteryScore);
+                const rawSalaryDetails = calculateTalentExpectedSalary({
                   baseSalary: talent.base_salary,
                   ego: egoScore,
                   genreMasteryScore,
                   studioReputation: reputation,
-                  isCameo: false,
+                  isCameo: isActor && roleSlot === 'cameo',
                 });
+                const expectedMinimumSalary = Math.round(
+                  rawSalaryDetails.expectedMinimumSalary * roleSalaryFactor(roleSlot, kind)
+                );
+                const acceptanceDifficultyLabel = rawSalaryDetails.acceptanceDifficultyLabel;
+                const vipDinnerCost = Math.max(150_000, Math.min(1_500_000, Math.round(talent.base_salary * 0.015)));
 
                 const minSal = Math.max(
                   500_000,
@@ -881,7 +1013,7 @@ export function Stage3CrewCastCards() {
                           <span>سيناريو: «{draft.title || 'الفرعون الأخير'}»</span>
                         </span>
                         <span className="text-[10px] font-black text-emerald-700">
-                          ملاءمة التصنيف: {genreMasteryScore}%
+                          ملاءمة الدور: {roleFitScore}/100
                         </span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed font-medium text-slate-600">
@@ -894,6 +1026,29 @@ export function Stage3CrewCastCards() {
                         </strong>
                       </div>
                     </div>
+
+                    {isActor && (
+                      <div className="mt-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3">
+                        <label htmlFor="actor-role-slot" className="mb-2 block text-xs font-black text-slate-800">حجم وموقع الدور داخل العمل</label>
+                        <select
+                          id="actor-role-slot"
+                          value={roleSlot}
+                          onChange={(event) => {
+                            const nextSlot = event.target.value as OfferRoleSlot;
+                            setNegotiationTarget((current) => current ? { ...current, roleSlot: nextSlot } : current);
+                            setOfferedSalary(Math.round(talent.base_salary * (nextSlot === 'cameo' ? 0.22 : roleSalaryFactor(nextSlot, 'actor') * 0.94)));
+                          }}
+                          className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-900"
+                        >
+                          {(['lead', 'antagonist', 'supporting', 'cameo'] as OfferRoleSlot[]).map((slot) => {
+                            const capacity = ROLE_CAPACITY[slot] || 0;
+                            const full = getRoleCount(slot) >= capacity && !(draft.talentOffers[talent.id]?.roleSlot === slot && draft.talentOffers[talent.id]?.status === 'accepted');
+                            return <option key={slot} value={slot} disabled={full}>{SLOT_ARABIC_NAMES[slot]} {full ? '(اكتمل العدد)' : `(${getRoleCount(slot)}/${capacity})`}</option>;
+                          })}
+                        </select>
+                        <p className="mt-2 text-[10px] font-bold text-slate-600">ملاءمة الموهبة للدور: <strong className="text-violet-700">{roleFitScore}/100</strong> · حجم الدور يغيّر الأجر المتوقع وفرصة القبول.</p>
+                      </div>
+                    )}
 
                     {/* Free-Text Custom Role Input for Actors (Player writes the exact role!) */}
                     {isActor && (
@@ -968,6 +1123,7 @@ export function Stage3CrewCastCards() {
 
                       <button
                         type="button"
+                        disabled={!vipDinner && cash < vipDinnerCost}
                         onClick={() => setVipDinner(!vipDinner)}
                         className={`flex min-h-[42px] w-full items-center justify-center gap-2 rounded-2xl border-2 px-3 py-2 text-xs font-black transition ${
                           vipDinner
@@ -978,10 +1134,11 @@ export function Stage3CrewCastCards() {
                         <Flame className="h-4 w-4" />
                         <span>
                           {vipDinner
-                            ? 'تم تفعيل جلسة عمل وعشاء خاص (+فرصة قبول أعلى)'
-                            : 'إضافة جلسة قراءة خاصة وعشاء عمل لإقناع النجم'}
+                            ? `تم اختيار العشاء المدفوع (${formatMoney(vipDinnerCost)} ج.م)`
+                            : `جلسة قراءة وعشاء عمل مدفوعة (${formatMoney(vipDinnerCost)} ج.م)`}
                         </span>
                       </button>
+                      <p className="px-1 text-[10px] font-bold text-slate-500">تُخصم تكلفة الجلسة من الخزينة عند إرسال العرض، ولا تُخصم من أجر الفنان.</p>
                     </div>
 
                     <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-2.5 text-center text-[11px] font-bold text-amber-900">

@@ -183,7 +183,7 @@ export function Stage1StudioCreation() {
             </div>
 
             {/* Tactile 3D Mobile Action Buttons */}
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <div className="step-navigation mt-7 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={() => unlockAndGoTo(2)}
@@ -408,7 +408,7 @@ export function Stage1StudioCreation() {
               </AnimatePresence>
             </div>
 
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setWizardStep(1)}
@@ -512,7 +512,7 @@ export function Stage1StudioCreation() {
               ))}
             </div>
 
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setWizardStep(2)}
@@ -605,7 +605,7 @@ export function Stage1StudioCreation() {
               })}
             </div>
 
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
+            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
               <button
                 type="button"
                 onClick={() => setWizardStep(3)}
