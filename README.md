@@ -1,20 +1,17 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Hyptrix — Cinema & TV Tycoon
 
-# Run and deploy your AI Studio app
+لعبة محاكاة وإدارة استوديو إنتاج سينمائي وتلفزيوني باللغة العربية.
 
-This contains everything you need to run your app locally.
+## التشغيل محلياً
 
-View your app in AI Studio: https://ai.studio/apps/972472d9-1d91-4b19-b498-bc2fdea92593
+**المتطلبات:** Node.js 20 أو أحدث.
 
-## Run Locally
+1. ثبّت الحزم: `npm install`
+2. انسخ `.env.example` إلى `.env.local` وأضف المفاتيح الاختيارية التي تستخدمها.
+3. شغّل بيئة التطوير: `npm run dev`
 
-**Prerequisites:**  Node.js
+## تكاملات اختيارية
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- `GROQ_API_KEY`: لتفعيل توليد بعض الأحداث والتقييمات الديناميكية. تتوفر بدائل محلية داخل اللعبة عند غياب المفتاح.
+- `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_ANON_KEY`: للمزامنة السحابية ولوحة المتصدرين.
+- `APP_URL`: عنوان النشر المستخدم في البيانات الوصفية والروابط.

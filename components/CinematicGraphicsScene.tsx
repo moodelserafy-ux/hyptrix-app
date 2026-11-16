@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import React from 'react';
+import { motion } from 'motion/react';
 import { GenreId } from '@/lib/db-resolver';
 
 function hashString(str: string): number {
@@ -14,47 +13,8 @@ function hashString(str: string): number {
   return Math.abs(h);
 }
 
-function detectSoftwareWebGL(): boolean {
-  if (typeof document === 'undefined') return true;
-  try {
-    const gl = document.createElement('canvas').getContext('webgl2');
-    if (!gl) return true;
-    const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    const param = ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER;
-    const gpu = String(gl.getParameter(param));
-    gl.getExtension('WEBGL_lose_context')?.loseContext();
-    return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
-  } catch {
-    return true;
-  }
-}
-
-function disposeSceneResources(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
-  scene.traverse((obj) => {
-    const mesh = obj as THREE.Mesh;
-    if (mesh.geometry) {
-      mesh.geometry.dispose();
-    }
-    if (mesh.material) {
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((m) => {
-          const mat = m as THREE.MeshStandardMaterial;
-          mat.map?.dispose();
-          mat.dispose();
-        });
-      } else {
-        const mat = mesh.material as THREE.MeshStandardMaterial;
-        mat.map?.dispose();
-        mat.dispose();
-      }
-    }
-  });
-  renderer.dispose();
-}
-
 /**
- * 1. Real 3D WebGL Studio Lot Scene (AnimatedStudioLotGraphic)
- * Features: 3D studio buildings, volumetric sky spotlights, 3D camera dolly & crane, floating golden particles, smooth orbit/pan camera.
+ * 1. Animated 2.5D Studio Lot Graphic for StudioHubView
  */
 export function AnimatedStudioLotGraphic({
   studioName,
@@ -67,328 +27,269 @@ export function AnimatedStudioLotGraphic({
   activeProjectTitle?: string;
   isFilming?: boolean;
 }) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const container = mountRef.current;
-    if (!container) return;
-
-    const isSoftwareGl = detectSoftwareWebGL();
-    const width = Math.max(container.offsetWidth || 480, 280);
-    const height = Math.max(container.offsetHeight || 190, 150);
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0c);
-    scene.fog = new THREE.FogExp2(0x0a0a0c, 0.022);
-
-    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 120);
-    camera.position.set(0, 7.5, 19);
-    camera.lookAt(0, 2.2, 0);
-
-    const renderer = new THREE.WebGLRenderer({
-      antialias: !isSoftwareGl,
-      powerPreference: 'high-performance',
-    });
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(width, height);
-    container.innerHTML = '';
-    container.appendChild(renderer.domElement);
-
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
-
-    // Lighting
-    const hemiLight = new THREE.HemisphereLight(0x38bdf8, 0x0a0a0c, 0.9);
-    scene.add(hemiLight);
-
-    const keyLight = new THREE.DirectionalLight(0xffd700, 2.2);
-    keyLight.position.set(10, 16, 12);
-    scene.add(keyLight);
-
-    const rimLight = new THREE.DirectionalLight(0xe50914, 1.3);
-    rimLight.position.set(-12, 8, -10);
-    scene.add(rimLight);
-
-    // Ground Plaza
-    const groundGeo = new THREE.PlaneGeometry(80, 80);
-    const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x12131a,
-      roughness: 0.35,
-      metalness: 0.4,
-    });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    scene.add(ground);
-
-    // Red Carpet Entrance Strip
-    const carpetGeo = new THREE.PlaneGeometry(3.2, 10);
-    const carpetMat = new THREE.MeshStandardMaterial({
-      color: 0xe50914,
-      roughness: 0.65,
-      metalness: 0.1,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-    });
-    const carpet = new THREE.Mesh(carpetGeo, carpetMat);
-    carpet.rotation.x = -Math.PI / 2;
-    carpet.position.set(0, 0.03, 5.2);
-    scene.add(carpet);
-
-    // Central Grand Soundstage Building (Composite Group)
-    const hqGroup = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0x1e202b,
-      roughness: 0.35,
-      metalness: 0.6,
-    });
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xd4af37,
-      roughness: 0.18,
-      metalness: 0.92,
-    });
-
-    const mainHall = new THREE.Mesh(new THREE.BoxGeometry(9.5, 4.8, 5.5), bodyMat);
-    mainHall.position.y = 2.4;
-    hqGroup.add(mainHall);
-
-    // Golden Art-Deco Roof Crown
-    const roofCrown = new THREE.Mesh(new THREE.BoxGeometry(10.1, 0.45, 5.9), goldMat);
-    roofCrown.position.y = 4.95;
-    hqGroup.add(roofCrown);
-
-    // Arched Vault Roof
-    const vaultGeo = new THREE.CylinderGeometry(2.6, 2.6, 9.2, 24, 1, false, 0, Math.PI);
-    vaultGeo.rotateZ(Math.PI / 2);
-    const vaultMesh = new THREE.Mesh(vaultGeo, bodyMat);
-    vaultMesh.position.y = 5.0;
-    hqGroup.add(vaultMesh);
-
-    // Flanking Soundstages (Left & Right)
-    [-8.2, 8.2].forEach((xPos) => {
-      const stageWing = new THREE.Group();
-      const wingBox = new THREE.Mesh(new THREE.BoxGeometry(5.2, 3.6, 4.6), bodyMat);
-      wingBox.position.y = 1.8;
-      stageWing.add(wingBox);
-
-      const wingTrim = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.28, 4.8), goldMat);
-      wingTrim.position.y = 3.68;
-      stageWing.add(wingTrim);
-
-      stageWing.position.set(xPos, 0, -1.2);
-      hqGroup.add(stageWing);
-    });
-
-    // 3D Spinning Golden Film Reels on Roof
-    const reelGroupLeft = new THREE.Group();
-    const reelGroupRight = new THREE.Group();
-    [reelGroupLeft, reelGroupRight].forEach((rg, idx) => {
-      const outerRing = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.05, 1.05, 0.22, 24),
-        goldMat
-      );
-      outerRing.rotation.x = Math.PI / 2;
-      rg.add(outerRing);
-
-      for (let i = 0; i < 4; i++) {
-        const spoke = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.14, 0.26), goldMat);
-        spoke.rotation.z = (i * Math.PI) / 4;
-        rg.add(spoke);
-      }
-      rg.position.set(idx === 0 ? -3.2 : 3.2, 6.2, 1.5);
-      hqGroup.add(rg);
-    });
-
-    scene.add(hqGroup);
-
-    // Volumetric Sky Spotlights (Left & Right)
-    const beamGeo = new THREE.ConeGeometry(2.8, 18, 24, 1, true);
-    beamGeo.translate(0, 9, 0);
-    const beamMatGold = new THREE.MeshBasicMaterial({
-      color: 0xd4af37,
-      transparent: true,
-      opacity: 0.2,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const beamMatRed = new THREE.MeshBasicMaterial({
-      color: isFilming ? 0xe50914 : 0x38bdf8,
-      transparent: true,
-      opacity: 0.18,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-
-    const beamLeft = new THREE.Mesh(beamGeo, beamMatGold);
-    beamLeft.position.set(-7.5, 0.2, 3.5);
-    scene.add(beamLeft);
-
-    const beamRight = new THREE.Mesh(beamGeo, beamMatRed);
-    beamRight.position.set(7.5, 0.2, 3.5);
-    scene.add(beamRight);
-
-    // 3D Cinema Camera Dolly Rig in Foreground
-    const cameraDolly = new THREE.Group();
-    const dollyBase = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.25, 1.2), goldMat);
-    dollyBase.position.y = 0.25;
-    cameraDolly.add(dollyBase);
-
-    const camBody = new THREE.Mesh(
-      new THREE.BoxGeometry(0.9, 0.65, 0.55),
-      new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.2, metalness: 0.8 })
-    );
-    camBody.position.set(0, 1.15, 0);
-    cameraDolly.add(camBody);
-
-    const lensCone = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.15, 0.45, 16),
-      goldMat
-    );
-    lensCone.rotation.x = Math.PI / 2;
-    lensCone.position.set(0, 1.15, -0.45);
-    cameraDolly.add(lensCone);
-
-    cameraDolly.position.set(-2.5, 0, 6.2);
-    scene.add(cameraDolly);
-
-    // Floating Golden Particles in the Air
-    const particleCount = 90;
-    const positions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 28;
-      positions[i * 3 + 1] = Math.random() * 11 + 0.5;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 16;
-    }
-    const particleGeo = new THREE.BufferGeometry();
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const particleMat = new THREE.PointsMaterial({
-      color: 0xd4af37,
-      size: 0.18,
-      transparent: true,
-      opacity: 0.75,
-      blending: THREE.AdditiveBlending,
-    });
-    const particles = new THREE.Points(particleGeo, particleMat);
-    scene.add(particles);
-
-    // Interactive Drag Orbit
-    let isDragging = false;
-    let prevX = 0;
-    let targetYaw = 0;
-    let currentYaw = 0;
-
-    const onPointerDown = (e: PointerEvent) => {
-      isDragging = true;
-      prevX = e.clientX;
-    };
-    const onPointerMove = (e: PointerEvent) => {
-      if (!isDragging) return;
-      const dx = e.clientX - prevX;
-      prevX = e.clientX;
-      targetYaw = Math.max(-0.55, Math.min(0.55, targetYaw + dx * 0.005));
-    };
-    const onPointerUp = () => {
-      isDragging = false;
-    };
-
-    const domElem = renderer.domElement;
-    domElem.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-
-    const clock = new THREE.Clock();
-    let frameId = 0;
-    let disposed = false;
-
-    function afterDraw(cb: () => void) {
-      const gl = renderer.getContext() as WebGL2RenderingContext;
-      if (!gl || !gl.fenceSync) {
-        frameId = window.setTimeout(cb, 80);
-        return;
-      }
-      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-      gl.flush();
-      const poll = () => {
-        if (disposed) return;
-        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
-        if (state === gl.UNSIGNALED) {
-          frameId = window.setTimeout(poll, 5);
-        } else {
-          if (sync) gl.deleteSync(sync);
-          frameId = window.setTimeout(cb, 80);
-        }
-      };
-      frameId = window.setTimeout(poll, 5);
-    }
-
-    function tick() {
-      if (disposed) return;
-      const dt = Math.min(clock.getDelta(), 0.1);
-      const t = clock.getElapsedTime();
-
-      if (!isDragging) {
-        targetYaw = Math.sin(t * 0.35) * 0.22;
-      }
-      currentYaw = THREE.MathUtils.damp(currentYaw, targetYaw, 4, dt);
-
-      camera.position.x = Math.sin(currentYaw) * 19;
-      camera.position.z = Math.cos(currentYaw) * 19;
-      camera.lookAt(0, 2.3, 0);
-
-      reelGroupLeft.rotation.z = t * 1.4;
-      reelGroupRight.rotation.z = -t * 1.4;
-
-      beamLeft.rotation.z = Math.sin(t * 1.1) * 0.38;
-      beamRight.rotation.z = -Math.sin(t * 1.05 + 0.8) * 0.38;
-
-      cameraDolly.position.x = -2.5 + Math.sin(t * 0.9) * 2.5;
-      particles.rotation.y = t * 0.08;
-
-      renderer.render(scene, camera);
-      if (isSoftwareGl) afterDraw(tick);
-      else frameId = requestAnimationFrame(tick);
-    }
-
-    tick();
-
-    const ro = new ResizeObserver(() => {
-      if (!container || disposed) return;
-      const w = Math.max(container.offsetWidth, 240);
-      const h = Math.max(container.offsetHeight, 140);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    });
-    ro.observe(container);
-
-    return () => {
-      disposed = true;
-      cancelAnimationFrame(frameId);
-      clearTimeout(frameId);
-      ro.disconnect();
-      domElem.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      disposeSceneResources(scene, renderer);
-    };
-  }, [isFilming]);
-
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl border border-[#D4AF37]/35 bg-[#0A0A0C] shadow-2xl">
-      <div ref={mountRef} className="h-44 w-full cursor-grab active:cursor-grabbing sm:h-52" />
-      <div className="pointer-events-none absolute inset-x-3 bottom-2.5 flex items-center justify-between gap-2 rounded-xl border border-[#D4AF37]/30 bg-[#0A0A0C]/85 px-3 py-1.5 text-[11px] font-bold text-slate-200 backdrop-blur-md">
-        <span className="truncate text-[#D4AF37]">
-          {hasActiveProject
-            ? `${studioName} · البلاتوه الرئيسي: «${activeProjectTitle}»`
-            : `${studioName} · مدينة الإنتاج جاهزة لانطلاق مشروعك القادم`}
+    <div className="relative w-full overflow-hidden rounded-2xl border-2 border-indigo-200/90 bg-gradient-to-b from-[#1E1B4B] via-[#312E81] to-[#4338CA] p-3 shadow-inner">
+      {/* Animated Sky Spotlights */}
+      <svg
+        viewBox="0 0 520 175"
+        className="h-36 w-full sm:h-44"
+        aria-label="مشهد مدينة الإنتاج السينمائي التفاعلي"
+      >
+        <defs>
+          <linearGradient id="beamLeft" x1="0%" y1="100%" x2="60%" y2="0%">
+            <stop offset="0%" stopColor="#FBBF24" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#FBBF24" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="beamRight" x1="100%" y1="100%" x2="40%" y2="0%">
+            <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#38BDF8" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="stageBuilding" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#EEF2FF" />
+            <stop offset="100%" stopColor="#C7D2FE" />
+          </linearGradient>
+          <linearGradient id="goldDome" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#FDE047" />
+            <stop offset="100%" stopColor="#F59E0B" />
+          </linearGradient>
+          <linearGradient id="redCarpetGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#F43F5E" />
+            <stop offset="100%" stopColor="#BE123C" />
+          </linearGradient>
+        </defs>
+
+        {/* Twinkling Stars */}
+        {[
+          { cx: 45, cy: 25, d: 0 },
+          { cx: 120, cy: 18, d: 0.5 },
+          { cx: 210, cy: 30, d: 1.1 },
+          { cx: 340, cy: 20, d: 0.3 },
+          { cx: 465, cy: 28, d: 0.8 },
+          { cx: 410, cy: 42, d: 1.4 },
+        ].map((st, idx) => (
+          <motion.circle
+            key={idx}
+            cx={st.cx}
+            cy={st.cy}
+            r="2"
+            fill="#FDE047"
+            animate={{ opacity: [0.25, 1, 0.25], scale: [0.8, 1.3, 0.8] }}
+            transition={{ duration: 2.4, repeat: Infinity, delay: st.d }}
+          />
+        ))}
+
+        {/* Sweeping Searchlights */}
+        <motion.polygon
+          points="75,155 10,5 155,5"
+          fill="url(#beamLeft)"
+          animate={{ rotate: [-14, 16, -14] }}
+          transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ transformOrigin: '75px 155px' }}
+        />
+        <motion.polygon
+          points="445,155 365,5 510,5"
+          fill="url(#beamRight)"
+          animate={{ rotate: [14, -16, 14] }}
+          transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ transformOrigin: '445px 155px' }}
+        />
+
+        {/* Floating Studio Blimp & Aerial Camera Drone in the Sky */}
+        <motion.g
+          animate={{ x: [-18, 22, -18], y: [0, -4, 0] }}
+          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <ellipse cx="145" cy="34" rx="42" ry="13" fill="#F8FAFC" stroke="#818CF8" strokeWidth="2" />
+          <ellipse cx="145" cy="34" rx="34" ry="8" fill="#4F46E5" />
+          <polygon points="103,34 92,26 92,42" fill="#F59E0B" />
+          <rect x="132" y="47" width="26" height="6" rx="3" fill="#FDE047" />
+          <text
+            x="145"
+            y="37"
+            textAnchor="middle"
+            fill="#FFFFFF"
+            fontSize="7.5"
+            fontWeight="900"
+          >
+            HYPTRIX
+          </text>
+        </motion.g>
+
+        {/* Hovering Cinema Drone */}
+        <motion.g
+          animate={{ x: [12, -24, 12], y: [-3, 5, -3] }}
+          transition={{ duration: 5.2, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <rect x="366" y="30" width="24" height="6" rx="3" fill="#38BDF8" />
+          <line x1="360" y1="28" x2="372" y2="28" stroke="#FDE047" strokeWidth="2" />
+          <line x1="384" y1="28" x2="396" y2="28" stroke="#FDE047" strokeWidth="2" />
+          <circle cx="378" cy="39" r="3.5" fill="#EF4444" />
+        </motion.g>
+
+        {/* Background Soundstage 2 (Left) */}
+        <rect
+          x="32"
+          y="78"
+          width="110"
+          height="74"
+          rx="10"
+          fill="#E0E7FF"
+          stroke="#818CF8"
+          strokeWidth="2"
+        />
+        <path d="M32 88 Q87 62 142 88" fill="#6366F1" />
+        <rect x="48" y="96" width="26" height="18" rx="4" fill="#312E81" />
+        <rect x="86" y="96" width="38" height="14" rx="4" fill="#F59E0B" />
+        <text x="105" y="106" textAnchor="middle" fill="#1E1B4B" fontSize="7.5" fontWeight="900">
+          STAGE 2
+        </text>
+
+        {/* Background Soundstage 3 (Right) */}
+        <rect
+          x="378"
+          y="78"
+          width="110"
+          height="74"
+          rx="10"
+          fill="#E0E7FF"
+          stroke="#818CF8"
+          strokeWidth="2"
+        />
+        <path d="M378 88 Q433 62 488 88" fill="#06B6D4" />
+        <rect x="396" y="96" width="38" height="14" rx="4" fill="#EC4899" />
+        <text x="415" y="106" textAnchor="middle" fill="#FFFFFF" fontSize="7.5" fontWeight="900">
+          VFX LAB
+        </text>
+        <rect x="444" y="96" width="26" height="18" rx="4" fill="#312E81" />
+
+        {/* Central Grand Studio Headquarters Building */}
+        <rect
+          x="160"
+          y="54"
+          width="200"
+          height="98"
+          rx="14"
+          fill="url(#stageBuilding)"
+          stroke="#4F46E5"
+          strokeWidth="2.5"
+        />
+        {/* Golden Art-Deco Arch & Roof */}
+        <path d="M180 54 Q260 22 340 54 Z" fill="url(#goldDome)" />
+
+        {/* Spinning Film Reels on Roof */}
+        <motion.g
+          animate={{ rotate: 360 }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+          style={{ transformOrigin: '205px 46px' }}
+        >
+          <circle cx="205" cy="46" r="13" fill="#1E1B4B" stroke="#FBBF24" strokeWidth="2.5" />
+          <circle cx="205" cy="40" r="2.5" fill="#FDE047" />
+          <circle cx="205" cy="52" r="2.5" fill="#FDE047" />
+          <circle cx="199" cy="46" r="2.5" fill="#FDE047" />
+          <circle cx="211" cy="46" r="2.5" fill="#FDE047" />
+        </motion.g>
+
+        <motion.g
+          animate={{ rotate: -360 }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+          style={{ transformOrigin: '315px 46px' }}
+        >
+          <circle cx="315" cy="46" r="13" fill="#1E1B4B" stroke="#FBBF24" strokeWidth="2.5" />
+          <circle cx="315" cy="40" r="2.5" fill="#FDE047" />
+          <circle cx="315" cy="52" r="2.5" fill="#FDE047" />
+          <circle cx="309" cy="46" r="2.5" fill="#FDE047" />
+          <circle cx="321" cy="46" r="2.5" fill="#FDE047" />
+        </motion.g>
+
+        {/* Studio Marquee Sign */}
+        <rect
+          x="185"
+          y="64"
+          width="150"
+          height="24"
+          rx="7"
+          fill="#1E1B4B"
+          stroke="#F59E0B"
+          strokeWidth="2"
+        />
+        <text
+          x="260"
+          y="80"
+          textAnchor="middle"
+          fill="#FDE047"
+          fontSize="10.5"
+          fontWeight="900"
+        >
+          {studioName.slice(0, 22)}
+        </text>
+
+        {/* Studio Entrance & Red Carpet */}
+        <rect x="228" y="102" width="64" height="50" rx="8" fill="#1E1B4B" />
+        <polygon points="232,152 288,152 312,175 208,175" fill="url(#redCarpetGrad)" />
+        {/* Golden Carpet Stanchions */}
+        <circle cx="222" cy="162" r="3" fill="#FBBF24" />
+        <circle cx="298" cy="162" r="3" fill="#FBBF24" />
+
+        {/* Live Recording Blinking Light when Project is Active */}
+        {hasActiveProject && (
+          <g>
+            <motion.circle
+              cx="260"
+              cy="115"
+              r="5"
+              fill={isFilming ? '#EF4444' : '#10B981'}
+              animate={{ opacity: [1, 0.25, 1], scale: [1, 1.25, 1] }}
+              transition={{ duration: 1.1, repeat: Infinity }}
+            />
+            <text
+              x="260"
+              y="132"
+              textAnchor="middle"
+              fill="#FFFFFF"
+              fontSize="7.5"
+              fontWeight="900"
+            >
+              {isFilming ? 'ON AIR · جاري التصوير' : 'تحضير العمل'}
+            </text>
+          </g>
+        )}
+
+        {/* Animated Camera Dolly Crew on the Lot */}
+        <motion.g
+          animate={{ x: [0, 34, 0] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <rect x="92" y="142" width="28" height="8" rx="3" fill="#475569" />
+          <circle cx="98" cy="152" r="4" fill="#FBBF24" />
+          <circle cx="114" cy="152" r="4" fill="#FBBF24" />
+          <rect x="101" y="128" width="12" height="14" rx="2" fill="#0F172A" />
+          <polygon points="113,131 124,126 124,140 113,136" fill="#38BDF8" />
+        </motion.g>
+
+        {/* Ground Lot Road */}
+        <rect x="0" y="152" width="520" height="23" fill="#0F172A" fillOpacity="0.45" />
+      </svg>
+
+      {/* Live Overlay Badge */}
+      <div className="mt-1.5 flex items-center justify-between gap-2 rounded-xl bg-white/95 px-3 py-1.5 text-[11px] font-black text-slate-800 shadow-xs">
+        <span className="flex items-center gap-1.5 truncate">
+          <span
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+              isFilming
+                ? 'animate-ping bg-rose-500'
+                : hasActiveProject
+                ? 'bg-amber-500'
+                : 'bg-emerald-500'
+            }`}
+          />
+          <span className="truncate">
+            {hasActiveProject
+              ? `بلاتوه الاستوديو: «${activeProjectTitle}»`
+              : 'بلاتوهات التصوير جاهزة لانطلاق مشروعك القادم'}
+          </span>
         </span>
-        <span className="shrink-0 text-[10px] font-black text-amber-300">
-          {isFilming ? 'ON AIR · جاري التصوير' : 'كاميرا تفاعلية'}
+        <span className="shrink-0 rounded-lg bg-violet-100 px-2 py-0.5 text-[10px] font-black text-violet-800">
+          {isFilming ? 'كاميرا دايرة 🎬' : 'مقر الاستوديو'}
         </span>
       </div>
     </div>
@@ -396,7 +297,7 @@ export function AnimatedStudioLotGraphic({
 }
 
 /**
- * 2. Illustrated Character Portrait SVG for Actors, Directors & Technical Crew
+ * 2. Custom Illustrated Character Portrait SVG for Actors, Directors & Technical Crew
  */
 export function TalentCharacterPortraitSvg({
   name,
@@ -419,12 +320,13 @@ export function TalentCharacterPortraitSvg({
   const skinTones = ['#F5CBA7', '#F0B27A', '#E59866', '#FAD7A0', '#D4AC6E'];
   const hairColors = ['#1E293B', '#0F172A', '#3E2723', '#4A2311', '#334155'];
   const suitColors = [
-    '#16161D',
-    '#311042',
-    '#0F172A',
-    '#7F1D1D',
+    '#4F46E5',
+    '#7C3AED',
+    '#0284C7',
+    '#E11D48',
+    '#059669',
+    '#D97706',
     '#1E1B4B',
-    '#064E3B',
   ];
 
   const skin = skinTones[seed % skinTones.length];
@@ -437,23 +339,27 @@ export function TalentCharacterPortraitSvg({
 
   const topColor =
     tier === 'S'
-      ? '#451A03'
+      ? '#FEF08A'
       : tier === 'A'
-      ? '#2E1065'
+      ? '#DDD6FE'
       : isRising
-      ? '#7C2D12'
-      : '#0F172A';
+      ? '#FDE68A'
+      : '#CFFAFE';
   const bottomColor =
     tier === 'S'
-      ? '#D4AF37'
+      ? '#F59E0B'
       : tier === 'A'
       ? '#7C3AED'
       : isRising
       ? '#EA580C'
-      : '#1E293B';
+      : '#0284C7';
 
   return (
-    <svg viewBox="0 0 80 80" className="h-full w-full" aria-label={name}>
+    <svg
+      viewBox="0 0 80 80"
+      className="h-full w-full"
+      aria-label={name}
+    >
       <defs>
         <linearGradient id={bgGradId} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor={topColor} />
@@ -461,16 +367,29 @@ export function TalentCharacterPortraitSvg({
         </linearGradient>
       </defs>
 
-      <rect width="80" height="80" rx="14" fill={`url(#${bgGradId})`} />
-      <circle cx="40" cy="36" r="27" fill="#D4AF37" fillOpacity="0.14" />
+      {/* Vibrant Tier Aura Background */}
+      <rect width="80" height="80" rx="16" fill={`url(#${bgGradId})`} />
+
+      {/* Subtle Spotlight Ring */}
+      <circle
+        cx="40"
+        cy="36"
+        r="28"
+        fill="#FFFFFF"
+        fillOpacity="0.28"
+      />
 
       {/* Shoulders / Suit / Gown */}
-      <path d="M14 80 Q16 56 40 56 Q64 56 66 80 Z" fill={outfit} />
-      <polygon points="32,57 40,69 48,57" fill="#F8FAFC" />
+      <path
+        d="M14 80 Q16 56 40 56 Q64 56 66 80 Z"
+        fill={outfit}
+      />
+      {/* White Collar / Lapel */}
+      <polygon points="32,57 40,69 48,57" fill="#FFFFFF" />
       {!isFemale ? (
-        <polygon points="38,61 42,61 41,76 39,76" fill="#E50914" />
+        <polygon points="38,61 42,61 41,76 39,76" fill="#F43F5E" />
       ) : (
-        <circle cx="40" cy="63" r="3.5" fill="#D4AF37" />
+        <circle cx="40" cy="63" r="3.5" fill="#FDE047" />
       )}
 
       {/* Neck */}
@@ -478,7 +397,10 @@ export function TalentCharacterPortraitSvg({
 
       {/* Back Hair for Female */}
       {isFemale && (
-        <path d="M20 34 Q18 56 26 60 L54 60 Q62 56 60 34 Z" fill={hair} />
+        <path
+          d="M20 34 Q18 56 26 60 L54 60 Q62 56 60 34 Z"
+          fill={hair}
+        />
       )}
 
       {/* Face / Head */}
@@ -505,6 +427,7 @@ export function TalentCharacterPortraitSvg({
       <circle cx="34.6" cy="32.4" r="0.6" fill="#FFFFFF" />
       <circle cx="46.6" cy="32.4" r="0.6" fill="#FFFFFF" />
 
+      {/* Director / Star Sunglasses or Eyeglasses */}
       {hasGlasses && (
         <g>
           <rect
@@ -515,7 +438,7 @@ export function TalentCharacterPortraitSvg({
             rx="2"
             fill={role === 'director' ? '#0F172A' : 'none'}
             fillOpacity={role === 'director' ? '0.75' : '0'}
-            stroke="#D4AF37"
+            stroke="#F59E0B"
             strokeWidth="1.6"
           />
           <rect
@@ -526,13 +449,14 @@ export function TalentCharacterPortraitSvg({
             rx="2"
             fill={role === 'director' ? '#0F172A' : 'none'}
             fillOpacity={role === 'director' ? '0.75' : '0'}
-            stroke="#D4AF37"
+            stroke="#F59E0B"
             strokeWidth="1.6"
           />
-          <line x1="38.5" y1="33" x2="41.5" y2="33" stroke="#D4AF37" strokeWidth="1.6" />
+          <line x1="38.5" y1="33" x2="41.5" y2="33" stroke="#F59E0B" strokeWidth="1.6" />
         </g>
       )}
 
+      {/* Beard / Mustache for Male */}
       {hasBeard && (
         <path
           d="M28 40 Q40 50 52 40 Q50 50 40 51 Q30 50 28 40 Z"
@@ -541,6 +465,7 @@ export function TalentCharacterPortraitSvg({
         />
       )}
 
+      {/* Confident Smile */}
       <path
         d="M35 42 Q40 46 45 42"
         stroke={isFemale ? '#E11D48' : '#78350F'}
@@ -548,13 +473,44 @@ export function TalentCharacterPortraitSvg({
         strokeLinecap="round"
         fill="none"
       />
+
+      {/* Role Emblem Corner Prop */}
+      {role === 'director' ? (
+        <g transform="translate(54, 54)">
+          <circle cx="11" cy="11" r="10" fill="#1E1B4B" stroke="#FBBF24" strokeWidth="1.5" />
+          <polygon points="6,11 15,6 15,16" fill="#F59E0B" />
+        </g>
+      ) : role === 'cinematographer' ? (
+        <g transform="translate(54, 54)">
+          <circle cx="11" cy="11" r="10" fill="#0F172A" stroke="#38BDF8" strokeWidth="1.5" />
+          <circle cx="11" cy="11" r="4.5" fill="#38BDF8" />
+        </g>
+      ) : role === 'composer' ? (
+        <g transform="translate(54, 54)">
+          <circle cx="11" cy="11" r="10" fill="#4C1D95" stroke="#F472B6" strokeWidth="1.5" />
+          <circle cx="9" cy="14" r="2.5" fill="#FDE047" />
+          <path d="M11 14 L11 7 L16 8" stroke="#FDE047" strokeWidth="1.8" fill="none" />
+        </g>
+      ) : role === 'editor_vfx' ? (
+        <g transform="translate(54, 54)">
+          <circle cx="11" cy="11" r="10" fill="#064E3B" stroke="#34D399" strokeWidth="1.5" />
+          <polygon points="11,5 13,9 17,11 13,13 11,17 9,13 5,11 9,9" fill="#34D399" />
+        </g>
+      ) : tier === 'S' ? (
+        <g transform="translate(54, 6)">
+          <circle cx="10" cy="10" r="9" fill="#1E1B4B" fillOpacity="0.8" />
+          <polygon
+            points="10,4 12,8 16,8.5 13,11.5 14,15.5 10,13.5 6,15.5 7,11.5 4,8.5 8,8"
+            fill="#FDE047"
+          />
+        </g>
+      ) : null}
     </svg>
   );
 }
 
 /**
- * 3. Real 3D WebGL Soundstage Filming Set (AnimatedFilmingSetGraphic)
- * Features: 3D soundstage truss, dynamic volumetric studio lamps, 3D camera dolly on rails, 3D performers & clapperboard.
+ * 3. Animated Live Filming Soundstage Graphic for Stage4ProductionCrises
  */
 export function AnimatedFilmingSetGraphic({
   title,
@@ -573,253 +529,199 @@ export function AnimatedFilmingSetGraphic({
   dayTotal: number;
   isComplete?: boolean;
 }) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const container = mountRef.current;
-    if (!container) return;
-
-    const isSoftwareGl = detectSoftwareWebGL();
-    const width = Math.max(container.offsetWidth || 480, 260);
-    const height = Math.max(container.offsetHeight || 165, 135);
-
-    const genreColorMap: Record<string, number> = {
-      action: 0xe50914,
-      superhero: 0xf59e0b,
-      heist: 0x38bdf8,
-      psychological_horror: 0x9333ea,
-      supernatural_horror: 0xc084fc,
-      sci_fi: 0x06b6d4,
-      fantasy: 0xec4899,
-      historical: 0xd4af37,
-      biography: 0xfbbf24,
-      comedy: 0xfacc15,
-      light_comedy: 0x38bdf8,
-      romance: 0xf43f5e,
-      crime_mystery: 0x22d3ee,
-      popular_drama: 0xd4af37,
-    };
-    const accentHex = genreColorMap[genre] || 0xd4af37;
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0c);
-    scene.fog = new THREE.FogExp2(0x0a0a0c, 0.03);
-
-    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 90);
-    camera.position.set(0, 4.5, 13.5);
-    camera.lookAt(0, 2.0, 0);
-
-    const renderer = new THREE.WebGLRenderer({
-      antialias: !isSoftwareGl,
-      powerPreference: 'high-performance',
-    });
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
-    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(width, height);
-    container.innerHTML = '';
-    container.appendChild(renderer.domElement);
-
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
-
-    scene.add(new THREE.HemisphereLight(accentHex, 0x0a0a0c, 0.9));
-    const keyLight = new THREE.DirectionalLight(0xffedd5, 2.4);
-    keyLight.position.set(6, 12, 8);
-    scene.add(keyLight);
-
-    const rimLight = new THREE.PointLight(accentHex, 8, 22);
-    rimLight.position.set(0, 4.5, -3);
-    scene.add(rimLight);
-
-    // Soundstage Floor
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(40, 40),
-      new THREE.MeshStandardMaterial({ color: 0x14151f, roughness: 0.28, metalness: 0.5 })
-    );
-    floor.rotation.x = -Math.PI / 2;
-    scene.add(floor);
-
-    // Cyclorama Set Backdrop Wall
-    const backdrop = new THREE.Mesh(
-      new THREE.BoxGeometry(11, 5.5, 0.35),
-      new THREE.MeshStandardMaterial({
-        color: 0x16161d,
-        emissive: accentHex,
-        emissiveIntensity: 0.18,
-        roughness: 0.4,
-      })
-    );
-    backdrop.position.set(0, 2.75, -3.2);
-    scene.add(backdrop);
-
-    // Overhead Lighting Truss & Volumetric Cones
-    const metalMat = new THREE.MeshStandardMaterial({
-      color: 0x94a3b8,
-      metalness: 0.85,
-      roughness: 0.22,
-    });
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xd4af37,
-      metalness: 0.92,
-      roughness: 0.18,
-    });
-
-    const trussBar = new THREE.Mesh(new THREE.BoxGeometry(13, 0.3, 0.3), metalMat);
-    trussBar.position.set(0, 5.8, -0.5);
-    scene.add(trussBar);
-
-    const coneGeo = new THREE.ConeGeometry(2.4, 6.2, 20, 1, true);
-    coneGeo.translate(0, -3.1, 0);
-    const coneMat = new THREE.MeshBasicMaterial({
-      color: 0xffd700,
-      transparent: true,
-      opacity: 0.16,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const spotLeft = new THREE.Mesh(coneGeo, coneMat);
-    spotLeft.position.set(-2.5, 5.7, -0.5);
-    scene.add(spotLeft);
-
-    const spotRight = new THREE.Mesh(coneGeo, coneMat);
-    spotRight.position.set(2.5, 5.7, -0.5);
-    scene.add(spotRight);
-
-    // Performers on Set (Composite 3D Figures)
-    const actorsGroup = new THREE.Group();
-    [-1.2, 1.2].forEach((x, idx) => {
-      const actorFig = new THREE.Group();
-      const torso = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.36, 0.95, 8, 16),
-        new THREE.MeshStandardMaterial({
-          color: idx === 0 ? 0xd4af37 : 0xe50914,
-          roughness: 0.35,
-          metalness: 0.4,
-        })
-      );
-      torso.position.y = 1.05;
-      actorFig.add(torso);
-
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.3, 16, 16),
-        new THREE.MeshStandardMaterial({ color: 0xf5cba7, roughness: 0.5 })
-      );
-      head.position.y = 1.95;
-      actorFig.add(head);
-
-      actorFig.position.set(x, 0, -0.8);
-      actorsGroup.add(actorFig);
-    });
-    scene.add(actorsGroup);
-
-    // 3D Cinema Camera on Dolly Track
-    const dollyGroup = new THREE.Group();
-    const trackRail1 = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.08, 0.1), metalMat);
-    trackRail1.position.set(0, 0.04, 3.2);
-    scene.add(trackRail1);
-    const trackRail2 = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.08, 0.1), metalMat);
-    trackRail2.position.set(0, 0.04, 3.9);
-    scene.add(trackRail2);
-
-    const cart = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 1.0), goldMat);
-    cart.position.y = 0.2;
-    dollyGroup.add(cart);
-
-    const camBox = new THREE.Mesh(
-      new THREE.BoxGeometry(0.85, 0.65, 0.65),
-      new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 })
-    );
-    camBox.position.y = 1.35;
-    dollyGroup.add(camBox);
-
-    const reel1 = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.14, 16), goldMat);
-    reel1.rotation.z = Math.PI / 2;
-    reel1.position.set(0, 1.82, -0.15);
-    dollyGroup.add(reel1);
-
-    const reel2 = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.14, 16), goldMat);
-    reel2.rotation.z = Math.PI / 2;
-    reel2.position.set(0, 1.82, 0.25);
-    dollyGroup.add(reel2);
-
-    dollyGroup.position.set(0, 0, 3.55);
-    scene.add(dollyGroup);
-
-    const clock = new THREE.Clock();
-    let frameId = 0;
-    let disposed = false;
-
-    function afterDraw(cb: () => void) {
-      const gl = renderer.getContext() as WebGL2RenderingContext;
-      if (!gl || !gl.fenceSync) {
-        frameId = window.setTimeout(cb, 80);
-        return;
-      }
-      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-      gl.flush();
-      const poll = () => {
-        if (disposed) return;
-        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
-        if (state === gl.UNSIGNALED) {
-          frameId = window.setTimeout(poll, 5);
-        } else {
-          if (sync) gl.deleteSync(sync);
-          frameId = window.setTimeout(cb, 80);
-        }
-      };
-      frameId = window.setTimeout(poll, 5);
-    }
-
-    function tick() {
-      if (disposed) return;
-      const t = clock.getElapsedTime();
-
-      dollyGroup.position.x = Math.sin(t * 0.85) * 2.4;
-      spotLeft.rotation.z = Math.sin(t * 1.2) * 0.18;
-      spotRight.rotation.z = -Math.sin(t * 1.2) * 0.18;
-      actorsGroup.children.forEach((child, idx) => {
-        child.position.y = Math.abs(Math.sin(t * 2.2 + idx)) * 0.12;
-        child.rotation.y = Math.sin(t * 1.5 + idx) * 0.25;
-      });
-
-      renderer.render(scene, camera);
-      if (isSoftwareGl) afterDraw(tick);
-      else frameId = requestAnimationFrame(tick);
-    }
-
-    tick();
-
-    const ro = new ResizeObserver(() => {
-      if (!container || disposed) return;
-      const w = Math.max(container.offsetWidth, 240);
-      const h = Math.max(container.offsetHeight, 120);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    });
-    ro.observe(container);
-
-    return () => {
-      disposed = true;
-      cancelAnimationFrame(frameId);
-      clearTimeout(frameId);
-      ro.disconnect();
-      disposeSceneResources(scene, renderer);
-    };
-  }, [genre]);
+  const genreTheme: Record<string, { bgFrom: string; bgTo: string; accent: string; label: string }> = {
+    action: { bgFrom: '#450A0A', bgTo: '#991B1B', accent: '#F97316', label: 'مشاهد مطاردات وأكشن حي 🔥' },
+    superhero: { bgFrom: '#311042', bgTo: '#7C2D12', accent: '#FBBF24', label: 'مشاهد أبطال خارقين وخدع بصرية ⚡' },
+    heist: { bgFrom: '#0F172A', bgTo: '#1E3A8A', accent: '#38BDF8', label: 'تصوير خطة السطو والمطاردات 💎' },
+    psychological_horror: { bgFrom: '#090D16', bgTo: '#311042', accent: '#A855F7', label: 'إضاءة غموض ورعب نفسي 🌫️' },
+    supernatural_horror: { bgFrom: '#090D16', bgTo: '#3B0764', accent: '#C084FC', label: 'لوكيشن ما وراء الطبيعة والأساطير 👻' },
+    sci_fi: { bgFrom: '#082F49', bgTo: '#1E1B4B', accent: '#38BDF8', label: 'كروما خضراء ومؤثرات مستقبلية 🛸' },
+    fantasy: { bgFrom: '#1E1B4B', bgTo: '#4C1D95', accent: '#F472B6', label: 'ديكور فانتازيا وعوالم سحرية ✨' },
+    historical: { bgFrom: '#422006', bgTo: '#78350F', accent: '#FBBF24', label: 'ديكور تاريخي وإضاءة كلاسيكية ⚔️' },
+    biography: { bgFrom: '#27272A', bgTo: '#44403C', accent: '#FDE047', label: 'بلاتوه السيرة الذاتية والحقبة الزمنية 📖' },
+    comedy: { bgFrom: '#1E1B4B', bgTo: '#4338CA', accent: '#FACC15', label: 'لوكيشن كوميدي مبهج 🎭' },
+    light_comedy: { bgFrom: '#1E3A8A', bgTo: '#0284C7', accent: '#FDE047', label: 'لوكيشن لايت كوميدي عائلي 🌟' },
+    romance: { bgFrom: '#4C0519', bgTo: '#831843', accent: '#F43F5E', label: 'إضاءة دافئة ومشاهد رومانسية 💖' },
+    crime_mystery: { bgFrom: '#0F172A', bgTo: '#1E293B', accent: '#22D3EE', label: 'تصوير ليلي وتحقيقات غموض ⚡' },
+    popular_drama: { bgFrom: '#1E1B4B', bgTo: '#312E81', accent: '#A78BFA', label: 'بلاتوه الحارة والدراما الشعبية 🎬' },
+  };
+  const activeTheme = genreTheme[genre] || {
+    bgFrom: '#1E1B4B',
+    bgTo: '#312E81',
+    accent: '#A78BFA',
+    label: 'بلاتوه التصوير السينمائي 🎬',
+  };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[#D4AF37]/35 bg-[#0A0A0C] text-white shadow-xl">
-      <div ref={mountRef} className="h-36 w-full sm:h-44" />
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#D4AF37]/25 bg-[#16161D]/90 px-3.5 py-2 text-[11px] font-bold">
-        <span className="text-[#D4AF37]">
-          بلاتوه «{title}» · مشهد {dayCurrent}/{dayTotal} {isComplete ? '(اكتمل التصوير ✓)' : '(REC ●)'}
-        </span>
-        <span className="text-slate-300">
+    <div className="relative overflow-hidden rounded-2xl border-2 border-indigo-200 bg-slate-950 p-3 text-white shadow-md">
+      <svg
+        viewBox="0 0 520 180"
+        className="h-40 w-full sm:h-44"
+        aria-label="بلاتوه التصوير السينمائي المتحرك"
+      >
+        <defs>
+          <linearGradient id="setBackdrop" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={activeTheme.bgFrom} />
+            <stop offset="100%" stopColor={activeTheme.bgTo} />
+          </linearGradient>
+          <linearGradient id="studioLampBeam" x1="0%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stopColor="#FDE047" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#FDE047" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Soundstage Backdrop */}
+        <rect width="520" height="180" rx="14" fill="url(#setBackdrop)" />
+
+        {/* Overhead Rigging Truss */}
+        <rect x="10" y="10" width="500" height="8" rx="4" fill="#334155" />
+        {/* Studio Overhead Spotlights */}
+        <polygon points="150,18 95,155 215,155" fill="url(#studioLampBeam)" />
+        <polygon points="350,18 285,155 415,155" fill="url(#studioLampBeam)" />
+        <rect x="142" y="14" width="16" height="10" rx="3" fill="#FBBF24" />
+        <rect x="342" y="14" width="16" height="10" rx="3" fill="#FBBF24" />
+
+        {/* Genre-Specific Set Props in Center Stage */}
+        <rect
+          x="165"
+          y="42"
+          width="210"
+          height="102"
+          rx="10"
+          fill="#0F172A"
+          fillOpacity="0.55"
+          stroke={activeTheme.accent}
+          strokeWidth="2"
+        />
+
+        {/* Dynamic Genre Effects inside the Set */}
+        {(genre === 'action' || genre === 'superhero') && (
+          <motion.g
+            animate={{ scale: [0.9, 1.18, 0.9], opacity: [0.7, 1, 0.7] }}
+            transition={{ duration: 1.4, repeat: Infinity }}
+            style={{ transformOrigin: '270px 95px' }}
+          >
+            <circle cx="270" cy="95" r="26" fill="#EA580C" fillOpacity="0.45" />
+            <circle cx="270" cy="95" r="15" fill="#FDE047" fillOpacity="0.7" />
+          </motion.g>
+        )}
+
+        {(genre === 'sci_fi' || genre === 'fantasy') && (
+          <motion.circle
+            cx="270"
+            cy="92"
+            r="24"
+            stroke="#38BDF8"
+            strokeWidth="2.5"
+            strokeDasharray="6 4"
+            fill="none"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+            style={{ transformOrigin: '270px 92px' }}
+          />
+        )}
+
+        {/* Two Actors Performing on Set */}
+        <motion.g
+          animate={{ y: [0, -3, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          {/* Lead Actor Silhouette */}
+          <circle cx="242" cy="82" r="11" fill="#FDE68A" />
+          <path d="M226 138 Q228 96 242 96 Q256 96 258 138 Z" fill="#6366F1" />
+          {/* Co-star / Antagonist Silhouette */}
+          <circle cx="302" cy="84" r="10.5" fill="#FED7AA" />
+          <path d="M287 138 Q289 98 302 98 Q315 98 317 138 Z" fill="#F43F5E" />
+        </motion.g>
+
+        {/* Overhead Boom Mic */}
+        <motion.g
+          animate={{ rotate: [-4, 4, -4] }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ transformOrigin: '390px 35px' }}
+        >
+          <line x1="390" y1="35" x2="275" y2="62" stroke="#94A3B8" strokeWidth="3" />
+          <ellipse cx="272" cy="63" rx="8" ry="4" fill="#F43F5E" />
+        </motion.g>
+
+        {/* Moving Cinema Camera on Dolly Track (Left) */}
+        <rect x="28" y="148" width="120" height="5" rx="2.5" fill="#64748B" />
+        <motion.g
+          animate={{ x: [0, 42, 0] }}
+          transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          {/* Dolly Base */}
+          <rect x="40" y="136" width="44" height="10" rx="4" fill="#F59E0B" />
+          <circle cx="48" cy="148" r="5" fill="#E2E8F0" />
+          <circle cx="76" cy="148" r="5" fill="#E2E8F0" />
+          {/* Camera Tripod & Cinema Camera */}
+          <line x1="62" y1="136" x2="54" y2="104" stroke="#CBD5E1" strokeWidth="3" />
+          <line x1="62" y1="136" x2="70" y2="104" stroke="#CBD5E1" strokeWidth="3" />
+          <rect x="46" y="84" width="32" height="20" rx="4" fill="#0F172A" stroke="#38BDF8" strokeWidth="2" />
+          {/* Dual Camera Reels */}
+          <motion.circle
+            cx="54"
+            cy="77"
+            r="7"
+            fill="#1E293B"
+            stroke="#FBBF24"
+            strokeWidth="2"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
+          />
+          <motion.circle
+            cx="69"
+            cy="77"
+            r="7"
+            fill="#1E293B"
+            stroke="#FBBF24"
+            strokeWidth="2"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
+          />
+          {/* Lens Matte Box */}
+          <polygon points="78,88 92,82 92,106 78,100" fill="#38BDF8" />
+        </motion.g>
+
+        {/* Animated Snapping Clapperboard (Right) */}
+        <g transform="translate(415, 76)">
+          <rect
+            x="0"
+            y="18"
+            width="76"
+            height="54"
+            rx="6"
+            fill="#0F172A"
+            stroke="#F8FAFC"
+            strokeWidth="2"
+          />
+          {/* Top Hinged Clapper Stick */}
+          <motion.g
+            animate={{ rotate: isComplete ? 0 : [-18, 0, -18] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ transformOrigin: '4px 18px' }}
+          >
+            <rect x="0" y="8" width="76" height="10" rx="3" fill="#F8FAFC" />
+            <polygon points="10,8 20,8 14,18 4,18" fill="#0F172A" />
+            <polygon points="30,8 40,8 34,18 24,18" fill="#0F172A" />
+            <polygon points="50,8 60,8 54,18 44,18" fill="#0F172A" />
+          </motion.g>
+          <text x="38" y="36" textAnchor="middle" fill="#FDE047" fontSize="8.5" fontWeight="900">
+            SCENE {dayCurrent}/{dayTotal}
+          </text>
+          <text x="38" y="50" textAnchor="middle" fill="#FFFFFF" fontSize="7.5" fontWeight="700">
+            {title.slice(0, 13)}
+          </text>
+          <text x="38" y="63" textAnchor="middle" fill="#38BDF8" fontSize="7" fontWeight="800">
+            {isComplete ? 'WRAP ✓' : 'REC ●'}
+          </text>
+        </g>
+      </svg>
+
+      {/* Bottom Live Set Status Strip */}
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/10 px-3 py-1.5 text-[11px] font-bold text-indigo-100 backdrop-blur-xs">
+        <span>{activeTheme.label}</span>
+        <span className="font-black text-amber-300">
           إخراج: {directorName} · بطولة: {leadName}
         </span>
       </div>
@@ -828,8 +730,7 @@ export function AnimatedFilmingSetGraphic({
 }
 
 /**
- * 4. Real 3D WebGL Cinema Premiere Auditorium (AnimatedCinemaPremiereGraphic)
- * Features: Giant glowing 3D cinema screen with procedural CanvasTexture, projector volumetric light beam, velvet curtains, 3D auditorium seats.
+ * 4. Animated Cinema Premiere & TV Broadcast Graphic for Stage5ReleaseSimulation
  */
 export function AnimatedCinemaPremiereGraphic({
   title,
@@ -848,221 +749,139 @@ export function AnimatedCinemaPremiereGraphic({
   rank: number;
   criticScore: number;
 }) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const container = mountRef.current;
-    if (!container) return;
-
-    const isSoftwareGl = detectSoftwareWebGL();
-    const width = Math.max(container.offsetWidth || 480, 260);
-    const height = Math.max(container.offsetHeight || 165, 135);
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x08080c);
-    scene.fog = new THREE.FogExp2(0x08080c, 0.025);
-
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 80);
-    camera.position.set(0, 2.8, 12.5);
-    camera.lookAt(0, 2.7, -3);
-
-    const renderer = new THREE.WebGLRenderer({
-      antialias: !isSoftwareGl,
-      powerPreference: 'high-performance',
-    });
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(width, height);
-    container.innerHTML = '';
-    container.appendChild(renderer.domElement);
-
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const screenGlowLight = new THREE.PointLight(0xd4af37, 12, 22);
-    screenGlowLight.position.set(0, 3.2, -1);
-    scene.add(screenGlowLight);
-
-    // Dynamic Procedural Screen Texture
-    const screenCanvas = document.createElement('canvas');
-    screenCanvas.width = 512;
-    screenCanvas.height = 256;
-    const ctx = screenCanvas.getContext('2d');
-    if (ctx) {
-      const grad = ctx.createLinearGradient(0, 0, 512, 256);
-      grad.addColorStop(0, '#16161D');
-      grad.addColorStop(0.5, '#1E1B4B');
-      grad.addColorStop(1, '#311042');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 512, 256);
-
-      ctx.strokeStyle = '#D4AF37';
-      ctx.lineWidth = 8;
-      ctx.strokeRect(8, 8, 496, 240);
-
-      ctx.fillStyle = '#D4AF37';
-      ctx.font = '900 22px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        isSeries
-          ? `بث الحلقات · الحلقة ${currentStep} من ${maxSteps}`
-          : `شباك التذاكر · اليوم ${currentStep} من ${maxSteps}`,
-        256,
-        58
-      );
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = '900 36px system-ui, sans-serif';
-      ctx.fillText(`« ${title.slice(0, 22)} »`, 256, 120);
-
-      ctx.fillStyle = '#34D399';
-      ctx.font = '900 30px system-ui, sans-serif';
-      ctx.fillText(`${liveRevenueFormatted} ج.م`, 256, 174);
-
-      ctx.fillStyle = '#FDE047';
-      ctx.font = '800 20px system-ui, sans-serif';
-      ctx.fillText(`المركز #${rank} بالموسم · تقييم النقاد ${criticScore}/10`, 256, 218);
-    }
-
-    const screenTexture = new THREE.CanvasTexture(screenCanvas);
-    screenTexture.colorSpace = THREE.SRGBColorSpace;
-    screenTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
-    // Giant Glowing 3D Cinema Screen
-    const screenMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(11.2, 5.4),
-      new THREE.MeshBasicMaterial({ map: screenTexture })
-    );
-    screenMesh.position.set(0, 3.4, -3.5);
-    scene.add(screenMesh);
-
-    // Golden Frame around Cinema Screen
-    const frameMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(11.6, 5.8, 0.25),
-      new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.2 })
-    );
-    frameMesh.position.set(0, 3.4, -3.65);
-    scene.add(frameMesh);
-
-    // Red Velvet Side Curtains
-    const curtainMat = new THREE.MeshStandardMaterial({
-      color: 0x991b1b,
-      roughness: 0.75,
-      metalness: 0.1,
-    });
-    [-6.3, 6.3].forEach((x) => {
-      const curtain = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.85, 6.4, 16), curtainMat);
-      curtain.position.set(x, 3.2, -3.2);
-      scene.add(curtain);
-    });
-
-    // Volumetric Projector Beam from Back Booth
-    const projConeGeo = new THREE.ConeGeometry(4.8, 14, 24, 1, true);
-    projConeGeo.rotateX(Math.PI / 2);
-    const projCone = new THREE.Mesh(
-      projConeGeo,
-      new THREE.MeshBasicMaterial({
-        color: 0xd4af37,
-        transparent: true,
-        opacity: 0.11,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      })
-    );
-    projCone.position.set(0, 3.8, 3.5);
-    scene.add(projCone);
-
-    // 3D Auditorium Seats (InstancedMesh)
-    const seatGeo = new THREE.BoxGeometry(0.75, 0.75, 0.65);
-    const seatMat = new THREE.MeshStandardMaterial({
-      color: 0x7f1d1d,
-      roughness: 0.6,
-      metalness: 0.2,
-    });
-    const seatRows = 3;
-    const seatsPerRow = 9;
-    const seatsInst = new THREE.InstancedMesh(seatGeo, seatMat, seatRows * seatsPerRow);
-    const dummy = new THREE.Object3D();
-    let idx = 0;
-    for (let r = 0; r < seatRows; r++) {
-      for (let c = 0; c < seatsPerRow; c++) {
-        dummy.position.set((c - 4) * 1.15, 0.35 + r * 0.25, 2.2 + r * 1.6);
-        dummy.updateMatrix();
-        seatsInst.setMatrixAt(idx++, dummy.matrix);
-      }
-    }
-    seatsInst.computeBoundingSphere();
-    scene.add(seatsInst);
-
-    const clock = new THREE.Clock();
-    let frameId = 0;
-    let disposed = false;
-
-    function afterDraw(cb: () => void) {
-      const gl = renderer.getContext() as WebGL2RenderingContext;
-      if (!gl || !gl.fenceSync) {
-        frameId = window.setTimeout(cb, 80);
-        return;
-      }
-      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-      gl.flush();
-      const poll = () => {
-        if (disposed) return;
-        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
-        if (state === gl.UNSIGNALED) {
-          frameId = window.setTimeout(poll, 5);
-        } else {
-          if (sync) gl.deleteSync(sync);
-          frameId = window.setTimeout(cb, 80);
-        }
-      };
-      frameId = window.setTimeout(poll, 5);
-    }
-
-    function tick() {
-      if (disposed) return;
-      const t = clock.getElapsedTime();
-      camera.position.x = Math.sin(t * 0.45) * 1.2;
-      camera.lookAt(0, 3.1, -3.5);
-
-      renderer.render(scene, camera);
-      if (isSoftwareGl) afterDraw(tick);
-      else frameId = requestAnimationFrame(tick);
-    }
-
-    tick();
-
-    const ro = new ResizeObserver(() => {
-      if (!container || disposed) return;
-      const w = Math.max(container.offsetWidth, 240);
-      const h = Math.max(container.offsetHeight, 120);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    });
-    ro.observe(container);
-
-    return () => {
-      disposed = true;
-      cancelAnimationFrame(frameId);
-      clearTimeout(frameId);
-      ro.disconnect();
-      screenTexture.dispose();
-      disposeSceneResources(scene, renderer);
-    };
-  }, [title, isSeries, currentStep, maxSteps, liveRevenueFormatted, rank, criticScore]);
-
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[#D4AF37]/40 bg-[#0A0A0C] text-white shadow-xl">
-      <div ref={mountRef} className="h-36 w-full sm:h-44" />
+    <div className="relative overflow-hidden rounded-2xl border-2 border-violet-300 bg-gradient-to-b from-[#0F172A] via-[#1E1B4B] to-[#312E81] p-3 text-white shadow-md">
+      <svg
+        viewBox="0 0 520 175"
+        className="h-38 w-full sm:h-44"
+        aria-label="شاشة العرض الجماهيري التفاعلية"
+      >
+        <defs>
+          <linearGradient id="projBeam" x1="50%" y1="100%" x2="50%" y2="0%">
+            <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.1" />
+            <stop offset="100%" stopColor="#A78BFA" stopOpacity="0.45" />
+          </linearGradient>
+          <linearGradient id="cinemaScreenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#4F46E5" />
+            <stop offset="50%" stopColor="#7C3AED" />
+            <stop offset="100%" stopColor="#06B6D4" />
+          </linearGradient>
+        </defs>
+
+        {/* Red Velvet Curtains (Left & Right) */}
+        <path d="M0 0 L68 0 Q52 85 36 165 L0 165 Z" fill="#BE123C" />
+        <path d="M520 0 L452 0 Q468 85 484 165 L520 165 Z" fill="#BE123C" />
+
+        {/* Projector Light Cone */}
+        <motion.polygon
+          points="260,175 95,18 425,18"
+          fill="url(#projBeam)"
+          animate={{ opacity: [0.55, 0.9, 0.55] }}
+          transition={{ duration: 2.6, repeat: Infinity }}
+        />
+
+        {/* Giant Glowing Cinema / Broadcast Screen */}
+        <rect
+          x="95"
+          y="16"
+          width="330"
+          height="104"
+          rx="14"
+          fill="url(#cinemaScreenGrad)"
+          stroke="#FDE047"
+          strokeWidth="3"
+        />
+
+        {/* Animated Equalizer / Box Office Momentum Bars inside Screen */}
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+          <motion.rect
+            key={idx}
+            x={122 + idx * 36}
+            y={76}
+            width="18"
+            height="32"
+            rx="4"
+            fill="#FDE047"
+            fillOpacity="0.32"
+            animate={{
+              height: [14, 38, 22, 42, 16],
+              y: [94, 70, 86, 66, 92],
+            }}
+            transition={{
+              duration: 2.2,
+              repeat: Infinity,
+              delay: idx * 0.18,
+            }}
+          />
+        ))}
+
+        {/* Movie / Series Title & Live Numbers on Screen */}
+        <rect
+          x="195"
+          y="26"
+          width="130"
+          height="18"
+          rx="9"
+          fill="#0F172A"
+          fillOpacity="0.65"
+        />
+        <text x="260" y="38" textAnchor="middle" fill="#FDE047" fontSize="8.5" fontWeight="900">
+          {isSeries
+            ? `بث الحلقة ${currentStep} من ${maxSteps}`
+            : `شباك التذاكر · اليوم ${currentStep} من ${maxSteps}`}
+        </text>
+
+        <text
+          x="260"
+          y="64"
+          textAnchor="middle"
+          fill="#FFFFFF"
+          fontSize="16"
+          fontWeight="900"
+        >
+          « {title.slice(0, 24)} »
+        </text>
+
+        <text
+          x="260"
+          y="88"
+          textAnchor="middle"
+          fill="#A7F3D0"
+          fontSize="13"
+          fontWeight="900"
+        >
+          {liveRevenueFormatted} ج.م
+        </text>
+
+        <text
+          x="260"
+          y="107"
+          textAnchor="middle"
+          fill="#E0E7FF"
+          fontSize="9"
+          fontWeight="800"
+        >
+          المركز #{rank} بالموسم · تقييم النقاد {criticScore}/10
+        </text>
+
+        {/* Audience Silhouettes in Cinema Seats */}
+        {[75, 115, 155, 195, 235, 275, 315, 355, 395, 435].map((cx, i) => (
+          <motion.g
+            key={i}
+            animate={{ y: [0, i % 2 === 0 ? -3 : -2, 0] }}
+            transition={{ duration: 2.4, repeat: Infinity, delay: i * 0.15 }}
+          >
+            <rect x={cx - 14} y="146" width="28" height="26" rx="6" fill="#1E293B" />
+            <circle cx={cx} cy="140" r="9" fill="#0F172A" />
+          </motion.g>
+        ))}
+      </svg>
     </div>
   );
 }
 
 /**
- * 5. Real 3D WebGL Red Carpet & Rotating Golden Trophy Scene (AnimatedRedCarpetFestivalGraphic)
- * Features: Rotating 3D metallic gold trophy, red carpet with golden stanchions, paparazzi camera flashes, falling golden confetti.
+ * 5. Animated Red Carpet & Golden Trophy Stage Graphic for Stage6FestivalsAwards & WorldPopupsOverlay
  */
 export function AnimatedRedCarpetFestivalGraphic({
   festivalName,
@@ -1073,219 +892,134 @@ export function AnimatedRedCarpetFestivalGraphic({
   year: number;
   wonCount: number;
 }) {
-  const mountRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const container = mountRef.current;
-    if (!container) return;
-
-    const isSoftwareGl = detectSoftwareWebGL();
-    const width = Math.max(container.offsetWidth || 480, 260);
-    const height = Math.max(container.offsetHeight || 155, 130);
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0c);
-    scene.fog = new THREE.FogExp2(0x0a0a0c, 0.03);
-
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 80);
-    camera.position.set(0, 3.4, 9.8);
-    camera.lookAt(0, 2.2, 0);
-
-    const renderer = new THREE.WebGLRenderer({
-      antialias: !isSoftwareGl,
-      powerPreference: 'high-performance',
-    });
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.35;
-    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(width, height);
-    container.innerHTML = '';
-    container.appendChild(renderer.domElement);
-
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
-
-    scene.add(new THREE.HemisphereLight(0xfef08a, 0x0a0a0c, 1.0));
-    const keyLight = new THREE.DirectionalLight(0xffd700, 3.0);
-    keyLight.position.set(6, 12, 8);
-    scene.add(keyLight);
-
-    const flashLight = new THREE.PointLight(0xffffff, 0, 25);
-    flashLight.position.set(2, 4, 5);
-    scene.add(flashLight);
-
-    // Red Carpet Runway
-    const carpet = new THREE.Mesh(
-      new THREE.PlaneGeometry(5.5, 22),
-      new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.65, metalness: 0.1 })
-    );
-    carpet.rotation.x = -Math.PI / 2;
-    scene.add(carpet);
-
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xd4af37,
-      metalness: 0.95,
-      roughness: 0.12,
-    });
-    const darkMarbleMat = new THREE.MeshStandardMaterial({
-      color: 0x16161d,
-      metalness: 0.6,
-      roughness: 0.2,
-    });
-
-    // Golden Stanchion Posts along the Red Carpet
-    [-2.5, 2.5].forEach((x) => {
-      for (let z = -3; z <= 4; z += 2.3) {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.1, 12), goldMat);
-        post.position.set(x, 0.55, z);
-        scene.add(post);
-
-        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 12), goldMat);
-        ball.position.set(x, 1.15, z);
-        scene.add(ball);
-      }
-    });
-
-    // 3D Rotating Golden Award Trophy (Composite Group)
-    const trophyGroup = new THREE.Group();
-
-    const basePedestal = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.1, 1.35, 0.6, 24),
-      darkMarbleMat
-    );
-    basePedestal.position.y = 0.3;
-    trophyGroup.add(basePedestal);
-
-    const goldRing = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.95, 1.05, 0.25, 24),
-      goldMat
-    );
-    goldRing.position.y = 0.72;
-    trophyGroup.add(goldRing);
-
-    const stem = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.45, 1.6, 20),
-      goldMat
-    );
-    stem.position.y = 1.6;
-    trophyGroup.add(stem);
-
-    const cupGlobe = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.95, 1),
-      goldMat
-    );
-    cupGlobe.position.y = 2.95;
-    trophyGroup.add(cupGlobe);
-
-    const outerHalo = new THREE.Mesh(
-      new THREE.TorusGeometry(1.25, 0.08, 16, 36),
-      goldMat
-    );
-    outerHalo.position.y = 2.95;
-    trophyGroup.add(outerHalo);
-
-    scene.add(trophyGroup);
-
-    // Golden Confetti Particles
-    const confCount = 80;
-    const confPos = new Float32Array(confCount * 3);
-    for (let i = 0; i < confCount; i++) {
-      confPos[i * 3] = (Math.random() - 0.5) * 14;
-      confPos[i * 3 + 1] = Math.random() * 7 + 0.5;
-      confPos[i * 3 + 2] = (Math.random() - 0.5) * 10;
-    }
-    const confGeo = new THREE.BufferGeometry();
-    confGeo.setAttribute('position', new THREE.BufferAttribute(confPos, 3));
-    const confetti = new THREE.Points(
-      confGeo,
-      new THREE.PointsMaterial({
-        color: 0xfde047,
-        size: 0.16,
-        transparent: true,
-        opacity: 0.85,
-        blending: THREE.AdditiveBlending,
-      })
-    );
-    scene.add(confetti);
-
-    const clock = new THREE.Clock();
-    let frameId = 0;
-    let disposed = false;
-
-    function afterDraw(cb: () => void) {
-      const gl = renderer.getContext() as WebGL2RenderingContext;
-      if (!gl || !gl.fenceSync) {
-        frameId = window.setTimeout(cb, 80);
-        return;
-      }
-      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-      gl.flush();
-      const poll = () => {
-        if (disposed) return;
-        const state = sync && gl.getSyncParameter(sync, gl.SYNC_STATUS);
-        if (state === gl.UNSIGNALED) {
-          frameId = window.setTimeout(poll, 5);
-        } else {
-          if (sync) gl.deleteSync(sync);
-          frameId = window.setTimeout(cb, 80);
-        }
-      };
-      frameId = window.setTimeout(poll, 5);
-    }
-
-    function tick() {
-      if (disposed) return;
-      const t = clock.getElapsedTime();
-
-      trophyGroup.rotation.y = t * 1.15;
-      trophyGroup.position.y = Math.sin(t * 2) * 0.1;
-      outerHalo.rotation.x = Math.sin(t * 1.4) * 0.45;
-      confetti.rotation.y = -t * 0.25;
-
-      // Periodic paparazzi camera flash bursts
-      const flashPulse = Math.sin(t * 7.5) * Math.sin(t * 3.1);
-      flashLight.intensity = flashPulse > 0.78 ? 22 : 0;
-      flashLight.position.x = Math.sin(t * 4.3) * 4;
-
-      renderer.render(scene, camera);
-      if (isSoftwareGl) afterDraw(tick);
-      else frameId = requestAnimationFrame(tick);
-    }
-
-    tick();
-
-    const ro = new ResizeObserver(() => {
-      if (!container || disposed) return;
-      const w = Math.max(container.offsetWidth, 240);
-      const h = Math.max(container.offsetHeight, 115);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    });
-    ro.observe(container);
-
-    return () => {
-      disposed = true;
-      cancelAnimationFrame(frameId);
-      clearTimeout(frameId);
-      ro.disconnect();
-      disposeSceneResources(scene, renderer);
-    };
-  }, []);
-
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[#D4AF37]/45 bg-[#0A0A0C] text-white shadow-xl">
-      <div ref={mountRef} className="h-36 w-full sm:h-40" />
-      <div className="pointer-events-none absolute inset-x-3 bottom-2 flex items-center justify-between gap-2 rounded-xl border border-[#D4AF37]/35 bg-[#0A0A0C]/85 px-3 py-1.5 text-[11px] font-bold backdrop-blur-md">
-        <span className="truncate font-black text-[#D4AF37]">
+    <div className="relative overflow-hidden rounded-2xl border-2 border-amber-300 bg-gradient-to-b from-[#1E1B4B] via-[#311042] to-[#451A03] p-3 text-white shadow-md">
+      <svg
+        viewBox="0 0 520 155"
+        className="h-34 w-full sm:h-38"
+        aria-label="مسرح جوائز المهرجان السينمائي"
+      >
+        <defs>
+          <linearGradient id="goldSpot" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stopColor="#FDE047" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="#F59E0B" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="trophyGold" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#FEF08A" />
+            <stop offset="100%" stopColor="#D97706" />
+          </linearGradient>
+        </defs>
+
+        {/* Golden Stage Curtains & Spotlights */}
+        <motion.polygon
+          points="150,0 80,155 230,155"
+          fill="url(#goldSpot)"
+          animate={{ rotate: [-8, 8, -8] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ transformOrigin: '150px 0px' }}
+        />
+        <motion.polygon
+          points="370,0 290,155 440,155"
+          fill="url(#goldSpot)"
+          animate={{ rotate: [8, -8, 8] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ transformOrigin: '370px 0px' }}
+        />
+
+        {/* Paparazzi Camera Flashes */}
+        {[
+          { cx: 65, cy: 48, d: 0.1 },
+          { cx: 120, cy: 85, d: 0.7 },
+          { cx: 400, cy: 65, d: 0.4 },
+          { cx: 455, cy: 42, d: 1.1 },
+          { cx: 205, cy: 36, d: 0.9 },
+          { cx: 320, cy: 34, d: 0.2 },
+        ].map((fl, i) => (
+          <motion.circle
+            key={i}
+            cx={fl.cx}
+            cy={fl.cy}
+            r="6"
+            fill="#FFFFFF"
+            animate={{ opacity: [0, 0.95, 0], scale: [0.4, 1.8, 0.4] }}
+            transition={{ duration: 1.9, repeat: Infinity, delay: fl.d }}
+          />
+        ))}
+
+        {/* Falling Golden Confetti & Sparkles */}
+        {[
+          { x: 95, y: 18, c: '#FDE047', d: 0 },
+          { x: 145, y: 26, c: '#38BDF8', d: 0.4 },
+          { x: 195, y: 14, c: '#F43F5E', d: 0.8 },
+          { x: 325, y: 20, c: '#FDE047', d: 0.2 },
+          { x: 375, y: 16, c: '#A78BFA', d: 0.6 },
+          { x: 430, y: 24, c: '#34D399', d: 1.0 },
+        ].map((cf, idx) => (
+          <motion.rect
+            key={idx}
+            x={cf.x}
+            y={cf.y}
+            width="5"
+            height="9"
+            rx="1.5"
+            fill={cf.c}
+            animate={{
+              y: [0, 95],
+              rotate: [0, 220],
+              opacity: [1, 0.9, 0],
+            }}
+            transition={{
+              duration: 3.2,
+              repeat: Infinity,
+              delay: cf.d,
+              ease: 'linear',
+            }}
+          />
+        ))}
+
+        {/* Red Carpet Stage Pedestal */}
+        <polygon points="150,155 370,155 330,115 190,115" fill="#BE123C" stroke="#FBBF24" strokeWidth="2" />
+
+        {/* Central Shimmering Golden Trophy */}
+        <motion.g
+          animate={{ y: [0, -5, 0], scale: [1, 1.04, 1] }}
+          transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ transformOrigin: '260px 75px' }}
+        >
+          <circle cx="260" cy="64" r="34" fill="#FDE047" fillOpacity="0.18" />
+          {/* Trophy Cup */}
+          <path
+            d="M240 40 L280 40 L274 72 Q260 84 246 72 Z"
+            fill="url(#trophyGold)"
+          />
+          {/* Trophy Handles */}
+          <path
+            d="M240 45 Q228 45 232 60 Q236 68 246 66"
+            stroke="#FDE047"
+            strokeWidth="3"
+            fill="none"
+          />
+          <path
+            d="M280 45 Q292 45 288 60 Q284 68 274 66"
+            stroke="#FDE047"
+            strokeWidth="3"
+            fill="none"
+          />
+          {/* Stem & Base */}
+          <rect x="256" y="76" width="8" height="18" fill="url(#trophyGold)" />
+          <rect x="242" y="94" width="36" height="10" rx="3" fill="#B45309" stroke="#FDE047" strokeWidth="1.5" />
+        </motion.g>
+
+        {/* Festival Banner Text */}
+        <text x="260" y="24" textAnchor="middle" fill="#FEF08A" fontSize="11.5" fontWeight="900">
           {festivalName} · {year}
-        </span>
-        <span className="shrink-0 text-amber-200">
-          {wonCount > 0 ? `تتويج شركتك بـ ${wonCount} جوائز 🏆` : 'السجادة الحمراء والمسرح الذهبي'}
-        </span>
-      </div>
+        </text>
+        <text x="260" y="138" textAnchor="middle" fill="#FFFFFF" fontSize="10" fontWeight="900">
+          {wonCount > 0
+            ? `تتويج تاريخي لشركتك بـ ${wonCount} جوائز رسمية 🏆`
+            : 'السجادة الحمراء وإعلان جوائز لجنة التحكيم'}
+        </text>
+      </svg>
     </div>
   );
 }

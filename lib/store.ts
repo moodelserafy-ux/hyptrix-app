@@ -15,12 +15,6 @@ import {
   formatMoney,
   calculateStudioMarketValue,
   generateRivalReleases,
-  StudioFacilityId,
-  StudioFacilitiesLevels,
-  DEFAULT_FACILITIES_LEVELS,
-  STUDIO_FACILITY_CONFIGS,
-  getFacilityUpgradeCost,
-  SimulationTwistEvent,
 } from './game-engine';
 import {
   GenreId,
@@ -310,7 +304,6 @@ export interface ReleasedProjectRecord {
   daysTracked?: number;
   dailyNews?: DailyAiNewsItem[];
   festivalsTriggered?: boolean;
-  simulationTwists?: SimulationTwistEvent[];
 }
 
 export interface WorldHistoryEntry {
@@ -903,7 +896,6 @@ export interface HyptrixGameState {
   founderPerk: FounderPerk;
   currentRegion: MarketRegion;
   unlockedRegions: MarketRegion[];
-  facilitiesLevels: StudioFacilitiesLevels;
   cash: number;
   marketValue: number;
   marketValueModifier: number;
@@ -945,10 +937,8 @@ export interface HyptrixGameState {
   quickStartDemoStudio: () => void;
   setActiveScreen: (screen: ActiveStageScreen) => void;
   advanceGameDay: (days?: number) => void;
-  upgradeStudioFacility: (facilityId: StudioFacilityId) => { ok: boolean; message: string };
   unlockMarketRegionWithCash: (region: MarketRegion) => boolean;
   toggleDraftDistributionMarket: (region: MarketRegion) => void;
-  triggerAnnualAwardsCeremonyNow: () => void;
   submitTalentOffer: (offer: TalentOfferRecord) => void;
   confirmMultiAcceptedChoice: (slot: OfferRoleSlot, chosenTalentIds: string[]) => void;
   removeTalentFromDraft: (talentId: string) => void;
@@ -1051,7 +1041,6 @@ export const useGameStore = create<HyptrixGameState>()(
       founderPerk: 'visionary_director',
       currentRegion: 'egypt',
       unlockedRegions: ['egypt'],
-      facilitiesLevels: { ...DEFAULT_FACILITIES_LEVELS },
       cash: 75_000_000,
       marketValue: 110_000_000,
       marketValueModifier: 0,
@@ -1128,70 +1117,6 @@ export const useGameStore = create<HyptrixGameState>()(
 
       setActiveScreen: (screen) => set({ activeScreen: screen }),
 
-      upgradeStudioFacility: (facilityId) => {
-        const state = get();
-        const currentLevels = state.facilitiesLevels || DEFAULT_FACILITIES_LEVELS;
-        const currentLevel = currentLevels[facilityId] || 1;
-        const cfg = STUDIO_FACILITY_CONFIGS.find((f) => f.id === facilityId);
-        if (!cfg) {
-          return { ok: false, message: 'المرفق غير موجود.' };
-        }
-        if (currentLevel >= cfg.maxLevel) {
-          return {
-            ok: false,
-            message: `وصل «${cfg.name}» إلى المستوى الأقصى (${cfg.maxLevel}).`,
-          };
-        }
-
-        const cost = getFacilityUpgradeCost(facilityId, currentLevel);
-        if (state.cash < cost) {
-          return {
-            ok: false,
-            message: `السيولة النقدية في الخزينة غير كافية (مطلوب ${formatMoney(cost)} ج.م).`,
-          };
-        }
-
-        const nextLevel = currentLevel + 1;
-        const nextFacilities: StudioFacilitiesLevels = {
-          ...currentLevels,
-          [facilityId]: nextLevel,
-        };
-        const nextCash = state.cash - cost;
-        const nextRep = Math.min(100, state.reputation + 2);
-        const nextMv = calculateStudioMarketValue({
-          cash: nextCash,
-          reputation: nextRep,
-          releasedProjects: state.releasedProjects,
-          marketValueModifier: state.marketValueModifier || 0,
-          facilitiesLevels: nextFacilities,
-        });
-        const levelTitle = cfg.levelTitles[nextLevel - 1] || `المستوى ${nextLevel}`;
-
-        set({
-          cash: nextCash,
-          reputation: nextRep,
-          facilitiesLevels: nextFacilities,
-          marketValue: nextMv,
-          worldHistory: [
-            {
-              year: state.currentYear,
-              eventText: `تطوير «${cfg.name}» إلى المستوى ${nextLevel} (${levelTitle}) باستثمار ${formatMoney(cost)} ج.م.`,
-              category: 'milestone',
-            },
-            ...state.worldHistory,
-          ],
-          aiMemoryLog: [
-            `طوّرت شركة «${state.studioName}» مبنى ومعدات «${cfg.name}» إلى المستوى ${nextLevel} (${levelTitle}).`,
-            ...(state.aiMemoryLog || []),
-          ].slice(0, 25),
-        });
-
-        return {
-          ok: true,
-          message: `تم بناء وتطوير «${cfg.name}» إلى المستوى ${nextLevel}: ${levelTitle}!`,
-        };
-      },
-
       unlockMarketRegionWithCash: (region) => {
         const state = get();
         if (state.unlockedRegions.includes(region)) return true;
@@ -1262,112 +1187,6 @@ export const useGameStore = create<HyptrixGameState>()(
               ...state.draft,
               selectedDistributionMarkets: nextList.length > 0 ? nextList : ['egypt'],
             },
-          };
-        }),
-
-      triggerAnnualAwardsCeremonyNow: () =>
-        set((state) => {
-          const db = getResolvedDatabase(state.customDbPatch);
-          const yearToJudge = state.currentYear;
-          const playerProjectsThisYear = state.releasedProjects.filter(
-            (p) => p.year === yearToJudge
-          );
-
-          // Ensure rival releases exist for this year
-          let rivalsPool = state.yearlyRivalReleases.filter(
-            (r) => !r.year || r.year === yearToJudge
-          );
-          if (rivalsPool.length < 3) {
-            const extraFilmRivals = generateRivalReleases(
-              [...db.competitor_studios, ...state.emergingCompetitors],
-              db.actors,
-              [],
-              1.05,
-              yearToJudge,
-              'film'
-            );
-            const extraSeriesRivals = generateRivalReleases(
-              [...db.competitor_studios, ...state.emergingCompetitors],
-              db.actors,
-              [],
-              1.0,
-              yearToJudge + 5,
-              'series'
-            );
-            rivalsPool = [...rivalsPool, ...extraFilmRivals, ...extraSeriesRivals];
-          }
-
-          const gala = buildAnnualAwardsGalaForYear({
-            playerProjectsInYear: playerProjectsThisYear,
-            rivalReleasesInYear: rivalsPool,
-            studioName: state.studioName,
-            year: yearToJudge,
-            db,
-          });
-
-          const updatedProjects = state.releasedProjects.map((proj) => {
-            const wonForProj = gala.awardsByProjectId[proj.id] || [];
-            if (wonForProj.length === 0) return { ...proj, festivalsTriggered: true };
-            return {
-              ...proj,
-              awardsWon: Array.from(new Set([...proj.awardsWon, ...wonForProj])),
-              festivalsTriggered: true,
-            };
-          });
-
-          const updatedActorAwards = { ...state.actorAwardCounts };
-          for (const aId of gala.winningActorIds) {
-            updatedActorAwards[aId] = (updatedActorAwards[aId] || 0) + 1;
-          }
-
-          const nextCompDelta = { ...state.competitorNetWorthDelta };
-          for (const [stName, awCount] of Object.entries(gala.rivalAwardsCountByStudio)) {
-            const prev = nextCompDelta[stName] || {
-              netWorthDelta: 0,
-              releasesDelta: 0,
-              awardsDelta: 0,
-            };
-            nextCompDelta[stName] = {
-              ...prev,
-              awardsDelta: prev.awardsDelta + awCount,
-              netWorthDelta: prev.netWorthDelta + awCount * 14_000_000,
-            };
-          }
-
-          const totalPlayerWon = Object.values(gala.awardsByProjectId).flat().length;
-          const nextRep = Math.min(100, state.reputation + totalPlayerWon * 3);
-          const nextMarketVal = calculateStudioMarketValue({
-            cash: state.cash,
-            reputation: nextRep,
-            releasedProjects: updatedProjects,
-            marketValueModifier: state.marketValueModifier || 0,
-          });
-
-          // Advance to the start of the new year if not already there
-          const currentYearIndex = Math.floor((state.gameDay - 1) / DAYS_PER_GAME_YEAR);
-          const nextYearStartDay = (currentYearIndex + 1) * DAYS_PER_GAME_YEAR + 1;
-          const shouldAdvanceYear = state.lastAwardsGalaYear < yearToJudge;
-
-          return {
-            gameDay: shouldAdvanceYear ? Math.max(state.gameDay, nextYearStartDay) : state.gameDay,
-            currentYear: shouldAdvanceYear ? yearToJudge + 1 : state.currentYear,
-            lastAwardsGalaYear: yearToJudge,
-            releasedProjects: updatedProjects,
-            lastReleasedProject: updatedProjects[0] || state.lastReleasedProject,
-            actorAwardCounts: updatedActorAwards,
-            competitorNetWorthDelta: nextCompDelta,
-            reputation: nextRep,
-            marketValue: nextMarketVal,
-            festivalModalQueue: gala.ceremonies,
-            yearlyRivalReleases: [],
-            worldHistory: [
-              {
-                year: yearToJudge,
-                eventText: `إقامة الحفل السنوي لتوزيع جوائز السينما والدراما لعام ${yearToJudge} وحصد الاستوديو ${totalPlayerWon} جائزة.`,
-                category: 'award',
-              },
-              ...state.worldHistory,
-            ],
           };
         }),
 
@@ -2391,7 +2210,6 @@ export const useGameStore = create<HyptrixGameState>()(
           founderPerk: 'visionary_director',
           currentRegion: 'egypt',
           unlockedRegions: ['egypt'],
-          facilitiesLevels: { ...DEFAULT_FACILITIES_LEVELS },
           cash: 75_000_000,
           marketValue: 110_000_000,
           marketValueModifier: 0,

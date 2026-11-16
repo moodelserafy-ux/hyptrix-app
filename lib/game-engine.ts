@@ -54,22 +54,12 @@ export function calculateStudioMarketValue(params: {
     awardsWon: string[];
   }[];
   marketValueModifier?: number;
-  facilitiesLevels?: StudioFacilitiesLevels;
 }): number {
-  const {
-    cash,
-    reputation,
-    releasedProjects,
-    marketValueModifier = 0,
-    facilitiesLevels,
-  } = params;
+  const { cash, reputation, releasedProjects, marketValueModifier = 0 } = params;
 
   const baseBrandEquity = 68_000_000;
   const liquidCashWeight = Math.round(cash * 0.55);
   const reputationEquity = (reputation - 50) * 1_650_000;
-  const physicalAssetsEquity = facilitiesLevels
-    ? calculateFacilitiesBonuses(facilitiesLevels).physicalAssetsEquity
-    : 0;
 
   let ipCatalogValue = 0;
   let totalAwards = 0;
@@ -96,7 +86,6 @@ export function calculateStudioMarketValue(params: {
       baseBrandEquity +
         liquidCashWeight +
         reputationEquity +
-        physicalAssetsEquity +
         ipCatalogValue +
         awardsPrestigeEquity +
         marketValueModifier
@@ -646,195 +635,8 @@ export function generateRivalReleases(
   });
 }
 
-export type StudioFacilityId =
-  | 'soundstage'
-  | 'camera_rig'
-  | 'vfx_tower'
-  | 'audio_stage'
-  | 'marketing_hub';
-
-export type StudioFacilitiesLevels = Record<StudioFacilityId, number>;
-
-export const DEFAULT_FACILITIES_LEVELS: StudioFacilitiesLevels = {
-  soundstage: 1,
-  camera_rig: 1,
-  vfx_tower: 1,
-  audio_stage: 1,
-  marketing_hub: 1,
-};
-
-export interface StudioFacilityConfig {
-  id: StudioFacilityId;
-  name: string;
-  shortLabel: string;
-  categoryLabel: string;
-  maxLevel: number;
-  baseUpgradeCost: number;
-  description: string;
-  levelTitles: [string, string, string, string, string];
-  impactSummary: (level: number) => string;
-}
-
-export const STUDIO_FACILITY_CONFIGS: StudioFacilityConfig[] = [
-  {
-    id: 'soundstage',
-    name: 'البلاتوه السينمائي الرئيسي',
-    shortLabel: 'البلاتوه',
-    categoryLabel: 'مبنى تصوير',
-    maxLevel: 5,
-    baseUpgradeCost: 14_000_000,
-    description:
-      'قاعات التصوير المغلقة والديكورات الداخلية؛ تطويرها يرفع الجودة الفنية ويقلل احتمالات تعطل التصوير.',
-    levelTitles: [
-      'قاعة تصوير أولية',
-      'بلاتوه معزول صوتياً',
-      'مجمع بلاتوهات مزدوج',
-      'مدينة ديكورات متكاملة',
-      'المجمع السينمائي الكبير',
-    ],
-    impactSummary: (lvl) =>
-      `+${lvl * 3} جودة إنتاج أساسية · -${lvl * 8}% مخاطر أزمات التصوير`,
-  },
-  {
-    id: 'camera_rig',
-    name: 'معدات التصوير والإضاءة',
-    shortLabel: 'الكاميرات',
-    categoryLabel: 'معدات تصوير',
-    maxLevel: 5,
-    baseUpgradeCost: 12_000_000,
-    description:
-      'رافعات الكاميرات، العدسات السينمائية، والتصوير الجوي لرفع جودة الصورة وزيادة إقبال الأسبوع الأول.',
-    levelTitles: [
-      'كاميرات تصوير قياسية',
-      'عدسات سينمائية وعربات حركة',
-      'رافعات تصوير وإضاءة حديثة',
-      'وحدات تصوير جوي ومطاردات',
-      'أسطول التصوير السينمائي المتكامل',
-    ],
-    impactSummary: (lvl) =>
-      `+${lvl * 2.5} جودة بصرية · +${lvl * 5}% إيرادات الأسبوع الافتتاحي`,
-  },
-  {
-    id: 'vfx_tower',
-    name: 'مبنى المونتاج والمؤثرات البصرية',
-    shortLabel: 'المونتاج',
-    categoryLabel: 'ما بعد الإنتاج',
-    maxLevel: 5,
-    baseUpgradeCost: 16_000_000,
-    description:
-      'أجنحة المونتاج، تصحيح الألوان، والمؤثرات البصرية مع تأمين نسخ الأعمال ضد التسريب قبل العرض.',
-    levelTitles: [
-      'وحدة مونتاج أولية',
-      'معمل تصحيح ألوان ومؤثرات',
-      'مركز مؤثرات وحماية النسخ من التسريب',
-      'مجمع الخدع والمشاهد المركبة',
-      'المركز الرئيسي للمونتاج والمؤثرات',
-    ],
-    impactSummary: (lvl) =>
-      `+${(lvl * 0.22).toFixed(1)} تقييم نقاد · حماية النسخ من التسريب`,
-  },
-  {
-    id: 'audio_stage',
-    name: 'استوديو الصوت والموسيقى التصويرية',
-    shortLabel: 'الصوتيات',
-    categoryLabel: 'مبنى صوتي',
-    maxLevel: 5,
-    baseUpgradeCost: 11_000_000,
-    description:
-      'قاعات تسجيل الموسيقى التصويرية وهندسة الصوت المحيطي لرفع تقييم الجمهور وقيمة عقود المنصات.',
-    levelTitles: [
-      'غرفة تسجيل صوتي',
-      'استوديو دوبلاج ومؤثرات صوتية',
-      'قاعة هندسة صوت محيطي',
-      'مسرح تسجيل الموسيقى التصويرية',
-      'دار الأوركسترا والصوتيات الكبرى',
-    ],
-    impactSummary: (lvl) =>
-      `+${(lvl * 0.2).toFixed(1)} تقييم جمهور · +${lvl * 7}% قيمة عقود المنصات`,
-  },
-  {
-    id: 'marketing_hub',
-    name: 'مقر التسويق والعلاقات العامة',
-    shortLabel: 'التسويق',
-    categoryLabel: 'مقر إعلامي',
-    maxLevel: 5,
-    baseUpgradeCost: 13_000_000,
-    description:
-      'قاعات المؤتمرات الصحفية والعروض الخاصة التي ترفع الترقب الجماهيري وتسهّل التفاوض مع النجوم.',
-    levelTitles: [
-      'مكتب علاقات عامة',
-      'قاعة مؤتمرات صحفية',
-      'ساحة العروض الخاصة',
-      'مركز الحملات الترويجية',
-      'قصر الاحتفالات والعروض الكبرى',
-    ],
-    impactSummary: (lvl) =>
-      `+${lvl * 5} ترقب جماهيري · -${lvl * 2.5}% من مطالب أجور النجوم`,
-  },
-];
-
-export function getFacilityUpgradeCost(
-  facilityId: StudioFacilityId,
-  currentLevel: number
-): number {
-  const cfg = STUDIO_FACILITY_CONFIGS.find((f) => f.id === facilityId);
-  if (!cfg || currentLevel >= cfg.maxLevel) return 0;
-  return Math.round(cfg.baseUpgradeCost * Math.pow(1.55, currentLevel - 1));
-}
-
-export function calculateFacilitiesBonuses(
-  levels: StudioFacilitiesLevels = DEFAULT_FACILITIES_LEVELS
-) {
-  const s = levels.soundstage || 1;
-  const c = levels.camera_rig || 1;
-  const v = levels.vfx_tower || 1;
-  const a = levels.audio_stage || 1;
-  const m = levels.marketing_hub || 1;
-
-  const totalLevels = s + c + v + a + m; // 5 .. 25
-  const qualityBonus = (s - 1) * 3 + (c - 1) * 2.5 + (v - 1) * 2;
-  const openingWeekMultiplier = 1 + (c - 1) * 0.05;
-  const criticScoreBonus = (v - 1) * 0.22 + (s - 1) * 0.1;
-  const audienceScoreBonus = (a - 1) * 0.2 + (c - 1) * 0.12;
-  const streamingDealMultiplier = 1 + (a - 1) * 0.07;
-  const baseHypeBonus = (m - 1) * 5;
-  const salaryDiscountFraction = Math.min(0.12, (m - 1) * 0.025);
-  const leakProtectionActive = v >= 3;
-  const physicalAssetsEquity =
-    (s - 1) * 18_000_000 +
-    (c - 1) * 15_000_000 +
-    (v - 1) * 22_000_000 +
-    (a - 1) * 14_000_000 +
-    (m - 1) * 16_000_000;
-
-  return {
-    totalLevels,
-    qualityBonus,
-    openingWeekMultiplier,
-    criticScoreBonus,
-    audienceScoreBonus,
-    streamingDealMultiplier,
-    baseHypeBonus,
-    salaryDiscountFraction,
-    leakProtectionActive,
-    physicalAssetsEquity,
-  };
-}
-
-export interface SimulationTwistEvent {
-  id: string;
-  title: string;
-  description: string;
-  impactType: 'positive' | 'mixed' | 'negative';
-  boxOfficeMultiplier: number;
-  streamingMultiplier: number;
-  criticDelta: number;
-  audienceDelta: number;
-}
-
 /**
- * Diversified, probabilistic simulation engine with Studio 3D Facilities,
- * Genre Fatigue/Freshness Waves, and Unpredictable Market Twists so no single static formula wins every time.
+ * Grounded & realistic financial and quality simulation with Multi-Market International Distribution.
  */
 export function calculateFinancialsAndQuality(params: {
   format: ProjectFormat;
@@ -863,9 +665,6 @@ export function calculateFinancialsAndQuality(params: {
   marketRegion: MarketRegion;
   selectedDistributionMarkets?: MarketRegion[];
   scriptWordCount?: number;
-  facilitiesLevels?: StudioFacilitiesLevels;
-  previousGenres?: GenreId[];
-  entropySeed?: number;
 }): {
   technicalQuality: number;
   starPower: number;
@@ -875,9 +674,6 @@ export function calculateFinancialsAndQuality(params: {
   totalGrossRevenue: number;
   distributionFeesTotal: number;
   marketRevenueBreakdown: Record<MarketRegion, number>;
-  simulationTwists: SimulationTwistEvent[];
-  criticDeltaFromTwists: number;
-  audienceDeltaFromTwists: number;
 } {
   const {
     format,
@@ -905,12 +701,7 @@ export function calculateFinancialsAndQuality(params: {
     marketRegion,
     selectedDistributionMarkets,
     scriptWordCount = 20,
-    facilitiesLevels = DEFAULT_FACILITIES_LEVELS,
-    previousGenres = [],
-    entropySeed,
   } = params;
-
-  const facilities = calculateFacilitiesBonuses(facilitiesLevels);
 
   const synergy = calculateGenreSynergy(
     primaryGenre,
@@ -964,14 +755,13 @@ export function calculateFinancialsAndQuality(params: {
     directorGenreFit +
     antagBonus +
     scriptBonus +
-    prodBonus +
-    facilities.qualityBonus;
+    prodBonus;
 
   if (founderPerk === 'visionary_director') {
     rawQuality *= 1.05;
   }
 
-  const technicalQuality = Math.min(96, Math.max(28, Math.round(rawQuality)));
+  const technicalQuality = Math.min(94, Math.max(28, Math.round(rawQuality)));
 
   const leadPull =
     leads.length > 0
@@ -994,135 +784,7 @@ export function calculateFinancialsAndQuality(params: {
     )
   );
 
-  // Probabilistic Twists & Genre Fatigue / Freshness Wave
-  const simulationTwists: SimulationTwistEvent[] = [];
-
-  // 1. Check Genre Repetition vs Market Freshness
-  const recentTwo = previousGenres.slice(0, 2);
-  const repeatedSameGenreCount = recentTwo.filter((g) => g === primaryGenre).length;
-  if (repeatedSameGenreCount >= 2) {
-    simulationTwists.push({
-      id: 'genre_fatigue',
-      title: 'تشبّع الجمهور من تكرار التصنيف الدرامي',
-      description:
-        'طرح الاستوديو لعدة أعمال متتالية من نفس التصنيف أدى لفتور جزء من الجمهور وتوقعه للحبكة مسبقاً.',
-      impactType: 'negative',
-      boxOfficeMultiplier: 0.82,
-      streamingMultiplier: 0.88,
-      criticDelta: -0.45,
-      audienceDelta: -0.35,
-    });
-  } else if (previousGenres.length > 0 && !recentTwo.includes(primaryGenre)) {
-    simulationTwists.push({
-      id: 'genre_fresh_wave',
-      title: 'موجة عطش جماهيري للتجديد الدرامي',
-      description:
-        'تغيير بوصلة الاستوديو نحو تصنيف مختلف فاجأ السوق إيجابياً وجذب شريحة جديدة من المشاهدين.',
-      impactType: 'positive',
-      boxOfficeMultiplier: 1.14,
-      streamingMultiplier: 1.12,
-      criticDelta: 0.25,
-      audienceDelta: 0.3,
-    });
-  }
-
-  // 2. Roll dynamic unpredictable event based on entropy seed (only when entropySeed is provided or in live gameplay)
-  if (typeof entropySeed === 'number') {
-    const roll = Math.abs(Math.sin(entropySeed * 12.9898 + technicalQuality * 78.233)) % 1;
-
-    if (roll < 0.22) {
-      simulationTwists.push({
-        id: 'viral_sleeper_hit',
-        title: 'انفجار ترند عضوي غير متوقع على المنصات',
-        description:
-          'تداول الجمهور مقاطع مؤثرة وحوارات من العمل بشكل عفوي كثيف، مما ضاعف الإقبال في الأسابيع التالية.',
-        impactType: 'positive',
-        boxOfficeMultiplier: 1.26,
-        streamingMultiplier: 1.28,
-        criticDelta: 0.15,
-        audienceDelta: 0.55,
-      });
-    } else if (roll < 0.42) {
-      simulationTwists.push({
-        id: 'critic_audience_split',
-        title: 'انقسام وجدل واسع بين النقاد والجمهور',
-        description:
-          'أثار أسلوب الإخراج جدلاً حاداً في البرامج الفنية؛ تحفظ بعض النقاد بينما تدفق الجمهور بدافع الفضول.',
-        impactType: 'mixed',
-        boxOfficeMultiplier: 1.12,
-        streamingMultiplier: 1.15,
-        criticDelta: -0.4,
-        audienceDelta: 0.45,
-      });
-    } else if (roll < 0.62 && (facilitiesLevels.soundstage >= 2 || facilitiesLevels.camera_rig >= 2)) {
-      simulationTwists.push({
-        id: 'improvised_masterpiece',
-        title: 'مشهد ذروة مرتجل في البلاتوه يخطف الأنفاس',
-        description:
-          'بفضل جاهزية البلاتوه والكاميرات، ارتجل الأبطال مشهداً استثنائياً أشاد به النقاد كأفضل لقطة في الموسم.',
-        impactType: 'positive',
-        boxOfficeMultiplier: 1.16,
-        streamingMultiplier: 1.18,
-        criticDelta: 0.6,
-        audienceDelta: 0.5,
-      });
-    } else if (roll < 0.8) {
-      if (facilities.leakProtectionActive) {
-        simulationTwists.push({
-          id: 'leak_foiled_buzz',
-          title: 'إحباط محاولة قرصنة بفضل برج الأمن الرقمي',
-          description:
-            'تصدى برج الخدع والأمن السيبراني لمحاولة تسريب النسخة الأصلية، مما خلق تعاطفاً وضجة إيجابية كبرى قبل العرض.',
-          impactType: 'positive',
-          boxOfficeMultiplier: 1.11,
-          streamingMultiplier: 1.1,
-          criticDelta: 0.1,
-          audienceDelta: 0.25,
-        });
-      } else {
-        simulationTwists.push({
-          id: 'piracy_leak_hit',
-          title: 'تسريب مقاطع مصورة قبل العرض الرسمي',
-          description:
-            'تسببت ثغرة في غرفة المونتاج بتسريب مشاهد مهمة قبل الطرح (طوّر برج الخدع للمستوى 3 لمنع التسريبات مستقبلاً).',
-          impactType: 'negative',
-          boxOfficeMultiplier: 0.86,
-          streamingMultiplier: 0.9,
-          criticDelta: -0.1,
-          audienceDelta: -0.25,
-        });
-      }
-    } else {
-      simulationTwists.push({
-        id: 'weather_streaming_shift',
-        title: 'تحول مفاجئ في سلوك المشاهدة الأسبوعي',
-        description:
-          'تذبذب إقبال القاعات في الأيام الأولى بسبب تقلبات الطقس والامتحانات، لكن العمل عوّض بقوة في البث الرقمي والعطلة.',
-        impactType: 'mixed',
-        boxOfficeMultiplier: 0.93,
-        streamingMultiplier: 1.24,
-        criticDelta: 0.2,
-        audienceDelta: 0.15,
-      });
-    }
-  }
-
-  const twistBoxOfficeMult = simulationTwists.reduce(
-    (acc, t) => acc * t.boxOfficeMultiplier,
-    1.0
-  );
-  const twistStreamingMult = simulationTwists.reduce(
-    (acc, t) => acc * t.streamingMultiplier,
-    1.0
-  );
-  const criticDeltaFromTwists =
-    facilities.criticScoreBonus +
-    simulationTwists.reduce((acc, t) => acc + t.criticDelta, 0);
-  const audienceDeltaFromTwists =
-    facilities.audienceScoreBonus +
-    simulationTwists.reduce((acc, t) => acc + t.audienceDelta, 0);
-
-  // Determine active distribution markets
+  // Determine active distribution markets (if selectedDistributionMarkets is provided, use it; otherwise fallback to marketRegion)
   const activeMarkets: MarketRegion[] =
     selectedDistributionMarkets && selectedDistributionMarkets.length > 0
       ? Array.from(new Set(['egypt' as MarketRegion, ...selectedDistributionMarkets]))
@@ -1161,13 +823,12 @@ export function calculateFinancialsAndQuality(params: {
       ? 1.18
       : 0.9;
 
-  const effectiveHype = hypeScore + facilities.baseHypeBonus;
   const marketingFactor = 0.52 + Math.min(0.62, marketingBudget / 34_000_000);
   const screensFactor =
     format === 'film'
       ? Math.max(0.4, Math.min(1.18, screensCount / 150))
       : 1.0;
-  const hypeFactor = Math.max(0.55, 0.7 + (effectiveHype - 55) / 160);
+  const hypeFactor = Math.max(0.55, 0.7 + (hypeScore - 55) / 160);
 
   const wordOfMouthFactor =
     technicalQuality >= 84
@@ -1189,15 +850,12 @@ export function calculateFinancialsAndQuality(params: {
         ageMultiplier *
         hypeFactor *
         wordOfMouthFactor *
-        aiBoxOfficeMultiplier *
-        twistBoxOfficeMult
+        aiBoxOfficeMultiplier
       : 0;
 
   const baseGross = singleMarketBaseGross * totalMarketMultiplier;
 
-  let firstWeekRevenue = Math.round(
-    baseGross * 0.38 * facilities.openingWeekMultiplier
-  );
+  let firstWeekRevenue = Math.round(baseGross * 0.38);
   if (founderPerk === 'marketing_whale') {
     firstWeekRevenue = Math.round(firstWeekRevenue * 1.08);
   }
@@ -1215,9 +873,7 @@ export function calculateFinancialsAndQuality(params: {
       : 0.25;
 
   const totalStreamingRevenue = Math.round(
-    (platformDealAmount *
-      platformQualityFactor *
-      facilities.streamingDealMultiplier +
+    platformDealAmount * platformQualityFactor +
       (format === 'series'
         ? (starPower * 165_000 + technicalQuality * 155_000) *
           seasonBoost *
@@ -1225,8 +881,7 @@ export function calculateFinancialsAndQuality(params: {
           wordOfMouthFactor *
           aiBoxOfficeMultiplier *
           totalMarketMultiplier
-        : totalBoxOfficeRevenue * 0.12)) *
-      twistStreamingMult
+        : totalBoxOfficeRevenue * 0.12)
   );
 
   const totalGrossRevenue = totalBoxOfficeRevenue + totalStreamingRevenue;
@@ -1256,9 +911,6 @@ export function calculateFinancialsAndQuality(params: {
     totalGrossRevenue,
     distributionFeesTotal,
     marketRevenueBreakdown,
-    simulationTwists,
-    criticDeltaFromTwists,
-    audienceDeltaFromTwists,
   };
 }
 

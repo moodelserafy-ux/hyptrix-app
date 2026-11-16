@@ -1,5 +1,5 @@
 {
-  "name": "ai-studio-applet",
+  "name": "hyptrix-cinema-tv-tycoon",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,10 +10,8 @@
     "clean": "next clean"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
     "@hookform/resolvers": "^5.2.1",
     "@supabase/supabase-js": "^2.119.0",
-    "@types/three": "^0.187.0",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -26,7 +24,6 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "tailwind-merge": "^3.3.1",
-    "three": "^0.187.0",
     "zustand": "^5.1.0"
   },
   "devDependencies": {

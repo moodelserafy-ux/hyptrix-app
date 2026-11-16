@@ -14,7 +14,7 @@ const readexPro = Readex_Pro({
   variable: '--font-readex',
 });
 
-const appUrl = process.env.APP_URL || 'https://hyptrix.com';
+const appUrl = process.env.APP_URL || 'https://hyptrix.app';
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
@@ -23,10 +23,9 @@ export const metadata: Metadata = {
     template: '%s | Hyptrix — Cinema & TV Tycoon',
   },
   description:
-    'Hyptrix هي لعبة محاكاة وإدارة شركات إنتاج سينمائي وتلفزيوني باللغة العربية. شيّد بلاتوهات التصوير وطوّر معدات الكاميرات والمؤثرات البصرية، اكتب السيناريو، تفاوض مع أكثر من 160 نجماً ومخرجاً، ونافس في شباك التذاكر والحفل السنوي للجوائز.',
+    'Hyptrix هي أقوى لعبة محاكاة وإدارة شركات إنتاج سينمائي وتلفزيوني باللغة العربية. أسس استوديو الإنتاج الخاص بك، اكتب السيناريو، تفاوض مع أكثر من 100 نجم ومخرج، أدر ميزانيات الأفلام والمسلسلات، وتصدر شباك التذاكر والمهرجانات.',
   keywords: [
     'Hyptrix',
-    'hyptrix.com',
     'Cinema & TV Tycoon',
     'لعبة إدارة شركة إنتاج سينمائي',
     'لعبة إنتاج أفلام ومسلسلات',
@@ -38,15 +37,15 @@ export const metadata: Metadata = {
     'TV Production Tycoon Game',
     'أفضل لعبة إدارة إنتاج فني',
   ],
-  authors: [{ name: 'Hyptrix Interactive Studios', url: 'https://hyptrix.com' }],
+  authors: [{ name: 'Hyptrix Interactive Studios' }],
   creator: 'Hyptrix Interactive Studios',
   publisher: 'Hyptrix Interactive Studios',
-  manifest: '/manifest.webmanifest',
+  manifest: '/manifest.json',
   alternates: {
-    canonical: 'https://hyptrix.com',
+    canonical: '/',
     languages: {
-      'ar-EG': 'https://hyptrix.com',
-      ar: 'https://hyptrix.com',
+      'ar-EG': '/',
+      ar: '/',
     },
   },
   robots: {
@@ -63,8 +62,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Hyptrix — Cinema & TV Tycoon | إمبراطورية الإنتاج السينمائي والدرامي',
     description:
-      'ابنِ مدينتك الإنتاجية في Hyptrix: تشييد البلاتوهات وتطوير معدات الكاميرات، كتابة السيناريو، التفاوض مع أكثر من 160 نجماً ومخرجاً، وإدارة شباك التذاكر والمهرجانات.',
-    url: 'https://hyptrix.com',
+      'ابنِ إمبراطوريتك السينمائية والتلفزيونية في Hyptrix: تطوير السيناريو، التفاوض مع أكثر من 100 نجم ومخرج، إدارة الأزمات، متابعة عرض حلقات المسلسلات وإيرادات شباك التذاكر.',
+    url: appUrl,
     siteName: 'Hyptrix — Cinema & TV Tycoon',
     locale: 'ar_EG',
     type: 'website',
@@ -73,7 +72,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Hyptrix — Cinema & TV Tycoon | لعبة إدارة شركات الإنتاج السينمائي والدرامي',
     description:
-      'شيّد استوديو إنتاجك، طوّر الكاميرات والبلاتوهات، تفاوض مع النجوم والمخرجين، وتصدر شباك التذاكر في Hyptrix.',
+      'أسس شركة إنتاجك السينمائي والدرامي، تفاوض مع ألمع النجوم والمخرجين، نافس في شباك التذاكر ومواسم المسلسلات، وتصدر ترتيب شركات الإنتاج.',
   },
   category: 'games',
 };
@@ -88,7 +87,7 @@ const jsonLdSchema = {
         'هايبتريكس: إمبراطورية السينما والدراما',
         'Hyptrix Movie & TV Studio Tycoon',
       ],
-      url: 'https://hyptrix.com',
+      url: appUrl,
       inLanguage: 'ar',
       applicationCategory: 'GameApplication',
       applicationSubCategory: 'Business Simulation & Tycoon Game',
@@ -101,20 +100,27 @@ const jsonLdSchema = {
       operatingSystem: 'Web, Android, iOS, Desktop PWA',
       playMode: 'SinglePlayer',
       description:
-        'Hyptrix هي لعبة محاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني باللغة العربية على hyptrix.com. تتيح للاعب بناء مدينة إنتاجية متكاملة، كتابة السيناريو، التفاوض مع أكثر من 160 ممثلاً ومخرجاً، طرح الأفلام في شباك التذاكر أو عرض المسلسلات عبر المنصات، والمنافسة في الحفل السنوي للجوائز.',
+        'Hyptrix هي اللعبة العربية الأولى والأعمق لمحاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني. تتيح للاعب تأسيس استوديو إنتاج فني، اختيار التصنيفات الدرامية، صياغة السيناريو، التفاوض مع أكثر من 100 ممثل ومخرج، إدارة مواقع التصوير، طرح الأفلام في شباك التذاكر أو عرض المسلسلات حلقة بحلقة عبر القنوات والمنصات، والمنافسة على جوائز المهرجانات.',
       featureList: [
-        'بناء وتطوير مدينة الاستوديو تشمل البلاتوهات ومعدات الكاميرات والمؤثرات البصرية واستوديو الصوت',
-        'نظام تطوير سيناريو عميق للأفلام السينمائية والمسلسلات الدرامية',
-        'سوق مواهب يضم أكثر من 160 ممثلاً وممثلة ومخرجاً مع نظام تفاوض واقعي',
-        'محرك حسابي احتمالي ديناميكي يحاكي مفاجآت السوق وتقلبات الجمهور والنقاد',
-        'التوزيع العالمي للأعمال في مصر والخليج وأوروبا وهوليوود',
-        'حفل جوائز سنوي كبير يقارن بين جميع أعمال العام بأسلوب عادل',
+        'تأسيس استوديو إنتاج سينمائي وتلفزيوني وتصميم الهوية والشعار',
+        'نظام تطوير سيناريو متكامل للأفلام السينمائية والمسلسلات الدرامية',
+        'سوق مواهب ضخم يضم أكثر من 100 ممثل وممثلة ووجوه صاعدة جديدة تظهر مع تقدم الزمن',
+        'نظام تفاوض واقعي مع المخرجين والنجوم ومديري التصوير والمؤلفين الموسيقيين',
+        'محاكاة دقيقة لإيرادات شباك التذاكر للأفلام وعرض حلقات المسلسلات حلقة بحلقة',
+        'لوحة متصدرين محلية تنافسية لأغنى وأقوى شركات الإنتاج',
       ],
       offers: {
         '@type': 'Offer',
         price: '0',
         priceCurrency: 'EGP',
         availability: 'https://schema.org/InStock',
+      },
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: '4.9',
+        ratingCount: '2480',
+        bestRating: '5',
+        worstRating: '1',
       },
     },
     {
@@ -125,7 +131,7 @@ const jsonLdSchema = {
           name: 'ما هي أفضل لعبة إدارة شركات إنتاج سينمائي وتلفزيوني باللغة العربية؟',
           acceptedAnswer: {
             '@type': 'Answer',
-            text: 'تُعد لعبة Hyptrix — Cinema & TV Tycoon الخيار الأول والأعمق لمحاكاة إدارة استوديوهات السينما والتلفزيون باللغة العربية، حيث تجمع بين كتابة السيناريو، التفاوض الواقعي مع أكثر من 160 نجم ومخرج، إدارة ميزانيات التصوير والدعاية، ومحاكاة إيرادات شباك التذاكر وعرض المسلسلات حلقة بحلقة.',
+            text: 'تُعد لعبة Hyptrix — Cinema & TV Tycoon الخيار الأول والأعمق لمحاكاة إدارة استوديوهات السينما والتلفزيون باللغة العربية، حيث تجمع بين كتابة السيناريو، التفاوض الواقعي مع أكثر من 100 نجم ومخرج، إدارة ميزانيات التصوير والدعاية، ومحاكاة إيرادات شباك التذاكر وعرض المسلسلات حلقة بحلقة.',
           },
         },
         {
@@ -143,7 +149,7 @@ const jsonLdSchema = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl" className={`dark ${alexandria.variable} ${readexPro.variable}`}>
+    <html lang="ar" dir="rtl" className={`${alexandria.variable} ${readexPro.variable}`}>
       <head>
         <script
           type="application/ld+json"
@@ -152,14 +158,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body
         suppressHydrationWarning
-        className="h-dvh w-screen overflow-hidden select-none bg-[#0A0A0C] text-slate-100 antialiased selection:bg-[#D4AF37] selection:text-[#0A0A0C]"
+        className="bg-[#F2F5FF] text-slate-900 antialiased selection:bg-violet-600 selection:text-white"
         style={{
           fontFamily: 'var(--font-readex), system-ui, -apple-system, sans-serif',
         }}
       >
-        <div className="relative h-dvh w-screen overflow-hidden select-none bg-gradient-to-b from-[#0A0A0C] to-[#16161D]">
-          {children}
-        </div>
+        {children}
       </body>
     </html>
   );

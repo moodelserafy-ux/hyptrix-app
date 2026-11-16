@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -107,8 +106,6 @@ async function callGroqJson(
   groqKeyOverride?: string,
   preferredModel?: string
 ): Promise<{ data: Record<string, unknown>; modelUsed: string } | null> {
-  const strictJsonSystemPrompt = `${systemPrompt}\n\nتنبيه تقني صارم جداً: يجب أن يكون ردك عبارة عن كائن JSON صالح فقط يبدأ بـ { وينتهي بـ } بدون أي نص إضافي خارج الـ JSON.`;
-
   const groqKey = (
     groqKeyOverride ||
     process.env.GROQ_API_KEY ||
@@ -116,18 +113,48 @@ async function callGroqJson(
     ''
   ).trim();
 
-  if (groqKey && groqKey !== 'MY_GROQ_API_KEY') {
-    const orderedModels = [
-      ...(preferredModel &&
-      GROQ_TEXT_MODELS.includes(preferredModel as (typeof GROQ_TEXT_MODELS)[number])
-        ? [preferredModel]
-        : []),
-      ...GROQ_TEXT_MODELS.filter((m) => m !== preferredModel),
-    ];
+  if (!groqKey || groqKey === 'MY_GROQ_API_KEY') {
+    return null;
+  }
 
-    for (const model of orderedModels) {
-      try {
-        const response = await fetch(GROQ_ENDPOINT, {
+  const orderedModels = [
+    ...(preferredModel &&
+    GROQ_TEXT_MODELS.includes(preferredModel as (typeof GROQ_TEXT_MODELS)[number])
+      ? [preferredModel]
+      : []),
+    ...GROQ_TEXT_MODELS.filter((m) => m !== preferredModel),
+  ];
+
+  const strictJsonSystemPrompt = `${systemPrompt}\n\nتنبيه تقني صارم جداً: يجب أن يكون ردك عبارة عن كائن JSON صالح فقط يبدأ بـ { وينتهي بـ } بدون أي نص إضافي خارج الـ JSON.`;
+
+  for (const model of orderedModels) {
+    try {
+      const response = await fetch(GROQ_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.78,
+          max_completion_tokens: 2048,
+          messages: [
+            { role: 'system', content: strictJsonSystemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      });
+
+      if (response.ok) {
+        const resJson = await response.json();
+        const content = resJson.choices?.[0]?.message?.content || '';
+        const extracted = extractJsonFromText(content);
+        if (extracted) {
+          return { data: extracted, modelUsed: model };
+        }
+      } else {
+        const retryRes = await fetch(GROQ_ENDPOINT, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -135,60 +162,27 @@ async function callGroqJson(
           },
           body: JSON.stringify({
             model,
-            temperature: 0.78,
-            max_completion_tokens: 2048,
+            temperature: 0.72,
             messages: [
               { role: 'system', content: strictJsonSystemPrompt },
               { role: 'user', content: userPrompt },
             ],
+            response_format: { type: 'json_object' },
           }),
         });
-
-        if (response.ok) {
-          const resJson = await response.json();
-          const content = resJson.choices?.[0]?.message?.content || '';
-          const extracted = extractJsonFromText(content);
-          if (extracted) {
-            return { data: extracted, modelUsed: model };
+        if (retryRes.ok) {
+          const retryJson = await retryRes.json();
+          const retryContent = retryJson.choices?.[0]?.message?.content || '';
+          const extractedRetry = extractJsonFromText(retryContent);
+          if (extractedRetry) {
+            return { data: extractedRetry, modelUsed: model };
           }
         }
-      } catch {
-        // Try next model or Gemini
-      }
-    }
-  }
-
-  // Automatic Server-Side Gemini AI Engine
-  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
-  if (geminiKey && geminiKey !== 'MY_GEMINI_API_KEY') {
-    try {
-      const ai = new GoogleGenAI({
-        apiKey: geminiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
-      });
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: userPrompt,
-        config: {
-          systemInstruction: strictJsonSystemPrompt,
-          responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        },
-      });
-      const textOut = response.text || '';
-      const extractedGem = extractJsonFromText(textOut);
-      if (extractedGem) {
-        return { data: extractedGem, modelUsed: 'gemini-4-hydrogen' };
       }
     } catch {
-      // Fallback to deterministic generator if offline
+      // Try next model
     }
   }
-
   return null;
 }
 
