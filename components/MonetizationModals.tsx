@@ -28,12 +28,12 @@ export function VipSweatPassModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
+      className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="vip-modal-title"
     >
-      <div className="w-full max-w-md rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-6 text-right shadow-2xl">
+      <div className="max-h-[88%] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-5 text-right shadow-2xl sm:p-6">
         <div className="flex items-center justify-between border-b border-indigo-100 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">

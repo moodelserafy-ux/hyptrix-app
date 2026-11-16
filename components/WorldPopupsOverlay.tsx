@@ -72,7 +72,7 @@ export function WorldPopupsOverlay() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
           dir="rtl"
         >
           <motion.div
@@ -80,7 +80,7 @@ export function WorldPopupsOverlay() {
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.9, y: 20, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-amber-300 border-b-4 border-b-amber-500 bg-gradient-to-b from-[#FFFDF5] via-white to-[#F5F3FF] p-5 shadow-[0_24px_60px_-12px_rgba(245,158,11,0.35)] sm:p-6"
+            className="max-h-[88%] w-full max-w-2xl overflow-y-auto rounded-3xl border-2 border-amber-300 border-b-4 border-b-amber-500 bg-gradient-to-b from-[#FFFDF5] via-white to-[#F5F3FF] p-5 shadow-[0_24px_60px_-12px_rgba(245,158,11,0.35)] sm:p-6"
           >
             {/* Animated Red Carpet & Trophy Stage Scene */}
             <div className="mb-3">
@@ -228,7 +228,7 @@ export function WorldPopupsOverlay() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-xs"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-xs"
           dir="rtl"
         >
           <motion.div
@@ -236,7 +236,7 @@ export function WorldPopupsOverlay() {
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.9, y: 20, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 340, damping: 26 }}
-            className="w-full max-w-md rounded-3xl border-2 border-indigo-200 border-b-4 border-b-indigo-400 bg-white p-5 shadow-2xl sm:p-6"
+            className="w-full max-w-lg rounded-3xl border-2 border-indigo-200 border-b-4 border-b-indigo-400 bg-white p-5 shadow-2xl sm:p-6"
           >
             {/* Top Journalistic Breaking Banner */}
             <div className="flex items-center justify-between gap-2 border-b border-indigo-100 pb-3">

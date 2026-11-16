@@ -137,7 +137,7 @@ export function LeaderboardAndSettingsView() {
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-4">
+    <div className="mx-auto max-w-5xl space-y-4">
       {/* Player Current Official Valuation & Rank Banner */}
       {playerEntry && (
         <div className="rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-violet-600 via-indigo-600 to-cyan-600 p-5 text-white shadow-lg">
@@ -269,7 +269,7 @@ export function LeaderboardAndSettingsView() {
           </span>
         </div>
 
-        <div className="mt-3 space-y-2 tabular-nums">
+        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2 tabular-nums">
           {entries.map((row) => {
             const isEmerging = emergingCompetitors.some(
               (em) => em.name === row.studioName
@@ -359,7 +359,7 @@ export function LeaderboardAndSettingsView() {
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-violet-600" />
           <h3 className="text-sm font-black text-slate-900">
-            ربط حساب الاستوديو وحفظ الترتيب السحابي (Supabase)
+            ربط حساب الاستوديو وحفظ الترتيب السحابي
           </h3>
         </div>
 

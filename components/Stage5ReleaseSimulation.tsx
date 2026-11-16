@@ -654,7 +654,7 @@ export function Stage5ReleaseSimulation() {
 
   if (evaluating || !lastReleasedProject) {
     return (
-      <div className="mx-auto flex min-h-[340px] max-w-xl flex-col items-center justify-center rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-8 text-center shadow-lg">
+      <div className="mx-auto flex min-h-[280px] max-w-4xl flex-col items-center justify-center rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-8 text-center shadow-lg">
         <Sparkles className="h-12 w-12 animate-spin text-violet-600" />
         <h3 className="font-display mt-4 text-xl font-black text-slate-900">
           {draft.format === 'series'
@@ -731,7 +731,7 @@ export function Stage5ReleaseSimulation() {
   ];
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 py-2">
+    <div className="mx-auto max-w-5xl space-y-4 py-1">
       {/* Locked Step Header */}
       <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/80 bg-white p-4 shadow-[0_12px_30px_-10px_rgba(99,102,241,0.14)]">
         <div className="flex items-center justify-between">
@@ -959,8 +959,8 @@ export function Stage5ReleaseSimulation() {
               )}
             </div>
 
-            {/* 4 Live Financial & Rating Metrics */}
-            <div className="grid grid-cols-2 gap-3 tabular-nums">
+            {/* 4 Live Financial & Rating Metrics (Widescreen 4-Column Row) */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 tabular-nums">
               <div className="rounded-2xl border-2 border-indigo-100 bg-[#F8FAFF] p-3.5">
                 <div className="text-[11px] font-bold text-slate-500">
                   {isSeries

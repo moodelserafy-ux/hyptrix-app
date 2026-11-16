@@ -45,31 +45,36 @@ export function Stage6FestivalsAwards() {
     new Set([currentYear, ...releasedProjects.map((p) => p.year)])
   ).sort((a, b) => b - a);
 
-  const playerWorksInYear = releasedProjects.filter(
-    (p) => p.year === selectedYear
+  const playerWorksInYear = React.useMemo(
+    () => releasedProjects.filter((p) => p.year === selectedYear),
+    [releasedProjects, selectedYear]
   );
-  const rivalWorksInYear = [
-    ...(yearlyRivalReleases || []),
-    ...playerWorksInYear.flatMap((p) => p.rivalReleases || []),
-  ];
 
   // Build the comprehensive Annual Grand Awards Ceremony for the selected year
   const annualGala: AutomaticFestivalCeremonyItem = React.useMemo(() => {
+    const rivalWorks = [
+      ...(yearlyRivalReleases || []),
+      ...playerWorksInYear.flatMap((p) => p.rivalReleases || []),
+    ];
     const res = buildAnnualAwardsGalaForYear({
       year: selectedYear,
       playerProjectsInYear: playerWorksInYear,
-      rivalReleasesInYear: rivalWorksInYear,
+      rivalReleasesInYear: rivalWorks,
       studioName,
       db,
     });
     return res.ceremonies[0];
-  }, [selectedYear, playerWorksInYear, rivalWorksInYear, studioName, db]);
+  }, [selectedYear, playerWorksInYear, yearlyRivalReleases, studioName, db]);
+
+  const rivalWorksCount =
+    (yearlyRivalReleases?.length || 0) +
+    playerWorksInYear.reduce((s, p) => s + (p.rivalReleases?.length || 0), 0);
 
   const daysUntilAnnualAwards = getDaysRemainingUntilAnnualAwards(gameDay);
   const isYearAlreadyCrowned = lastAwardsGalaYear >= selectedYear;
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 py-2">
+    <div className="mx-auto max-w-5xl space-y-4 py-1">
       {/* Header */}
       <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/80 bg-white p-4 shadow-[0_12px_30px_-10px_rgba(99,102,241,0.14)]">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -138,7 +143,7 @@ export function Stage6FestivalsAwards() {
           <span className="flex items-center gap-1.5 text-xs font-black text-slate-800">
             <Film className="h-4 w-4 text-violet-600" />
             <span>
-              أعمال شركتك الداخلة في سباق جوائز {selectedYear} ({playerWorksInYear.length}) مقابل ({rivalWorksInYear.length}) أعمال للشركات المنافسة:
+              أعمال شركتك الداخلة في سباق جوائز {selectedYear} ({playerWorksInYear.length}) مقابل ({rivalWorksCount}) أعمال للشركات المنافسة:
             </span>
           </span>
         </div>
@@ -214,7 +219,7 @@ export function Stage6FestivalsAwards() {
           </p>
         </div>
 
-        <div className="space-y-2.5">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {annualGala.awards.map((res, idx) => {
             const isSeriesCat = res.category.includes('مسلسل');
             return (

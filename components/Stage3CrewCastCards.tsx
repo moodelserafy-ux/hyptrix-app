@@ -80,7 +80,7 @@ const SEQUENTIAL_STEPS: {
     stepNum: 2,
     shortLabel: '2. المخرج',
     title: 'الخطوة 2 من 5: اختيار مخرج العمل',
-    nextButtonLabel: 'التالي: اختيار مدير التصوير (DOP)',
+    nextButtonLabel: 'التالي: اختيار مدير التصوير',
     required: true,
   },
   {
@@ -96,14 +96,14 @@ const SEQUENTIAL_STEPS: {
     stepNum: 4,
     shortLabel: '4. الموسيقى',
     title: 'الخطوة 4 من 5: اختيار مؤلف الموسيقى التصويرية',
-    nextButtonLabel: 'التالي: اختيار المونتير والخدع البصرية',
+    nextButtonLabel: 'التالي: اختيار المونتير والمؤثرات البصرية',
     required: false,
   },
   {
     id: 'editor_vfx',
     stepNum: 5,
     shortLabel: '5. المونتاج',
-    title: 'الخطوة 5 من 5: اختيار المونتير والخدع البصرية (VFX)',
+    title: 'الخطوة 5 من 5: اختيار المونتير والمؤثرات البصرية',
     nextButtonLabel: 'اعتماد الطاقم بالكامل والانتقال للميزانيات والتصوير!',
     required: false,
   },
@@ -458,7 +458,7 @@ export function Stage3CrewCastCards() {
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 py-2">
+    <div className="mx-auto max-w-5xl space-y-4 py-1">
       {/* Sequential 5-Step Wizard Header (1. الممثلون -> 2. المخرج -> 3. التصوير -> 4. الموسيقى -> 5. المونتاج) */}
       <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/80 bg-white p-4 shadow-[0_12px_30px_-10px_rgba(99,102,241,0.14)]">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -652,8 +652,8 @@ export function Stage3CrewCastCards() {
               </div>
             </div>
 
-            {/* Unified Actor Cards Grid */}
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            {/* Unified Actor Cards Grid (Widescreen Landscape Grid) */}
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
               {displayedActors.map((actor) => {
                 const isSelected = signedActorIds.includes(actor.id);
                 const customRole =
@@ -731,7 +731,7 @@ export function Stage3CrewCastCards() {
                       ? 'مدير التصوير يرفع جودة الكادرات البصرية والإضاءة السينمائية.'
                       : currentTeamStep === 'composer'
                       ? 'الموسيقار يصنع الهوية السمعية والتأثير العاطفي للمشاهد.'
-                      : 'المونتير ومشرف الـ VFX يضبط إيقاع المشاهد والخدع البصرية.'}
+                      : 'المونتير ومشرف المؤثرات يضبط إيقاع المشاهد البصرية.'}
                   </p>
                 </div>
               </div>
@@ -744,7 +744,7 @@ export function Stage3CrewCastCards() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
               {db.crew
                 .filter((c) => c.role === currentTeamStep)
                 .map((member) => {
@@ -843,13 +843,13 @@ export function Stage3CrewCastCards() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-xs"
+            className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-xs"
           >
             <motion.div
               initial={{ scale: 0.92, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.92, y: 20 }}
-              className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-300 bg-white p-5 shadow-2xl"
+              className="max-h-[88%] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-300 bg-white p-5 shadow-2xl"
               dir="rtl"
             >
               {(() => {

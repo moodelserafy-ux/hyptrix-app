@@ -138,7 +138,7 @@ export function SettingsModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-xs"
+        className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-xs"
         dir="rtl"
       >
         <motion.div
@@ -146,7 +146,7 @@ export function SettingsModal({
           animate={{ scale: 1, y: 0, opacity: 1 }}
           exit={{ scale: 0.94, y: 20, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-          className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-300 bg-white p-5 shadow-2xl sm:p-6"
+          className="max-h-[88%] w-full max-w-2xl overflow-y-auto rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-300 bg-white p-5 shadow-2xl sm:p-6"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-indigo-100 pb-3.5">

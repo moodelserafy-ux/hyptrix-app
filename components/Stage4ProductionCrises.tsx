@@ -377,7 +377,7 @@ export function Stage4ProductionCrises() {
   ];
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 py-2">
+    <div className="mx-auto max-w-5xl space-y-4 py-1">
       {/* Locked Step Header */}
       <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/80 bg-white p-4 shadow-[0_12px_30px_-10px_rgba(99,102,241,0.14)]">
         <div className="flex items-center justify-between">
@@ -599,7 +599,7 @@ export function Stage4ProductionCrises() {
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
                 {MARKET_CONFIGS.map((cfg) => {
                   const mId = cfg.id;
                   const isUnlocked = unlockedRegions.includes(mId);
