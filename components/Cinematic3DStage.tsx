@@ -477,7 +477,7 @@ export function Cinematic3DStage({
       camera.lookAt(pointer.x * 0.32, 2.1 - pointer.y * 0.25, -1.2);
       moving.forEach((object, index) => {
         if (object instanceof THREE.Group && kind === 'festival') {
-          if (object.children.some((child) => child.geometry instanceof THREE.LatheGeometry)) {
+          if (object.children.some((child) => child instanceof THREE.Mesh && child.geometry instanceof THREE.LatheGeometry)) {
             object.rotation.y = elapsed * 0.52;
             object.position.y = 0.03 + Math.sin(elapsed * 1.55) * 0.08;
           } else {
