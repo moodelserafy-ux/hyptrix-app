@@ -152,7 +152,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body
         suppressHydrationWarning
-        className="bg-[#F2F5FF] text-slate-900 antialiased selection:bg-violet-600 selection:text-white"
+        className="h-dvh w-screen overflow-hidden bg-[#0A0A0C] text-slate-100 antialiased selection:bg-amber-500 selection:text-black"
         style={{
           fontFamily: 'var(--font-readex), system-ui, -apple-system, sans-serif',
         }}

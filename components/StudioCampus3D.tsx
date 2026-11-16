@@ -110,23 +110,23 @@ function createStudioSignTexture(
   const ctx = canvas.getContext('2d')!;
 
   const grad = ctx.createLinearGradient(0, 0, 512, 128);
-  grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(0.5, '#f8fafc');
-  grad.addColorStop(1, '#eff6ff');
+  grad.addColorStop(0, '#111016');
+  grad.addColorStop(0.5, '#1b1820');
+  grad.addColorStop(1, '#090a0e');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 512, 128);
 
-  ctx.strokeStyle = '#7c3aed';
+  ctx.strokeStyle = '#d4af37';
   ctx.lineWidth = 8;
   ctx.strokeRect(4, 4, 504, 120);
 
-  ctx.fillStyle = '#1e1b4b';
+  ctx.fillStyle = '#f8e7b0';
   ctx.font = '900 38px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 256, 50);
 
-  ctx.fillStyle = '#7c3aed';
+  ctx.fillStyle = '#e50914';
   ctx.font = '800 22px sans-serif';
   ctx.fillText(subText, 256, 94);
 
@@ -141,7 +141,7 @@ function createRoadAsphaltTexture(maxAnisotropy: number): THREE.CanvasTexture {
   canvas.width = 256;
   canvas.height = 256;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = '#171920';
   ctx.fillRect(0, 0, 256, 256);
 
   // Side lines
@@ -150,7 +150,7 @@ function createRoadAsphaltTexture(maxAnisotropy: number): THREE.CanvasTexture {
   ctx.fillRect(0, 240, 256, 6);
 
   // Dashed center line
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#b99a47';
   for (let x = 16; x < 256; x += 64) {
     ctx.fillRect(x, 124, 36, 8);
   }
@@ -237,9 +237,9 @@ export function StudioCampus3D({
     const height = container.offsetHeight || window.innerHeight || 600;
 
     const scene = new THREE.Scene();
-    const skyColor = new THREE.Color(0xdbeafe);
+    const skyColor = new THREE.Color(0x0a0a0c);
     scene.background = skyColor;
-    scene.fog = new THREE.FogExp2(0xdbeafe, 0.014);
+    scene.fog = new THREE.FogExp2(0x0a0a0c, 0.012);
 
     const camera = new THREE.PerspectiveCamera(38, width / Math.max(1, height), 0.1, 160);
     camera.position.set(...OVERVIEW_CAM_POS);
@@ -258,7 +258,7 @@ export function StudioCampus3D({
     renderer.setSize(width, height);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMappingExposure = 0.88;
     renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = !isSoftwareGl;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -273,12 +273,12 @@ export function StudioCampus3D({
     scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     pmremGenerator.dispose();
 
-    // 3. Sunny Daytime Studio Lighting Rig
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xe0f2fe, 1.35);
+    // 3. Cinematic Warm-Key Lighting Rig
+    const hemiLight = new THREE.HemisphereLight(0xe9d9aa, 0x101018, 0.82);
     hemiLight.position.set(0, 30, 0);
     scene.add(hemiLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfffbeb, 2.2);
+    const sunLight = new THREE.DirectionalLight(0xffd778, 1.45);
     sunLight.position.set(16, 24, 14);
     sunLight.castShadow = !isSoftwareGl;
     const d = 16;
@@ -294,7 +294,7 @@ export function StudioCampus3D({
     sunLight.shadow.normalBias = 0.02;
     scene.add(sunLight);
 
-    const rimLight = new THREE.DirectionalLight(0xbae6fd, 1.1);
+    const rimLight = new THREE.DirectionalLight(0x8794b5, 0.62);
     rimLight.position.set(-16, 12, -12);
     scene.add(rimLight);
 
@@ -312,29 +312,29 @@ export function StudioCampus3D({
       cameraTransitionActiveRef.current = false;
     });
 
-    // Procedural Textures (Bright Daytime Architectural Glass)
+    // Procedural Textures (Nighttime Gold-Lit Architectural Glass)
     const windowTexCyan = createBuildingWindowTexture(
       maxAniso,
-      '#f8fafc',
-      '#38bdf8',
-      '#818cf8'
+      '#11151e',
+      '#d4af37',
+      '#8f1424'
     );
     const windowTexGold = createBuildingWindowTexture(
       maxAniso,
-      '#ffffff',
-      '#f59e0b',
-      '#a855f7'
+      '#17120a',
+      '#e8bd49',
+      '#a8782c'
     );
     const roadTex = createRoadAsphaltTexture(maxAniso);
 
-    // Shared PBR Material Library (Bright Light Palette)
+    // Shared PBR Material Library (Royal Black, Deep Navy, Gold & Cinema Red)
     const matCampusLawn = new THREE.MeshStandardMaterial({
-      color: 0x86efac,
+      color: 0x20251f,
       roughness: 0.88,
       metalness: 0.02,
     });
     const matPlazaStone = new THREE.MeshStandardMaterial({
-      color: 0xf8fafc,
+      color: 0x302d2c,
       roughness: 0.55,
       metalness: 0.08,
       polygonOffset: true,
@@ -350,7 +350,7 @@ export function StudioCampus3D({
       polygonOffsetUnits: -2,
     });
     const matSoundstageWall = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
+      color: 0x39343c,
       roughness: 0.42,
       metalness: 0.1,
     });
@@ -365,19 +365,19 @@ export function StudioCampus3D({
       metalness: 0.4,
     });
     const matDarkSteel = new THREE.MeshStandardMaterial({
-      color: 0x6366f1,
+      color: 0x3a333e,
       roughness: 0.35,
       metalness: 0.65,
     });
     const matBrushedGold = new THREE.MeshPhysicalMaterial({
-      color: 0xf59e0b,
+      color: 0xd4af37,
       roughness: 0.2,
       metalness: 0.85,
       clearcoat: 0.7,
     });
     const matGlass = new THREE.MeshPhysicalMaterial({
-      color: 0x38bdf8,
-      roughness: 0.1,
+      color: 0x28303c,
+      roughness: 0.18,
       metalness: 0.15,
       transmission: isSoftwareGl ? 0 : 0.65,
       transparent: true,
@@ -385,14 +385,14 @@ export function StudioCampus3D({
       clearcoat: 1.0,
     });
     const matRedCarpet = new THREE.MeshStandardMaterial({
-      color: 0xf43f5e,
+      color: 0x8f1424,
       roughness: 0.7,
       metalness: 0.05,
     });
     const matEmissiveCyan = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0ea5e9,
-      emissiveIntensity: 0.8,
+      color: 0xd4af37,
+      emissive: 0x8b6414,
+      emissiveIntensity: 0.72,
       roughness: 0.2,
     });
     const matEmissiveAmber = new THREE.MeshStandardMaterial({
@@ -468,7 +468,7 @@ export function StudioCampus3D({
     const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 1.5, 8);
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
     const foliageGeo = new THREE.ConeGeometry(0.85, 1.9, 8);
-    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.6 });
+    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x183c31, roughness: 0.72 });
 
     const trunkInstanced = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
     const foliageInstanced = new THREE.InstancedMesh(foliageGeo, foliageMat, treeCount);
@@ -765,7 +765,7 @@ export function StudioCampus3D({
               Math.PI * 0.85
             ),
             new THREE.MeshStandardMaterial({
-              color: 0x10b981,
+              color: 0x183c31,
               emissive: 0x059669,
               emissiveIntensity: 0.45,
               side: THREE.DoubleSide,

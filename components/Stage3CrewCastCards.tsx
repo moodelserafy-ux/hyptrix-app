@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   useGameStore,
@@ -23,6 +23,7 @@ import {
   formatMoney,
 } from '@/lib/game-engine';
 import { EaFcTalentCard } from './EaFcTalentCard';
+import { playContractSigned } from '@/lib/game-audio';
 import {
   AlertOctagon,
   ArrowLeft,
@@ -126,6 +127,20 @@ export function Stage3CrewCastCards() {
     removeTalentFromDraft,
     setActiveScreen,
   } = useGameStore();
+
+  const previousSignedTalentIdsRef = useRef<string[] | null>(null);
+
+  useEffect(() => {
+    const signedTalentIds = (Object.values(draft.talentOffers || {}) as TalentOfferRecord[])
+      .filter((offer) => offer.status === 'accepted')
+      .map((offer) => offer.talentId)
+      .sort();
+    const previousIds = previousSignedTalentIdsRef.current;
+    if (previousIds && signedTalentIds.some((id) => !previousIds.includes(id))) {
+      playContractSigned();
+    }
+    previousSignedTalentIdsRef.current = signedTalentIds;
+  }, [draft.talentOffers]);
 
   const db = getResolvedDatabase(customDbPatch);
 
@@ -653,7 +668,7 @@ export function Stage3CrewCastCards() {
             </div>
 
             {/* Unified Actor Cards Grid (Widescreen Landscape Grid) */}
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2.5">
               {displayedActors.map((actor) => {
                 const isSelected = signedActorIds.includes(actor.id);
                 const customRole =
@@ -744,7 +759,7 @@ export function Stage3CrewCastCards() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2.5">
               {db.crew
                 .filter((c) => c.role === currentTeamStep)
                 .map((member) => {

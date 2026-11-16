@@ -17,6 +17,7 @@ import {
   MarketRegion,
 } from '@/lib/game-engine';
 import { AnimatedFilmingSetGraphic } from './CinematicGraphicsScene';
+import { playCrisisAlert } from '@/lib/game-audio';
 import {
   Camera,
   Sliders,
@@ -361,6 +362,15 @@ export function Stage4ProductionCrises() {
   const firstUnresolvedIdx = draft.crises.findIndex((c) => !c.resolved);
   const activeCrisis =
     firstUnresolvedIdx !== -1 ? draft.crises[firstUnresolvedIdx] : null;
+  const lastAlertedCrisisRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const crisisId = activeCrisis?.id || null;
+    if (crisisId && crisisId !== lastAlertedCrisisRef.current) {
+      playCrisisAlert();
+    }
+    lastAlertedCrisisRef.current = crisisId;
+  }, [activeCrisis?.id]);
 
   const filmingProgressPct = Math.min(
     100,

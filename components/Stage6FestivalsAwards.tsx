@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   useGameStore,
@@ -11,6 +11,7 @@ import {
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
 import { AnimatedRedCarpetFestivalGraphic } from './CinematicGraphicsScene';
+import { playAwardFanfare } from '@/lib/game-audio';
 import {
   Trophy,
   CheckCircle2,
@@ -72,6 +73,15 @@ export function Stage6FestivalsAwards() {
 
   const daysUntilAnnualAwards = getDaysRemainingUntilAnnualAwards(gameDay);
   const isYearAlreadyCrowned = lastAwardsGalaYear >= selectedYear;
+
+  const previousAwardStateRef = useRef<{ year: number; count: number } | null>(null);
+  useEffect(() => {
+    const previous = previousAwardStateRef.current;
+    if (previous?.year === selectedYear && annualGala.playerWonCount > previous.count) {
+      playAwardFanfare();
+    }
+    previousAwardStateRef.current = { year: selectedYear, count: annualGala.playerWonCount };
+  }, [selectedYear, annualGala.playerWonCount]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 py-1">
