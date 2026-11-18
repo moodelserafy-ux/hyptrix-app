@@ -27,8 +27,15 @@ import {
   Heart,
   Share2,
   Loader2,
+  Smartphone,
+  Wifi,
+  BatteryCharging,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  playSocialNotifPop,
+  playCashRegisterChaChing,
+} from '@/lib/sound-fx';
 
 export function WorldPopupsOverlay() {
   const {
@@ -566,78 +573,70 @@ export function WorldPopupsOverlay() {
               </motion.div>
             )}
 
-            {/* 3. PR & SOCIAL MEDIA WAR ROOM MODAL (TikTok & X Trend Engine + Electronic Committees) */}
+            {/* 3. SMARTPHONE SCREEN: ELECTRONIC COMMITTEES & TREND ENGINE (شاشة الموبايل للجان الإلكترونية والتريند) */}
             {!currentFestival && !currentNews && isPrWarRoomOpen && (
               <motion.div
-                key="pr_war_room_modal"
-                initial={{ scale: 0.93, y: 20, opacity: 0 }}
+                key="pr_war_room_smartphone"
+                initial={{ scale: 0.9, y: 30, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
-                exit={{ scale: 0.93, y: 20, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-                className="glass-modal relative max-h-[90vh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl shadow-2xl"
+                exit={{ scale: 0.9, y: 30, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+                className="relative w-full max-w-[430px] rounded-[46px] border-[10px] border-[#1A2530] bg-[#0F171E] p-3 shadow-[0_30px_90px_rgba(0,0,0,0.85)] ring-4 ring-[#D4AF37]"
               >
-                {/* Header */}
-                <div className="relative overflow-hidden bg-gradient-to-l from-slate-950 via-fuchsia-950 to-indigo-950 px-5 py-4 text-white">
-                  <div className="pointer-events-none absolute -top-10 -left-10 h-32 w-32 rounded-full bg-fuchsia-500/20 blur-2xl" />
-                  <div className="relative flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-fuchsia-500 to-cyan-500 text-white shadow-lg">
-                        <Megaphone className="h-5 w-5" />
+                {/* Smartphone Top Notch & Status Bar */}
+                <div className="flex items-center justify-between px-4 pt-1 pb-2 text-[11px] font-typewriter font-bold text-[#F9F6F0]/80">
+                  <span dir="ltr">9:41 AM</span>
+                  <div className="w-24 h-4 rounded-full bg-black border border-[#D4AF37]/30 flex items-center justify-center">
+                    <span className="w-2 h-2 rounded-full bg-[#15803D] animate-pulse" />
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[#D4AF37]">
+                    <Wifi className="w-3.5 h-3.5" />
+                    <BatteryCharging className="w-4 h-4" />
+                  </div>
+                </div>
+
+                {/* Inner Smartphone Screen */}
+                <div className="rounded-[32px] bg-[#F9F6F0] text-[#1A2530] overflow-hidden border-2 border-[#D4AF37]/60 flex flex-col max-h-[80vh]">
+                  {/* App Header inside Phone */}
+                  <div className="bg-[#1A2530] text-[#F9F6F0] px-4 py-3 border-b-2 border-[#D4AF37] flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-xl bg-[#D91624] flex items-center justify-center border border-[#D4AF37]">
+                        <Smartphone className="w-5 h-5 text-[#D4AF37]" />
                       </div>
                       <div>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-black text-cyan-300">
-                          <Flame className="h-3 w-3 text-amber-400" />
-                          <span>محرك السوشيال ميديا واللجان الإلكترونية</span>
-                        </span>
-                        <h2 className="mt-0.5 font-display text-base font-black text-white sm:text-lg">
-                          غرفة عمليات التريند ومنصتي X وTikTok
+                        <h2 className="font-display text-base text-[#F9F6F0] leading-tight">
+                          موبايل الإمبراطور — رادار اللجان والتريند
                         </h2>
+                        <p className="text-[10px] font-bold text-[#D4AF37]">
+                          السيولة: {formatMoney(cash)} ج.م · الضجة: {draft.hypeScore}%
+                        </p>
                       </div>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => setPrWarRoomOpen(false)}
-                      className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/15 text-white transition hover:bg-white/25"
+                      className="w-8 h-8 rounded-full bg-[#F9F6F0]/15 hover:bg-[#D91624] text-white flex items-center justify-center transition cursor-pointer"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
-                </div>
 
-                <div className="space-y-4 p-4 sm:p-5">
-                  {/* Treasury & Active Work Strip */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/75 px-3.5 py-2.5">
-                    <div className="text-xs font-bold text-slate-700">
-                      العمل المستهدف:{' '}
-                      <strong className="font-black text-violet-900">
-                        «{lastReleasedProject?.title || draft.title || 'مشروع الاستوديو'}»
-                      </strong>{' '}
-                      · الضجة الحالية:{' '}
-                      <strong className="font-mono font-black text-amber-700">
-                        {draft.hypeScore}%
-                      </strong>
+                  {/* Rival Studio Target Selector */}
+                  <div className="bg-[#EFE9DC] px-3.5 py-2 border-b border-[#1A2530]/15">
+                    <div className="text-[10px] font-extrabold text-[#1A2530]/75 mb-1">
+                      اختر الشركة المنافسة المستهدفة بالإشاعات:
                     </div>
-                    <div className="rounded-xl bg-emerald-600 px-3 py-1 font-mono text-xs font-black text-white tabular-nums">
-                      السيولة: {formatMoney(cash)} ج.م
-                    </div>
-                  </div>
-
-                  {/* Rival Studio Target Selector for Attack Campaigns */}
-                  <div className="rounded-2xl border border-rose-200/80 bg-rose-50/60 p-3">
-                    <label className="block text-[11px] font-black text-rose-950">
-                      حدد الشركة المنافسة المستهدفة في حال إطلاق حملة لجان مضادة:
-                    </label>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                       {rivalStudioOptions.map((stName) => (
                         <button
                           key={stName}
                           type="button"
                           onClick={() => setSelectedRivalTarget(stName)}
-                          className={`rounded-xl px-2.5 py-1 text-[11px] font-black transition ${
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold whitespace-nowrap transition cursor-pointer ${
                             selectedRivalTarget === stName
-                              ? 'bg-rose-600 text-white shadow-xs'
-                              : 'border border-rose-200 bg-white text-slate-700 hover:bg-rose-100'
+                              ? 'bg-[#D91624] text-white shadow'
+                              : 'bg-white text-[#1A2530] border border-[#1A2530]/20'
                           }`}
                         >
                           {stName}
@@ -646,153 +645,171 @@ export function WorldPopupsOverlay() {
                     </div>
                   </div>
 
-                  {/* Campaigns Grid */}
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {SOCIAL_PR_CAMPAIGNS.map((camp: SocialPrCampaignItem) => {
-                      const isAttack = camp.type === 'attack_rival';
-                      const isBusy = launchingCampaignId === camp.id;
-                      return (
-                        <div
-                          key={camp.id}
-                          className={`flex flex-col justify-between rounded-2xl border-2 p-3.5 transition ${
-                            isAttack
-                              ? 'border-rose-200 bg-gradient-to-br from-rose-50/70 to-white'
-                              : 'border-indigo-100 bg-white'
+                  {/* Live Animated Social Comments Stream */}
+                  <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 bg-[#1A2530]/95 text-[#F9F6F0] min-h-[230px] max-h-[300px]">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-[#D4AF37] pb-1 border-b border-white/10">
+                      <span>🔴 بث مباشر للتعليقات والهاشتاجات (X & TikTok)</span>
+                      <span>تحديث فوري</span>
+                    </div>
+
+                    {/* Show player campaign posts + live baseline chatter */}
+                    {[
+                      ...(socialFeedLog || []),
+                      {
+                        id: 'default_chatter_1',
+                        platform: 'X' as const,
+                        authorName: 'ناقد سينمائي مستقل',
+                        handle: '@CinemaPulseEG',
+                        content: `الجمهور مترقب بشدة خطوة شركة «${studioName}» القادمة أمام أفلام «${selectedRivalTarget}» هذا الموسم! 🍿👀`,
+                        hashtag: `#سباق_الإيرادات`,
+                        likes: '18.4K',
+                        shares: '4.2K',
+                        sentiment: 'viral_boost' as const,
+                        timestampLabel: 'منذ دقيقة',
+                      },
+                      {
+                        id: 'default_chatter_2',
+                        platform: 'TikTok' as const,
+                        authorName: 'تريندات الشارع',
+                        handle: '@StreetVoxEG',
+                        content: `منافسة تكسير عظام على شباك التذاكر.. يا ترى مين هيكسب الصدارة الأسبوع ده؟ 🔥🎬`,
+                        hashtag: `#شباك_التذاكر`,
+                        likes: '42.1K',
+                        shares: '9.8K',
+                        sentiment: 'rival_attack' as const,
+                        timestampLabel: 'منذ 3 دقائق',
+                      },
+                    ]
+                      .slice(0, 7)
+                      .map((post, idx) => (
+                        <motion.div
+                          key={post.id}
+                          initial={{ opacity: 0, x: 20, scale: 0.96 }}
+                          animate={{ opacity: 1, x: 0, scale: 1 }}
+                          transition={{ delay: idx * 0.05 }}
+                          className={`rounded-2xl p-3 border ${
+                            post.sentiment === 'viral_boost'
+                              ? 'bg-[#15803D]/20 border-[#15803D]'
+                              : 'bg-[#D91624]/20 border-[#D91624]'
                           }`}
                         >
-                          <div>
-                            <div className="flex items-center justify-between gap-1.5">
-                              <span
-                                className={`rounded-lg px-2 py-0.5 text-[10px] font-black ${
-                                  camp.platform === 'TikTok'
-                                    ? 'bg-slate-900 text-cyan-300'
-                                    : isAttack
-                                    ? 'bg-rose-100 text-rose-800'
-                                    : 'bg-indigo-100 text-indigo-800'
-                                }`}
-                              >
-                                {camp.badgeLabel}
+                          <div className="flex items-center justify-between text-[10px] mb-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded bg-[#D4AF37] text-[#1A2530] font-typewriter font-black">
+                                {post.platform}
                               </span>
-                              <span className="font-mono text-xs font-black text-emerald-700 tabular-nums">
-                                {formatMoney(camp.cost)} ج.م
+                              <span className="font-extrabold text-white">
+                                {post.authorName}
+                              </span>
+                              <span dir="ltr" className="text-white/60 font-typewriter">
+                                {post.handle}
                               </span>
                             </div>
-
-                            <h3 className="mt-1.5 font-display text-xs font-black text-slate-950 sm:text-sm">
-                              {camp.title}
-                            </h3>
-                            <p className="mt-1 text-[11px] font-bold leading-relaxed text-slate-600">
-                              {camp.description}
-                            </p>
-                            <div className="mt-2 rounded-xl bg-slate-100/90 px-2.5 py-1 text-[10px] font-black text-violet-800">
-                              {camp.impactSummary}
-                            </div>
+                            <span className="text-[#D4AF37] font-bold">
+                              {post.timestampLabel}
+                            </span>
                           </div>
 
+                          <p className="text-xs font-bold leading-relaxed text-[#F9F6F0]">
+                            {post.content}
+                          </p>
+
+                          <div className="mt-1.5 flex items-center justify-between text-[10px] font-bold">
+                            <span className="text-[#D4AF37]">{post.hashtag}</span>
+                            <div className="flex items-center gap-3 font-typewriter text-white/80">
+                              <span className="inline-flex items-center gap-1">
+                                <Heart className="w-3 h-3 text-[#D91624]" />
+                                {post.likes}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Share2 className="w-3 h-3 text-[#D4AF37]" />
+                                {post.shares}
+                              </span>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                  </div>
+
+                  {/* Primary Bottom Smartphone Buttons: 2M Support & 5M Rival Rumor */}
+                  <div className="p-3.5 bg-[#F9F6F0] border-t-2 border-[#D4AF37] space-y-2">
+                    <button
+                      type="button"
+                      disabled={launchingCampaignId !== null}
+                      onClick={async () => {
+                        setLaunchingCampaignId('support_film_trolls');
+                        playSocialNotifPop();
+                        const ok = await launchSocialPrCampaign('support_film_trolls');
+                        if (ok) playCashRegisterChaChing();
+                        setLaunchingCampaignId(null);
+                      }}
+                      className="w-full py-3 px-4 rounded-2xl bg-[#15803D] hover:brightness-110 text-white font-display text-sm sm:text-base border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between cursor-pointer disabled:opacity-50"
+                    >
+                      <span>توجيه اللجان لدعم الفيلم (يكلف 2 مليون)</span>
+                      <span className="font-typewriter text-xs bg-black/25 px-2 py-0.5 rounded">
+                        2,000,000 ج.م
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={launchingCampaignId !== null}
+                      onClick={async () => {
+                        setLaunchingCampaignId('rival_rumor_trolls');
+                        playSocialNotifPop();
+                        const ok = await launchSocialPrCampaign(
+                          'rival_rumor_trolls',
+                          selectedRivalTarget
+                        );
+                        if (ok) playCashRegisterChaChing();
+                        setLaunchingCampaignId(null);
+                      }}
+                      className="w-full py-3 px-4 rounded-2xl bg-[#D91624] hover:brightness-110 text-white font-display text-sm sm:text-base border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between cursor-pointer disabled:opacity-50"
+                    >
+                      <span>نشر إشاعة عن فيلم المنافس (يكلف 5 مليون)</span>
+                      <span className="font-typewriter text-xs bg-black/25 px-2 py-0.5 rounded">
+                        5,000,000 ج.م
+                      </span>
+                    </button>
+
+                    {/* Additional Viral Campaigns Row */}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      {SOCIAL_PR_CAMPAIGNS.filter(
+                        (c) =>
+                          c.id !== 'support_film_trolls' &&
+                          c.id !== 'rival_rumor_trolls'
+                      )
+                        .slice(0, 2)
+                        .map((camp) => (
                           <button
+                            key={camp.id}
                             type="button"
-                            disabled={isBusy}
+                            disabled={launchingCampaignId !== null}
                             onClick={async () => {
                               setLaunchingCampaignId(camp.id);
+                              playSocialNotifPop();
                               await launchSocialPrCampaign(
                                 camp.id,
-                                isAttack ? selectedRivalTarget : undefined
+                                camp.type === 'attack_rival'
+                                  ? selectedRivalTarget
+                                  : undefined
                               );
                               setLaunchingCampaignId(null);
                             }}
-                            className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 px-3 text-xs font-black text-white shadow-xs transition hover:brightness-105 disabled:opacity-50 ${
-                              isAttack
-                                ? 'bg-gradient-to-r from-rose-600 to-orange-600'
-                                : 'bg-gradient-to-r from-violet-600 to-indigo-600'
-                            }`}
+                            className="p-2 rounded-xl bg-[#1A2530] text-[#F9F6F0] hover:bg-[#1A2530]/90 border border-[#D4AF37] text-[11px] font-extrabold text-center cursor-pointer"
                           >
-                            {isBusy ? (
-                              <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                <span>جاري التنفيذ...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Flame className="h-3.5 w-3.5" />
-                                <span>
-                                  {isAttack
-                                    ? `ضرب «${selectedRivalTarget}» الآن`
-                                    : 'تمويل وتصدير التريند الآن'}
-                                </span>
-                              </>
-                            )}
+                            <div className="truncate">{camp.title}</div>
+                            <div className="font-typewriter text-[10px] text-[#D4AF37]">
+                              {formatMoney(camp.cost)} ج.م
+                            </div>
                           </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Live Simulated X & TikTok Feed */}
-                  <div className="rounded-2xl border border-slate-200 bg-slate-950 p-3.5 text-white">
-                    <div className="mb-2.5 flex items-center justify-between">
-                      <span className="text-xs font-black text-cyan-300">
-                        البث الحي لمنصات التواصل (X & TikTok Live)
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400">
-                        تحديث فوري مع كل حملة
-                      </span>
-                    </div>
-
-                    {(!socialFeedLog || socialFeedLog.length === 0) ? (
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center text-xs font-bold text-slate-400">
-                        لم تطلق أي حملة تريند أو لجان إلكترونية بعد. اختر إحدى الحملات بالأعلى لتصدير عملك أو ضرب المنافسين!
-                      </div>
-                    ) : (
-                      <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
-                        {socialFeedLog.slice(0, 6).map((post) => (
-                          <div
-                            key={post.id}
-                            className="rounded-xl border border-white/10 bg-white/5 p-2.5"
-                          >
-                            <div className="flex items-center justify-between text-[10px]">
-                              <div className="flex items-center gap-1.5">
-                                <span
-                                  className={`rounded px-1.5 py-0.5 font-black ${
-                                    post.platform === 'TikTok'
-                                      ? 'bg-cyan-500/20 text-cyan-300'
-                                      : 'bg-white/15 text-white'
-                                  }`}
-                                >
-                                  {post.platform}
-                                </span>
-                                <span className="font-black text-white">
-                                  {post.authorName}
-                                </span>
-                                <span dir="ltr" className="text-slate-400">
-                                  {post.handle}
-                                </span>
-                              </div>
-                              <span className="text-amber-300 font-bold">
-                                {post.timestampLabel}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs font-bold leading-relaxed text-slate-100">
-                              {post.content}
-                            </p>
-                            <div className="mt-1.5 flex items-center justify-between text-[10px] font-black">
-                              <span className="text-cyan-400">{post.hashtag}</span>
-                              <div className="flex items-center gap-3 text-slate-300">
-                                <span className="inline-flex items-center gap-1">
-                                  <Heart className="h-3 w-3 text-rose-400" />
-                                  {post.likes}
-                                </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <Share2 className="h-3 w-3 text-emerald-400" />
-                                  {post.shares}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
                         ))}
-                      </div>
-                    )}
+                    </div>
                   </div>
                 </div>
+
+                {/* Smartphone Home Bar */}
+                <div className="w-28 h-1.5 rounded-full bg-[#D4AF37]/50 mx-auto mt-2.5" />
               </motion.div>
             )}
           </motion.div>

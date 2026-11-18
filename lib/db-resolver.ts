@@ -60,6 +60,16 @@ export interface ActorItem {
   unlockDay?: number;
   isRisingDiscovery?: boolean;
   isAiGenerated?: boolean;
+  isCustomStar?: boolean;
+  autographSignature?: string;
+  radarStats?: {
+    charisma: number;
+    acting: number;
+    action: number;
+    comedy: number;
+    popularity: number;
+    boxOffice: number;
+  };
   status?: 'active' | 'retired' | 'deceased';
   busyUntilDay?: number;
   busyWithStudio?: string;

@@ -26,6 +26,12 @@ import {
 } from '@/lib/game-engine';
 import { TalentCharacterPortraitSvg } from '@/components/CinematicGraphicsScene';
 import {
+  Fut3DTiltCard,
+  HexagonalRadarChartSvg,
+  DirectorChairIcon,
+  SixRadarStats,
+} from '@/components/CustomCinemaIcons';
+import {
   Users,
   Clapperboard,
   Check,
@@ -43,6 +49,7 @@ import {
   Film,
   Clock,
   AlertCircle,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -104,6 +111,7 @@ export function Stage3CrewCastCards() {
     confirmMultiAcceptedChoice,
     removeTalentFromDraft,
     setChildModalOpen,
+    setStarForgeOpen,
     showToast,
     groqApiKeyClient,
     preferredGroqModel,
@@ -1157,7 +1165,27 @@ export function Stage3CrewCastCards() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-3">
+            {/* VIP Star Forge Banner inside Actor Casting */}
+            <div className="rounded-2xl bg-gradient-to-r from-[#D91624] via-[#A90F1B] to-[#1A2530] p-4 text-[#F9F6F0] border-2 border-[#D4AF37] shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-typewriter font-black text-[#D4AF37]">
+                  THE STAR FORGE // كاستينج الـ VIP
+                </div>
+                <h3 className="font-display text-lg text-[#F9F6F0]">
+                  هل تبحث عن أسطورة خاصة باستوديوك؟ اصنع نجمك بكارت ألماظ (99 OVR)!
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStarForgeOpen(true)}
+                className="shrink-0 px-5 py-2.5 rounded-xl bg-[#D4AF37] text-[#1A2530] font-display text-sm hover:brightness-110 transition cursor-pointer flex items-center gap-2 shadow"
+              >
+                <Lock className="w-4 h-4" />
+                <span>فتح غرفة صناعة النجوم</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredActors.map((actor) => {
                 const isSigned = allSignedActorIds.includes(actor.id);
                 const offer = draft.talentOffers[actor.id];
@@ -1165,127 +1193,140 @@ export function Stage3CrewCastCards() {
                 const masteryScore = actor.genre_mastery[draft.primaryGenre] || 74;
                 const awardsCount = actorAwardCounts[actor.id] || 0;
 
+                const computedRadar: SixRadarStats = actor.radarStats || {
+                  charisma: actor.stats.charisma,
+                  acting: actor.stats.acting,
+                  action: actor.genre_mastery.action || Math.min(95, actor.stats.overall - 2),
+                  comedy: actor.genre_mastery.comedy || Math.min(92, actor.stats.charisma - 3),
+                  popularity: Math.min(99, Math.round((actor.stats.charisma + actor.stats.box_office_pull) / 2)),
+                  boxOffice: actor.stats.box_office_pull,
+                };
+
+                const cardTier = actor.isCustomStar ? 'DIAMOND' : actor.tier;
+                const isDarkCard = actor.isCustomStar;
+
                 return (
-                  <div
+                  <Fut3DTiltCard
                     key={actor.id}
-                    className={`glass-card rounded-3xl p-4 transition-all ${
+                    tier={cardTier}
+                    className={`p-4 transition-all ${
                       isSigned
-                        ? 'border-2 border-emerald-500 bg-emerald-50/75 shadow-md'
+                        ? 'ring-4 ring-[#15803D]'
                         : isPending
-                        ? 'border-2 border-amber-400 bg-amber-50/60 shadow-md'
-                        : 'hover:border-violet-300'
+                        ? 'ring-4 ring-[#D4AF37]'
+                        : ''
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-indigo-200/80 shadow-xs">
-                          <TalentCharacterPortraitSvg
-                            name={actor.name}
-                            gender={actor.gender}
-                            role="actor"
-                            tier={actor.tier}
-                            age={actor.age}
-                            isRising={actor.isRisingDiscovery || actor.isAiGenerated}
-                          />
+                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37] shadow-md bg-[#F9F6F0]">
+                          {actor.isCustomStar && actor.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={actor.image_url}
+                              alt={actor.name}
+                              className="w-full h-full object-cover sepia-[0.12] contrast-110"
+                            />
+                          ) : (
+                            <TalentCharacterPortraitSvg
+                              name={actor.name}
+                              gender={actor.gender}
+                              role="actor"
+                              tier={actor.tier}
+                              age={actor.age}
+                              isRising={actor.isRisingDiscovery || actor.isAiGenerated}
+                            />
+                          )}
                         </div>
                         <div>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="rounded-lg bg-amber-500 px-2 py-0.5 text-[10px] font-black text-slate-950">
-                              فئة {actor.tier}
-                            </span>
-                            <h3 className="font-display text-sm font-black text-slate-900">
-                              {actor.name}
-                            </h3>
+                            {actor.isCustomStar ? (
+                              <span className="rounded-md bg-[#38BDF8] px-2 py-0.5 font-typewriter text-[10px] font-black text-[#1A2530]">
+                                CUSTOM STAR · موهبة حصرية
+                              </span>
+                            ) : (
+                              <span className="rounded-md bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-black text-[#D4AF37]">
+                                FUT TIER {actor.tier}
+                              </span>
+                            )}
                             {awardsCount > 0 && (
-                              <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-amber-700">
+                              <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-[#D91624]">
                                 · <Award className="h-3.5 w-3.5" /> {awardsCount} جوائز
                               </span>
                             )}
                           </div>
-                          <p className="mt-0.5 text-xs font-bold text-slate-600">
-                            {actor.archetype} · {actor.age} سنة
-                          </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-600">
-                            <span
-                              className={
-                                masteryScore >= 85
-                                  ? 'font-black text-emerald-700'
-                                  : 'text-indigo-800'
-                              }
-                            >
-                              إتقان {primaryGenreObj?.name}: {masteryScore}%
-                            </span>
-                            {actor.busyWithStudio && (
-                              <span className="text-rose-700 font-black">
-                                · يصور حالياً مع {actor.busyWithStudio}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 rounded-2xl border border-indigo-200/70 bg-indigo-50/80 px-3 py-1.5 text-center">
-                        <div className="font-mono text-sm font-black text-violet-900 tabular-nums">
-                          {actor.stats.overall}
-                        </div>
-                        {actor.overallDelta ? (
-                          <span
-                            className={`flex items-center justify-center text-[10px] font-black ${
-                              actor.overallDelta > 0 ? 'text-emerald-600' : 'text-rose-600'
+                          <h3
+                            className={`font-display text-lg mt-0.5 ${
+                              isDarkCard ? 'text-white' : 'text-[#1A2530]'
                             }`}
                           >
-                            {actor.overallDelta > 0
-                              ? `+${actor.overallDelta}`
-                              : actor.overallDelta}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {actor.lastEvolutionNote &&
-                      !actor.lastEvolutionNote.includes('موهبة صاعدة') &&
-                      !actor.lastEvolutionNote.includes('الذكاء') && (
-                        <div className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-2.5 py-1 text-[11px] font-bold text-amber-950">
-                          {actor.lastEvolutionNote}
+                            {actor.name}
+                          </h3>
+                          <p
+                            className={`text-xs font-bold ${
+                              isDarkCard ? 'text-white/80' : 'text-[#1A2530]/75'
+                            }`}
+                          >
+                            {actor.archetype} · {actor.age} سنة · إتقان {primaryGenreObj?.name}:{' '}
+                            <span className="font-typewriter font-black">{masteryScore}%</span>
+                          </p>
                         </div>
-                      )}
+                      </div>
 
-                    <div className="mt-3 grid grid-cols-4 gap-1.5 text-center">
-                      <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
-                        <span className="block text-[9px] font-bold text-slate-500">الأجر</span>
-                        <span className="font-mono text-xs font-black text-emerald-700 tabular-nums">
-                          {formatMoney(actor.base_salary)}
-                        </span>
-                      </div>
-                      <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
-                        <span className="block text-[9px] font-bold text-slate-500">التمثيل</span>
-                        <span className="font-mono text-xs font-black text-slate-900 tabular-nums">
-                          {actor.stats.acting}
-                        </span>
-                      </div>
-                      <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
-                        <span className="block text-[9px] font-bold text-slate-500">النجومية</span>
-                        <span className="font-mono text-xs font-black text-amber-700 tabular-nums">
-                          {actor.stats.box_office_pull}
-                        </span>
-                      </div>
-                      <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
-                        <span className="block text-[9px] font-bold text-slate-500">الكاريزما</span>
-                        <span className="font-mono text-xs font-black text-indigo-700 tabular-nums">
-                          {actor.stats.charisma}
-                        </span>
+                      <div className="shrink-0 rounded-xl border-2 border-[#D4AF37] bg-[#1A2530] px-3 py-1.5 text-center shadow">
+                        <div className="text-[9px] font-typewriter text-[#D4AF37]">OVR</div>
+                        <div className="font-typewriter text-lg font-black text-[#F9F6F0] tabular-nums">
+                          {actor.stats.overall}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Offer Status Banner (Pending 2-3 days / Accepted / Rejected with AI reason) */}
+                    {/* Hexagonal Radar Chart + Typewriter Salary & Ruqaa Autograph */}
+                    <div className="mt-3 grid grid-cols-12 gap-2 items-center rounded-2xl bg-[#F9F6F0]/95 p-2.5 border border-[#1A2530]/15 text-[#1A2530]">
+                      <div className="col-span-7 flex justify-center">
+                        <HexagonalRadarChartSvg
+                          stats={computedRadar}
+                          size={145}
+                          isDiamond={actor.isCustomStar}
+                        />
+                      </div>
+                      <div className="col-span-5 flex flex-col justify-between space-y-2 pr-1 border-r border-[#1A2530]/15">
+                        <div>
+                          <span className="block text-[10px] font-extrabold text-[#1A2530]/65">
+                            الأجر الأساسي:
+                          </span>
+                          <span className="font-typewriter text-xs font-black text-[#15803D]">
+                            {formatMoney(actor.base_salary)} ج.م
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-extrabold text-[#1A2530]/65">
+                            شباك التذاكر:
+                          </span>
+                          <span className="font-typewriter text-xs font-black text-[#1A2530]">
+                            {computedRadar.boxOffice}/99
+                          </span>
+                        </div>
+                        <div className="pt-1 border-t border-dashed border-[#1A2530]/20">
+                          <span className="block text-[9px] font-bold text-[#1A2530]/55">
+                            توقيع النجم:
+                          </span>
+                          <span className="font-ruqaa text-base text-[#D91624] block -rotate-2">
+                            {actor.autographSignature || actor.name}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Offer Status Banner */}
                     {renderOfferStatusBanner(offer)}
 
-                    <div className="mt-3 flex items-center gap-2 border-t border-indigo-100/80 pt-2.5">
+                    <div className="mt-3 flex items-center gap-2 pt-2">
                       {isSigned ? (
                         <button
                           type="button"
                           onClick={() => removeTalentFromDraft(actor.id)}
-                          className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 py-2.5 text-xs font-black text-white shadow-sm"
+                          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#15803D] py-2 text-xs font-black text-white shadow cursor-pointer"
                         >
                           <Check className="h-4 w-4" />
                           <span>تم التوقيع (إلغاء التعاقد)</span>
@@ -1294,18 +1335,18 @@ export function Stage3CrewCastCards() {
                         <button
                           type="button"
                           onClick={() => removeTalentFromDraft(actor.id)}
-                          className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-amber-300 bg-amber-100/90 py-2.5 text-xs font-black text-amber-950"
+                          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-[#FFF6B3] py-2 text-xs font-black text-[#1A2530] cursor-pointer"
                         >
-                          <Clock className="h-4 w-4 text-amber-700" />
+                          <Clock className="h-4 w-4 text-[#D91624]" />
                           <span>بانتظار الرد الرسمي (سحب العرض)</span>
                         </button>
                       ) : (
                         <button
                           type="button"
                           onClick={() => openNegotiation({ kind: 'actor', item: actor })}
-                          className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2.5 text-xs font-black text-white shadow-md hover:brightness-105"
+                          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#D91624] hover:brightness-110 py-2 text-xs font-black text-white border border-[#D4AF37] shadow-md cursor-pointer"
                         >
-                          <MessageSquare className="h-3.5 w-3.5" />
+                          <MessageSquare className="h-3.5 w-3.5 text-[#D4AF37]" />
                           <span>
                             {offer?.status === 'rejected'
                               ? 'تعديل الشروط وإرسال عرض جديد'
@@ -1314,7 +1355,7 @@ export function Stage3CrewCastCards() {
                         </button>
                       )}
                     </div>
-                  </div>
+                  </Fut3DTiltCard>
                 );
               })}
             </div>

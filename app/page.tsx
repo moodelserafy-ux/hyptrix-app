@@ -18,13 +18,13 @@ import { Stage6FestivalsAwards } from '@/components/Stage6FestivalsAwards';
 import { LeaderboardAndSettingsView } from '@/components/LeaderboardAndSettingsView';
 import { SettingsModal } from '@/components/SettingsModal';
 import { WorldPopupsOverlay } from '@/components/WorldPopupsOverlay';
+import { GameFeelEffects } from '@/components/GameFeelEffects';
+import StarForgeModal from '@/components/StarForgeModal';
 import {
-  Building2,
-  Coins,
-  Calendar,
-  Settings,
-  Clock,
-} from 'lucide-react';
+  DirectorChairIcon,
+  FilmReelSettingsIcon,
+} from '@/components/CustomCinemaIcons';
+import { Coins, Calendar, Clock } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 const DAY_DURATION_SECONDS = 18;
@@ -54,6 +54,7 @@ export default function HomePage() {
     festivalModalQueue,
     isChildModalOpen,
     isPrWarRoomOpen,
+    isStarForgeOpen,
     draft,
     groqApiKeyClient,
     preferredGroqModel,
@@ -61,7 +62,6 @@ export default function HomePage() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(DAY_DURATION_SECONDS);
-  const [isScrolled, setIsScrolled] = useState(false);
   const [isPageActive, setIsPageActive] = useState(true);
   const isPageActiveRef = useRef(true);
   const secondsRef = useRef(DAY_DURATION_SECONDS);
@@ -71,6 +71,7 @@ export default function HomePage() {
   const isTopOverlayOpen =
     settingsOpen ||
     isPrWarRoomOpen ||
+    isStarForgeOpen ||
     breakingNewsQueue.length > 0 ||
     festivalModalQueue.length > 0;
   const isAnyModalOpen = isTopOverlayOpen || isChildModalOpen;
@@ -136,18 +137,6 @@ export default function HomePage() {
     };
   }, []);
 
-  // Track vertical scroll position to trigger smooth Dynamic Island Navbar animation
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handleScroll = () => {
-      const scrolledNow = window.scrollY > 18;
-      setIsScrolled((prev) => (prev !== scrolledNow ? scrolledNow : prev));
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   // Automatically scroll to the top whenever the user navigates between screens
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -178,7 +167,6 @@ export default function HomePage() {
   );
 
   // Accurate 1-day-at-a-time real-time progression
-  // Automatically pauses while ANY modal is open OR when the user leaves the game/tab/window, and resumes automatically on return.
   useEffect(() => {
     if (!studioCreated) return;
     const timer = setInterval(() => {
@@ -202,7 +190,7 @@ export default function HomePage() {
     return () => clearInterval(timer);
   }, [studioCreated, isAnyModalOpen, advanceGameDay]);
 
-  // Background AI World Evolution (Pauses automatically when a modal is open or when user leaves the game)
+  // Background AI World Evolution
   useEffect(() => {
     if (
       !studioCreated ||
@@ -373,149 +361,75 @@ export default function HomePage() {
   ]);
 
   const isStepScreen = studioCreated && activeScreen !== 'STUDIO_HUB';
-  const dayProgressPercent = Math.min(
-    100,
-    Math.max(
-      4,
-      Math.round(
-        ((DAY_DURATION_SECONDS - secondsLeft) / DAY_DURATION_SECONDS) * 100
-      )
-    )
-  );
 
   return (
     <div
-      className={`relative min-h-screen w-full text-slate-900 ${
-        studioCreated ? 'pt-18 pb-8' : 'pb-6'
-      }`}
+      className="relative min-h-screen w-full bg-[#F9F6F0] text-[#1A2530] pb-10"
       dir="rtl"
     >
-      {/* Scroll-Reactive Dynamic Cinema Island Navbar — Only 3 Clean Items, Zero Overflow */}
-      {studioCreated && (
-        <motion.header
-          initial={{ y: -24, opacity: 0 }}
-          animate={{
-            y: isScrolled ? 2 : 0,
-            opacity: isAnyModalOpen ? 0.35 : 1,
-          }}
-          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          className={`fixed top-2 right-0 left-0 z-40 px-2.5 sm:px-4 ${
-            isAnyModalOpen ? 'pointer-events-none select-none' : 'pointer-events-none'
+      {/* Global Clapperboard Transitions, Flying Cash Deltas & Crisis Red Alert */}
+      <GameFeelEffects />
+
+      {/* Minimal Cinema Clapperboard Strip ONLY when inside sub-stages (No traditional Navbar on Emperor's Desk) */}
+      {isStepScreen && (
+        <div
+          className={`sticky top-0 z-40 bg-[#1A2530] text-[#F9F6F0] border-b-4 border-[#D4AF37] px-3 sm:px-6 py-2.5 shadow-lg ${
+            isAnyModalOpen ? 'pointer-events-none opacity-40' : ''
           }`}
         >
-          <motion.div
-            layout
-            animate={{
-              scale: isScrolled ? 0.98 : 1,
-              y: isScrolled ? -1 : 0,
-            }}
-            transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-            className={`relative mx-auto flex items-center justify-between gap-2 transition-all duration-300 ${
-              isAnyModalOpen ? 'pointer-events-none select-none' : 'pointer-events-auto'
-            } ${
-              isScrolled
-                ? 'max-w-[490px] rounded-full border-2 border-violet-300/95 bg-white/95 px-3 py-1.5 shadow-[0_20px_48px_-10px_rgba(79,70,229,0.34),0_4px_14px_-2px_rgba(14,165,233,0.18)] backdrop-blur-2xl'
-                : 'max-w-xl rounded-2xl border-2 border-white/90 bg-white/90 px-3 py-2 shadow-[0_14px_34px_-10px_rgba(79,70,229,0.20)] backdrop-blur-xl sm:px-4'
-            }`}
-          >
-            {/* Animated Top Specular Shimmer Line */}
-            <div className="pointer-events-none absolute inset-x-8 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/75 to-transparent" />
-
-            {/* ITEM 1 (Right): Return to Hub Button (if in step screen) + Cash Capsule */}
-            <div className="flex shrink-0 items-center gap-1.5">
-              {isStepScreen && (
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.95 }}
-                  type="button"
-                  onClick={() => setActiveScreen('STUDIO_HUB')}
-                  className="flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-l from-violet-600 to-indigo-600 px-2.5 py-1 text-[11px] font-black text-white shadow-sm"
-                >
-                  <Building2 className="h-3.5 w-3.5 shrink-0 text-amber-300" />
-                  <span className="whitespace-nowrap">المقر</span>
-                </motion.button>
-              )}
-
-              {/* Crystal-Clear Cash Capsule — Never Clips or Overlaps at Any Amount */}
-              <motion.div
-                key={`cash_${cash}`}
-                initial={{ scale: 0.94 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 480, damping: 22 }}
-                className="flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-300/90 bg-gradient-to-l from-emerald-50/95 via-white to-emerald-50/90 px-2.5 py-1 shadow-2xs"
-              >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
-                  <Coins className="h-3.5 w-3.5 shrink-0" />
-                </span>
-                <div className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
-                  <span
-                    dir="ltr"
-                    className="font-mono text-xs font-black tracking-tight text-emerald-950 tabular-nums sm:text-[13px]"
-                  >
-                    {formatMoney(cash)}
-                  </span>
-                  <span className="text-[10px] font-black text-emerald-700">
-                    ج.م
-                  </span>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* ITEM 2 (Center/Left): Live Synchronized Cinema Calendar & Day Countdown */}
-            <motion.div
-              layout
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-indigo-200/90 bg-gradient-to-l from-indigo-50/95 via-white to-violet-50/90 px-2.5 py-1 text-[11px] font-black text-indigo-950 shadow-2xs"
+          <div className="mx-auto max-w-5xl flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveScreen('STUDIO_HUB')}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-sm border border-[#D4AF37] shadow cursor-pointer transition"
             >
-              <Calendar className="h-3.5 w-3.5 shrink-0 text-violet-600" />
-              <span className="whitespace-nowrap">
-                {formatGameDate(gameDay, currentYear)}
-              </span>
-              <span
-                dir="ltr"
-                className={`inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-black text-white shadow-2xs tabular-nums ${
-                  !isPageActive || isAnyModalOpen
-                    ? 'bg-slate-500'
-                    : 'bg-gradient-to-r from-violet-600 to-indigo-600'
-                }`}
-              >
-                <Clock className="h-2.5 w-2.5" />
-                <span>{secondsLeft}s</span>
-              </span>
-            </motion.div>
+              <DirectorChairIcon className="w-4 h-4 text-[#D4AF37]" />
+              <span>العودة لمكتب الإمبراطور</span>
+            </button>
 
-            {/* ITEM 3 (Left, only on STUDIO_HUB): Single Compact Settings Button */}
-            {!isStepScreen && (
-              <motion.button
-                whileHover={{ scale: 1.07, rotate: 20 }}
-                whileTap={{ scale: 0.93 }}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#F9F6F0]/10 border border-[#D4AF37]/40">
+                <Coins className="w-4 h-4 text-[#D4AF37]" />
+                <span
+                  dir="ltr"
+                  className="font-typewriter text-xs sm:text-sm font-black text-[#F9F6F0]"
+                >
+                  {formatMoney(cash)}
+                </span>
+                <span className="text-[11px] font-bold text-[#D4AF37]">ج.م</span>
+              </div>
+
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#F9F6F0]/10 border border-[#D4AF37]/30 text-xs font-bold">
+                <Calendar className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <span>{formatGameDate(gameDay, currentYear)}</span>
+                <span
+                  dir="ltr"
+                  className="font-typewriter text-[11px] text-[#D4AF37] flex items-center gap-0.5"
+                >
+                  <Clock className="w-3 h-3" />
+                  {secondsLeft}s
+                </span>
+              </div>
+
+              <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
-                title="الإعدادات"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-indigo-200/85 bg-white/95 text-slate-700 shadow-2xs transition hover:bg-indigo-50"
+                className="p-1.5 rounded-lg bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 text-[#D4AF37] border border-[#D4AF37]/40 cursor-pointer"
+                title="إعدادات الاستوديو"
               >
-                <Settings className="h-3.5 w-3.5" />
-              </motion.button>
-            )}
-
-            {/* Animated Bottom Day-Cycle Progress Track inside the Island */}
-            <div className="pointer-events-none absolute right-5 bottom-0 left-5 h-[2.5px] overflow-hidden rounded-full bg-indigo-100/70">
-              <motion.div
-                className="h-full rounded-full bg-gradient-to-l from-violet-600 via-indigo-500 to-amber-500"
-                initial={false}
-                animate={{ width: `${dayProgressPercent}%` }}
-                transition={{ duration: 0.45, ease: 'easeOut' }}
-              />
+                <FilmReelSettingsIcon className="w-5 h-5" />
+              </button>
             </div>
-          </motion.div>
-        </motion.header>
+          </div>
+        </div>
       )}
 
-      {/* Main Content Container (Completely Frozen & Unclickable when Top Overlay Modal is Open) */}
+      {/* Main Content Container */}
       <main
         aria-hidden={isTopOverlayOpen}
-        className={`mx-auto max-w-xl px-3 transition-opacity ${
-          isTopOverlayOpen ? 'pointer-events-none select-none opacity-40' : ''
-        }`}
+        className={`mx-auto px-3 sm:px-6 pt-4 transition-opacity ${
+          activeScreen === 'STUDIO_HUB' ? 'max-w-6xl' : 'max-w-4xl'
+        } ${isTopOverlayOpen ? 'pointer-events-none select-none opacity-40' : ''}`}
       >
         <AnimatePresence mode="wait">
           {!studioCreated ? (
@@ -537,7 +451,10 @@ export default function HomePage() {
               transition={{ type: 'spring', stiffness: 380, damping: 32 }}
             >
               {activeScreen === 'STUDIO_HUB' && (
-                <StudioHubView onOpenSettings={() => setSettingsOpen(true)} />
+                <StudioHubView
+                  onOpenSettings={() => setSettingsOpen(true)}
+                  secondsLeft={secondsLeft}
+                />
               )}
               {activeScreen === 'PROJECT_SETUP' && <Stage2ProjectSetup />}
               {activeScreen === 'CREW_CAST_CARDS' && <Stage3CrewCastCards />}
@@ -550,7 +467,10 @@ export default function HomePage() {
         </AnimatePresence>
       </main>
 
-      {/* Global Popups & Settings */}
+      {/* The Star Forge (غرفة صناعة النجوم / كاستينج الـ VIP) */}
+      <StarForgeModal />
+
+      {/* Global Popups & Smartphone PR War Room */}
       <WorldPopupsOverlay />
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>

@@ -1,22 +1,34 @@
 import type { Metadata, Viewport } from 'next';
-import { Readex_Pro, IBM_Plex_Sans_Arabic, Space_Mono } from 'next/font/google';
+import {
+  Cairo,
+  Lalezar,
+  Aref_Ruqaa,
+  Courier_Prime,
+} from 'next/font/google';
 import './globals.css';
 
-const cairo = Readex_Pro({
+const cairo = Cairo({
   subsets: ['arabic', 'latin'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['500', '600', '700', '800', '900'],
   variable: '--font-cairo',
   display: 'swap',
 });
 
-const changa = IBM_Plex_Sans_Arabic({
+const changa = Lalezar({
   subsets: ['arabic', 'latin'],
-  weight: ['500', '600', '700'],
+  weight: ['400'],
   variable: '--font-changa',
   display: 'swap',
 });
 
-const spaceMono = Space_Mono({
+const arefRuqaa = Aref_Ruqaa({
+  subsets: ['arabic', 'latin'],
+  weight: ['400', '700'],
+  variable: '--font-ruqaa',
+  display: 'swap',
+});
+
+const spaceMono = Courier_Prime({
   subsets: ['latin'],
   weight: ['400', '700'],
   variable: '--font-space-mono',
@@ -32,7 +44,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
-  themeColor: '#F2F5FF',
+  themeColor: '#F9F6F0',
 };
 
 export const metadata: Metadata = {
@@ -335,9 +347,9 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${cairo.variable} ${changa.variable} ${spaceMono.variable}`}
+      className={`${cairo.variable} ${changa.variable} ${arefRuqaa.variable} ${spaceMono.variable}`}
     >
-      <body className="min-h-dvh w-full overflow-x-hidden bg-[#F2F5FF] text-slate-900 antialiased selection:bg-violet-600 selection:text-white">
+      <body className="min-h-dvh w-full overflow-x-hidden bg-[#F9F6F0] text-[#1A2530] antialiased selection:bg-[#D91624] selection:text-white">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

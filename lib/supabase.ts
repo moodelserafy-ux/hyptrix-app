@@ -73,6 +73,7 @@ export type VerifiedTransactionType =
   | 'PROJECT_PRODUCTION_SPEND'
   | 'PROJECT_BOX_OFFICE_REVENUE'
   | 'RESOLVE_CRISIS_SPEND'
+  | 'VIP_PACKAGE_TOPUP'
   | 'SYNC_CHECKPOINT';
 
 export interface LedgerVerificationRequest {

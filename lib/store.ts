@@ -147,6 +147,8 @@ export function getStudioAssetBenefits(ownedAssets: string[] = []) {
 
 export interface SocialPrCampaignItem {
   id:
+    | 'support_film_trolls'
+    | 'rival_rumor_trolls'
     | 'tiktok_viral_wave'
     | 'x_hashtag_storm'
     | 'rival_smear_campaign'
@@ -161,6 +163,28 @@ export interface SocialPrCampaignItem {
 }
 
 export const SOCIAL_PR_CAMPAIGNS: SocialPrCampaignItem[] = [
+  {
+    id: 'support_film_trolls',
+    title: 'توجيه اللجان لدعم الفيلم (يكلف 2 مليون)',
+    platform: 'Mix',
+    cost: 2_000_000,
+    type: 'boost_player',
+    badgeLabel: 'لجان الدعم السريع · 2 مليون ج.م',
+    impactSummary: '+12 ضجة جماهيرية · قلب تعليقات السوشيال لإشادات حماسية فورية',
+    description:
+      'ضخ آلاف الحسابات والتعليقات الإيجابية على X وتيك توك للإشادة بفيلمك وتحويل دفة الجمهور لصالحك فوراً.',
+  },
+  {
+    id: 'rival_rumor_trolls',
+    title: 'نشر إشاعة عن فيلم المنافس (يكلف 5 مليون)',
+    platform: 'X',
+    cost: 5_000_000,
+    type: 'attack_rival',
+    badgeLabel: 'حرب الإشاعات · 5 مليون ج.م',
+    impactSummary: '-18% إيرادات المنافس · -35M من قيمة الشركة المنافسة · تصدر التريند',
+    description:
+      'إطلاق شائعات مسربة عن مشاكل داخل بلاتوه الفيلم المنافس وضعف قصته لسحب الجمهور نحو قاعات عرضك.',
+  },
   {
     id: 'tiktok_viral_wave',
     title: 'حملة مشاهد ومقاطع تريند على TikTok',
@@ -1298,10 +1322,17 @@ export interface HyptrixGameState {
   ledgerSignature: string;
   socialFeedLog: LiveSocialFeedPost[];
   isPrWarRoomOpen: boolean;
+  starForgeLocksOpened: number;
+  isStarForgeOpen: boolean;
 
   // Actions
   setChildModalOpen: (open: boolean) => void;
   setPrWarRoomOpen: (open: boolean) => void;
+  setStarForgeOpen: (open: boolean) => void;
+  unlockNextStarForgeLockWithAd: () => void;
+  buyVipGemPackage: (packageEgp: 10 | 30 | 50) => Promise<void>;
+  spendForStarForgeUpgrade: (cashCost: number, gemCost: number) => boolean;
+  createCustomVipStar: (actor: ActorItem) => void;
   purchaseStudioAsset: (assetId: string) => Promise<boolean>;
   resolveCrisisWithStudioAsset: (crisisId: string) => void;
   launchSocialPrCampaign: (
@@ -1479,9 +1510,125 @@ export const useGameStore = create<HyptrixGameState>()(
       ledgerSignature: '',
       socialFeedLog: [],
       isPrWarRoomOpen: false,
+      starForgeLocksOpened: 0,
+      isStarForgeOpen: false,
 
       setChildModalOpen: (open) => set({ isChildModalOpen: open }),
       setPrWarRoomOpen: (open) => set({ isPrWarRoomOpen: open }),
+      setStarForgeOpen: (open) => set({ isStarForgeOpen: open }),
+
+      unlockNextStarForgeLockWithAd: () =>
+        set((state) => {
+          const nextLocks = Math.min(5, (state.starForgeLocksOpened || 0) + 1);
+          return {
+            starForgeLocksOpened: nextLocks,
+            vipCoins: state.vipCoins + 15,
+          };
+        }),
+
+      buyVipGemPackage: async (packageEgp) => {
+        const state = get();
+        const rewardMap: Record<10 | 30 | 50, { gems: number; cashBonus: number; label: string }> = {
+          10: { gems: 150, cashBonus: 12_000_000, label: 'باقة النجم الصاعد (10 ج.م)' },
+          30: { gems: 500, cashBonus: 40_000_000, label: 'باقة المنتج الذهبي (30 ج.م)' },
+          50: { gems: 1200, cashBonus: 90_000_000, label: 'باقة الإمبراطور الألماظ (50 ج.م)' },
+        };
+        const pkg = rewardMap[packageEgp];
+        const prevCash = state.cash;
+        const nextCash = prevCash + pkg.cashBonus;
+        const nextMvMod = (state.marketValueModifier || 0) + pkg.cashBonus;
+        const nextMv = calculateStudioMarketValue({
+          cash: nextCash,
+          reputation: state.reputation,
+          releasedProjects: state.releasedProjects,
+          marketValueModifier: nextMvMod,
+        });
+
+        await verifyAndRecordServerTransaction({
+          studioInstanceId: getOrCreateStudioInstanceId(),
+          studioName: state.studioName,
+          ceoName: state.ceoName,
+          userEmail: state.supabaseUserEmail,
+          transactionType: 'VIP_PACKAGE_TOPUP',
+          amountDelta: pkg.cashBonus,
+          previousCash: prevCash,
+          expectedNewCash: nextCash,
+          marketValue: nextMv,
+          reputation: state.reputation,
+          ownedAssets: state.ownedStudioAssets || [],
+          itemId: `vip_pkg_${packageEgp}`,
+          itemLabel: pkg.label,
+          previousSignature: state.ledgerSignature,
+        });
+
+        set((cur) => ({
+          vipCoins: cur.vipCoins + pkg.gems,
+          cash: nextCash,
+          marketValueModifier: nextMvMod,
+          marketValue: nextMv,
+          starForgeLocksOpened: 5,
+        }));
+
+        get().showToast(
+          `تم شحن «${pkg.label}» بنجاح!`,
+          'magic',
+          `+${pkg.gems} عملة ذهبية VIP · +${formatMoney(pkg.cashBonus)} ج.م سيولة خزينة`
+        );
+      },
+
+      spendForStarForgeUpgrade: (cashCost, gemCost) => {
+        const state = get();
+        if (cashCost > 0 && state.cash < cashCost) {
+          state.showToast(
+            'رصيد الخزينة لا يكفي لترقية هذه الطاقة!',
+            'warning',
+            `تحتاج إلى ${formatMoney(cashCost)} ج.م.`
+          );
+          return false;
+        }
+        if (gemCost > 0 && state.vipCoins < gemCost) {
+          state.showToast(
+            'تحتاج إلى عملات VIP ذهبية لكسر حاجز الـ 80 والوصول لطاقة أسطورية (99)!',
+            'warning',
+            'اشحن باقة الـ 10 أو 30 أو 50 جنيه من الخزنة فوراً.'
+          );
+          return false;
+        }
+        set((cur) => ({
+          cash: Math.max(0, cur.cash - cashCost),
+          vipCoins: Math.max(0, cur.vipCoins - gemCost),
+        }));
+        return true;
+      },
+
+      createCustomVipStar: (actor) =>
+        set((state) => {
+          const customStar: ActorItem = {
+            ...actor,
+            isCustomStar: true,
+            isAiGenerated: false,
+            isRisingDiscovery: false,
+            status: 'active',
+          };
+          const headline = `ولادة أسطورة سينمائية: «${state.studioName}» تكشف رسمياً عن نجمها الحصري «${customStar.name}» بكارت ألماظ وتقييم ${customStar.stats.overall}!`;
+          return {
+            aiGeneratedActors: [
+              customStar,
+              ...state.aiGeneratedActors.filter((a) => a.id !== customStar.id),
+            ],
+            reputation: Math.min(100, state.reputation + 5),
+            marketValueModifier: (state.marketValueModifier || 0) + 25_000_000,
+            worldHistory: [
+              {
+                year: state.currentYear,
+                eventText: headline,
+                category: 'milestone',
+              },
+              ...state.worldHistory,
+            ],
+            aiMemoryLog: [headline, ...(state.aiMemoryLog || [])].slice(0, 25),
+          };
+        }),
 
       verifyWalletWithServer: async () => {
         const state = get();
@@ -1685,7 +1832,61 @@ export const useGameStore = create<HyptrixGameState>()(
         const rivalTag = rivalFilmTitle.replace(/\s+/g, '_');
 
         const newPosts: LiveSocialFeedPost[] = [];
-        if (campaign.id === 'tiktok_viral_wave') {
+        if (campaign.id === 'support_film_trolls') {
+          newPosts.push(
+            {
+              id: `supp_${Date.now()}_1`,
+              platform: 'X',
+              authorName: 'حملة جمهور السينما',
+              handle: '@CinemaLoversEG',
+              content: `بصراحة «${activeProjectTitle}» أفضل عمل نزل السنادي من غير منازع! أداء جبار وإخراج عالمي من شركة «${state.studioName}» 👏🔥`,
+              hashtag: `#${cleanTag}_رقم_واحد`,
+              likes: '94.2K',
+              shares: '27.8K',
+              sentiment: 'viral_boost',
+              timestampLabel: 'الآن · هجوم إيجابي كاسح',
+            },
+            {
+              id: `supp_${Date.now()}_2`,
+              platform: 'TikTok',
+              authorName: 'تريندات الشباك',
+              handle: '@BoxOfficeWave',
+              content: `الطوابير قدام السينمات على «${activeProjectTitle}» مش طبيعية! الفيلم يستاهل كل جنيه 🍿🎬`,
+              hashtag: `#${cleanTag}`,
+              likes: '175K',
+              shares: '34.1K',
+              sentiment: 'viral_boost',
+              timestampLabel: 'الآن · تيك توك',
+            }
+          );
+        } else if (campaign.id === 'rival_rumor_trolls') {
+          newPosts.push(
+            {
+              id: `rumor_${Date.now()}_1`,
+              platform: 'X',
+              authorName: 'تسريبات الفن السابع',
+              handle: '@InsiderLeakEG',
+              content: `أنباء مؤكدة عن خلافات حادة وانسحابات في كواليس «${rivalFilmTitle}» التابع لشركة «${rivalStudio}» والجمهور يشتكي من ضعف المونتاج! ⚡📉`,
+              hashtag: `#أزمة_${rivalTag}`,
+              likes: '68.4K',
+              shares: '31.9K',
+              sentiment: 'rival_attack',
+              timestampLabel: 'الآن · إشاعة متصدرة',
+            },
+            {
+              id: `rumor_${Date.now()}_2`,
+              platform: 'TikTok',
+              authorName: 'رادار النجوم',
+              handle: '@StarRadarClips',
+              content: `الجمهور بيخرج من نص عرض «${rivalFilmTitle}» وبيدخل قاعة «${activeProjectTitle}»! الفرق واضح جداً 🎯`,
+              hashtag: `#مقاطعة_${rivalTag}`,
+              likes: '142K',
+              shares: '29.5K',
+              sentiment: 'rival_attack',
+              timestampLabel: 'الآن · فيديو مسرب',
+            }
+          );
+        } else if (campaign.id === 'tiktok_viral_wave') {
           newPosts.push(
             {
               id: `tt_${Date.now()}_1`,
@@ -1789,7 +1990,64 @@ export const useGameStore = create<HyptrixGameState>()(
           let nextRep = cur.reputation;
           let nextHype = cur.draft.hypeScore;
 
-          if (campaign.id === 'tiktok_viral_wave') {
+          if (campaign.id === 'support_film_trolls') {
+            nextHype = Math.min(100, nextHype + 12);
+            nextMvMod += 8_000_000;
+            if (nextLast) {
+              const revBoost = Math.round(nextLast.totalGrossRevenue * 0.09) + 4_500_000;
+              nextLast = {
+                ...nextLast,
+                audienceScore: Number(Math.min(9.6, nextLast.audienceScore + 0.4).toFixed(1)),
+                boxOfficeRevenue: nextLast.boxOfficeRevenue + revBoost,
+                totalGrossRevenue: nextLast.totalGrossRevenue + revBoost,
+                targetGrossRevenue: (nextLast.targetGrossRevenue || nextLast.totalGrossRevenue) + revBoost,
+                netProfit: nextLast.netProfit + revBoost,
+                viralTrendLabel: `#${cleanTag} يكتسح السوشيال ميديا بدعم اللجان 🔥`,
+              };
+            }
+          } else if (campaign.id === 'rival_rumor_trolls') {
+            const prevRival = nextCompDelta[rivalStudio] || {
+              netWorthDelta: 0,
+              releasesDelta: 0,
+              awardsDelta: 0,
+            };
+            nextCompDelta[rivalStudio] = {
+              ...prevRival,
+              netWorthDelta: prevRival.netWorthDelta - 35_000_000,
+            };
+            if (nextLast) {
+              const updatedRivals = nextLast.rivalReleases.map((r) => {
+                if (r.studioName === rivalStudio || r.title === rivalFilmTitle) {
+                  const reducedRev = Math.max(
+                    16_000_000,
+                    Math.round(r.boxOfficeRevenue * 0.82)
+                  );
+                  return {
+                    ...r,
+                    boxOfficeRevenue: reducedRev,
+                    targetBoxOfficeRevenue: Math.round(
+                      (r.targetBoxOfficeRevenue || reducedRev) * 0.82
+                    ),
+                    criticScore: Number(Math.max(4.5, r.criticScore - 0.6).toFixed(1)),
+                  };
+                }
+                return r;
+              });
+              const allRevs = [
+                nextLast.totalGrossRevenue,
+                ...updatedRivals.map((r) => r.boxOfficeRevenue),
+              ].sort((a, b) => b - a);
+              const newRank = Math.max(
+                1,
+                allRevs.indexOf(nextLast.totalGrossRevenue) + 1
+              );
+              nextLast = {
+                ...nextLast,
+                rivalReleases: updatedRivals,
+                boxOfficeRank: newRank,
+              };
+            }
+          } else if (campaign.id === 'tiktok_viral_wave') {
             nextHype = Math.min(100, nextHype + 15);
             if (nextLast) {
               const revBoost = Math.round(nextLast.totalGrossRevenue * 0.12) + 6_500_000;

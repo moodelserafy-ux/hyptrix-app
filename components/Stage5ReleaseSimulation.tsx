@@ -29,8 +29,68 @@ import {
   Newspaper,
   Bot,
   Trophy,
+  Activity,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  playCashRegisterChaChing,
+  playHeartbeatTick,
+} from '@/lib/sound-fx';
+
+function SpinningOdometerRevenue({ targetValue }: { targetValue: number }) {
+  const [displayed, setDisplayed] = React.useState(targetValue);
+
+  React.useEffect(() => {
+    let frame = 0;
+    const totalFrames = 22;
+    const startVal = Math.max(0, displayed * 0.78);
+    const diff = targetValue - startVal;
+
+    playCashRegisterChaChing();
+
+    const interval = setInterval(() => {
+      frame += 1;
+      if (frame % 4 === 0) {
+        playHeartbeatTick();
+      }
+      if (frame >= totalFrames) {
+        setDisplayed(targetValue);
+        clearInterval(interval);
+      } else {
+        const progress = frame / totalFrames;
+        setDisplayed(Math.round(startVal + diff * progress));
+      }
+    }, 45);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetValue]);
+
+  const digits = displayed.toLocaleString('en-US').split('');
+
+  return (
+    <div
+      dir="ltr"
+      className="inline-flex items-center gap-0.5 bg-[#0F171E] px-3 py-1.5 rounded-xl border-2 border-[#D4AF37] shadow-inner"
+    >
+      {digits.map((ch, idx) => (
+        <motion.span
+          key={`${idx}_${ch}`}
+          initial={{ y: -12, opacity: 0.4 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.16 }}
+          className={`font-typewriter text-lg sm:text-2xl font-black ${
+            ch === ','
+              ? 'text-[#D4AF37] px-0.5'
+              : 'bg-[#1A2530] text-[#4ADE80] px-1.5 py-0.5 rounded border border-[#D4AF37]/30'
+          }`}
+        >
+          {ch}
+        </motion.span>
+      ))}
+    </div>
+  );
+}
 
 export function Stage5ReleaseSimulation() {
   const {
@@ -901,6 +961,80 @@ export function Stage5ReleaseSimulation() {
             exit={{ opacity: 0, y: -8 }}
             className="space-y-4"
           >
+            {/* LIVE BOX OFFICE STOCK TICKER & SPINNING ODOMETER (شاشة بورصة شباك التذاكر وعداد الإيرادات الدوّار) */}
+            <div className="rounded-3xl bg-[#1A2530] text-[#F9F6F0] p-5 border-4 border-[#D4AF37] shadow-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#D4AF37]/30 pb-3">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#D91624] text-white text-[10px] font-typewriter font-black mb-1">
+                    <Activity className="w-3.5 h-3.5 animate-pulse" />
+                    <span>BOX OFFICE STOCK EXCHANGE // شاشة بورصة التذاكر</span>
+                  </div>
+                  <h3 className="font-display text-xl sm:text-2xl text-[#F9F6F0]">
+                    عداد إيرادات «{lastReleasedProject.title}» المباشر
+                  </h3>
+                </div>
+
+                <div className="flex flex-col items-end">
+                  <span className="text-[11px] font-bold text-[#D4AF37] mb-1">
+                    إجمالي شباك التذاكر والبث (Cha-Ching Odometer):
+                  </span>
+                  <SpinningOdometerRevenue
+                    targetValue={lastReleasedProject.totalGrossRevenue}
+                  />
+                </div>
+              </div>
+
+              {/* Animated Stock Chart SVG */}
+              <div className="relative h-36 w-full rounded-2xl bg-[#0F171E] border border-[#D4AF37]/40 p-3 overflow-hidden">
+                <svg viewBox="0 0 500 110" className="w-full h-full overflow-visible">
+                  {/* Horizontal Stock Grid Lines */}
+                  {[20, 50, 80].map((y) => (
+                    <line
+                      key={y}
+                      x1={0}
+                      y1={y}
+                      x2={500}
+                      y2={y}
+                      stroke="rgba(212,175,55,0.16)"
+                      strokeDasharray="4 4"
+                    />
+                  ))}
+
+                  {/* Rival Studio Stock Line (Red Dashed) */}
+                  <motion.polyline
+                    fill="none"
+                    stroke="#D91624"
+                    strokeWidth="2.5"
+                    strokeDasharray="5 4"
+                    points="10,92 85,78 165,82 245,66 330,70 415,54 490,48"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 1.2 }}
+                  />
+
+                  {/* Player Film Stock Line (Glowing Gold & Emerald) */}
+                  <motion.polyline
+                    fill="none"
+                    stroke="#4ADE80"
+                    strokeWidth="4"
+                    points="10,95 85,74 165,62 245,48 330,36 415,24 490,14"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 1.4 }}
+                  />
+                </svg>
+
+                <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[10px] font-typewriter font-bold">
+                  <span className="text-[#4ADE80]">
+                    ▲ سهم فيلمك: متصدر المركز #{lastReleasedProject.boxOfficeRank}
+                  </span>
+                  <span className="text-[#D91624]">
+                    ▼ سهم أفلام المنافسين
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Animated Premiere Graphic */}
             <AnimatedCinemaPremiereGraphic
               title={lastReleasedProject.title}
@@ -914,11 +1048,11 @@ export function Stage5ReleaseSimulation() {
 
             {/* Key Metrics Grid */}
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 text-center">
-              <div className="rounded-2xl border-2 border-indigo-200 border-b-4 border-b-indigo-300 bg-white/95 p-3">
-                <span className="block text-[10px] font-bold text-slate-500">
+              <div className="rounded-2xl border-2 border-[#1A2530] bg-white p-3">
+                <span className="block text-[10px] font-bold text-[#1A2530]/70">
                   {isSeries ? 'إجمالي عوائد البث والإعلانات' : 'إجمالي الإيرادات'}
                 </span>
-                <span className="font-mono text-sm font-black text-emerald-700">
+                <span className="font-typewriter text-sm font-black text-[#15803D]">
                   {formatMoney(lastReleasedProject.totalGrossRevenue)} ج.م
                 </span>
               </div>

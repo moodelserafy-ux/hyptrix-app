@@ -17,7 +17,10 @@ import {
 } from '@/lib/game-engine';
 import { StudioLogoSvg } from './StudioLogoSvg';
 import { LeaderboardAndSettingsView } from './LeaderboardAndSettingsView';
-import { AnimatedStudioLotGraphic } from './CinematicGraphicsScene';
+import {
+  DirectorChairIcon,
+  FilmReelSettingsIcon,
+} from './CustomCinemaIcons';
 import {
   Globe,
   Trophy,
@@ -29,20 +32,26 @@ import {
   CheckCircle2,
   X,
   Sparkles,
-  Play,
   Flame,
   Crown,
-  Settings,
   Building2,
   ShieldCheck,
-  Megaphone,
   Loader2,
+  Lock,
+  Unlock,
+  Smartphone,
+  FileText,
+  Pin,
+  Coins,
+  Clock,
 } from 'lucide-react';
 
 export function StudioHubView({
   onOpenSettings,
+  secondsLeft = 18,
 }: {
   onOpenSettings?: () => void;
+  secondsLeft?: number;
 } = {}) {
   const {
     studioName,
@@ -55,6 +64,7 @@ export function StudioHubView({
     reputation,
     currentYear,
     gameDay,
+    vipCoins,
     draft,
     releasedProjects,
     worldHistory,
@@ -64,6 +74,9 @@ export function StudioHubView({
     setActiveScreen,
     setChildModalOpen,
     setPrWarRoomOpen,
+    setStarForgeOpen,
+    starForgeLocksOpened,
+    buyVipGemPackage,
     ownedStudioAssets,
     purchaseStudioAsset,
     showToast,
@@ -112,6 +125,7 @@ export function StudioHubView({
   const awaitingChoiceCount = offerList.filter(
     (n) => n.status === 'accepted_awaiting_choice'
   ).length;
+  const hasUnresolvedCrisis = (draft.crises || []).some((c) => !c.resolved);
 
   const activeDistMarkets: MarketRegion[] =
     Array.isArray(draft.selectedDistributionMarkets) &&
@@ -145,7 +159,6 @@ export function StudioHubView({
     setActiveSheet(sheet);
   };
 
-  // Pagination helpers for modals so there is never long vertical scrolling
   const archivePageSize = 3;
   const archiveTotalPages = Math.max(
     1,
@@ -167,331 +180,476 @@ export function StudioHubView({
   );
 
   return (
-    <div className="mx-auto max-w-xl space-y-3 py-1">
+    <div className="mx-auto max-w-6xl space-y-6 py-2">
       <div
         className={
           activeSheet
-            ? 'pointer-events-none select-none space-y-3 opacity-35 transition-opacity'
-            : 'space-y-3'
+            ? 'pointer-events-none select-none space-y-6 opacity-35 transition-opacity'
+            : 'space-y-6'
         }
       >
-      {/* Unified Compact Command Card (Studio Identity + 2.5D Lot + Dual Treasury + Primary Play CTA) */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-4 shadow-[0_18px_42px_-12px_rgba(99,102,241,0.18)] sm:p-5"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
+        {/* TOP STUDIO WALL PLAQUE (لوحة استوديو هوليوود الصباحية النحاسية) */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative rounded-3xl bg-[#1A2530] text-[#F9F6F0] border-4 border-[#D4AF37] p-4 sm:p-6 shadow-[0_20px_50px_rgba(26,37,48,0.25)]"
+        >
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            {/* Right: Studio Crest + Name + Director Chair Icon */}
+            <div className="flex items-center gap-4">
+              <div className="shrink-0 rounded-2xl bg-[#F9F6F0] p-2.5 border-2 border-[#D4AF37] shadow-lg">
+                <StudioLogoSvg config={logo} size={62} />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#D91624] text-white text-xs font-extrabold border border-[#D4AF37]/60">
+                    <Crown className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <span>{studioRankTitle}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-[#F9F6F0]/10 text-[#D4AF37] text-xs font-bold border border-[#D4AF37]/30">
+                    <span>{formatGameDate(gameDay, currentYear)}</span>
+                    <span
+                      dir="ltr"
+                      className="font-typewriter text-[11px] text-white bg-[#D91624] px-1.5 py-0.2 rounded flex items-center gap-0.5"
+                    >
+                      <Clock className="w-3 h-3" />
+                      {secondsLeft}s
+                    </span>
+                  </span>
+                </div>
+
+                <h1 className="font-display text-2xl sm:text-3xl text-[#F9F6F0] tracking-wide">
+                  مكتب الإمبراطور — {studioName}
+                </h1>
+
+                <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-bold text-[#F9F6F0]/80">
+                  <span className="inline-flex items-center gap-1.5 text-[#D4AF37]">
+                    <DirectorChairIcon className="w-4 h-4 text-[#D4AF37]" />
+                    <span>الإمبراطور: {ceoName}</span>
+                  </span>
+                  <span>
+                    ·{' '}
+                    {founderPerk === 'visionary_director'
+                      ? '★ مخرج عبقري (+10% جودة)'
+                      : founderPerk === 'marketing_whale'
+                      ? '★ حوت تسويق (+15% إيرادات)'
+                      : '★ مفاوض شرس (-15% أجور)'}
+                  </span>
+                  <span>· السمعة الفنية: {reputation}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Left: Brass Financial Plaques + Film Reel Settings */}
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
+              <div
+                onClick={() => openModalSheet('assets')}
+                className="px-4 py-2 rounded-2xl bg-[#F9F6F0] text-[#1A2530] border-2 border-[#D4AF37] cursor-pointer hover:scale-[1.02] transition"
+              >
+                <div className="text-[10px] font-extrabold text-[#1A2530]/70 flex items-center gap-1">
+                  <Wallet className="w-3.5 h-3.5 text-[#D91624]" />
+                  <span>خزينة السيولة النقدية</span>
+                </div>
+                <div
+                  data-testid="hub-cash-value"
+                  className="font-typewriter text-base sm:text-lg font-black text-[#1A2530]"
+                >
+                  <span dir="ltr">{formatMoney(cash)}</span>{' '}
+                  <span className="text-xs">ج.م</span>
+                </div>
+              </div>
+
+              <div className="px-4 py-2 rounded-2xl bg-[#F9F6F0]/10 text-[#F9F6F0] border-2 border-[#D4AF37]/60">
+                <div className="text-[10px] font-extrabold text-[#D4AF37] flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>القيمة السوقية</span>
+                </div>
+                <div
+                  data-testid="hub-market-value"
+                  className="font-typewriter text-base sm:text-lg font-black text-[#F9F6F0]"
+                >
+                  <span dir="ltr">{formatMoney(marketValue)}</span>{' '}
+                  <span className="text-xs text-[#D4AF37]">ج.م</span>
+                </div>
+              </div>
+
+              {onOpenSettings && (
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  title="إعدادات الاستوديو (بكرة السينما)"
+                  className="w-12 h-12 rounded-2xl bg-[#D4AF37] hover:brightness-110 text-[#1A2530] flex items-center justify-center border-2 border-[#F9F6F0] shadow-lg transition cursor-pointer"
+                >
+                  <FilmReelSettingsIcon className="w-6 h-6" />
+                </button>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* THE STUDIO WALL (الحائط الخلفي للمكتب: سبورة الفلين Corkboard + الخزنة الحديدية في الحائط) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* 1. سبورة الفلين (Corkboard) بصور الممثلين والدبابيس -> تفتح "طاقم العمل والمواهب" */}
+          <motion.div
+            whileHover={{ y: -4, scale: 1.01 }}
+            onClick={() => setActiveScreen('CREW_CAST_CARDS')}
+            className="lg:col-span-7 relative rounded-3xl bg-[#C89D66] border-8 border-[#6B4423] p-5 sm:p-6 shadow-[inset_0_4px_25px_rgba(0,0,0,0.35),0_16px_35px_rgba(26,37,48,0.18)] cursor-pointer overflow-hidden group"
+          >
+            {/* Corkboard Texture Overlay */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-md bg-[#1A2530] text-[#F9F6F0] border border-[#D4AF37] text-xs font-extrabold shadow">
+                <Pin className="w-3.5 h-3.5 text-[#D91624]" />
+                <span>سبورة الفلين المعلقة على الحائط (Corkboard)</span>
+              </div>
+              <span className="px-3 py-1 rounded-md bg-[#D91624] text-white font-display text-xs tracking-wide shadow">
+                اضغط لفتح كروت الممثلين والمواهب ←
+              </span>
+            </div>
+
+            {/* Pinned Polaroids on the Corkboard */}
+            <div className="grid grid-cols-3 gap-3 sm:gap-4 my-2">
+              {[
+                {
+                  title: 'نجوم الصف الأول',
+                  sub: 'كروت ذهبية وألماظ FUT',
+                  rot: '-rotate-2',
+                  badge: 'S-TIER & VIP',
+                },
+                {
+                  title: 'المخرجين والكتاب',
+                  sub: 'تعاقد حتى مخرجين للعمل',
+                  rot: 'rotate-2',
+                  badge: 'CREW',
+                },
+                {
+                  title: 'الرادار السداسي',
+                  sub: 'توقيعات خط الرقعة',
+                  rot: '-rotate-1',
+                  badge: 'RADAR 99',
+                },
+              ].map((card, i) => (
+                <div
+                  key={i}
+                  className={`relative bg-[#F9F6F0] p-3 pb-4 rounded-xl shadow-lg border border-[#1A2530]/20 ${card.rot} group-hover:rotate-0 transition-transform`}
+                >
+                  {/* Red Push-Pin */}
+                  <div className="w-4 h-4 rounded-full bg-[#D91624] border-2 border-white shadow mx-auto -mt-5 mb-2" />
+                  <div className="text-[10px] font-typewriter font-black text-[#D91624] mb-1">
+                    {card.badge}
+                  </div>
+                  <div className="font-display text-sm sm:text-base text-[#1A2530]">
+                    {card.title}
+                  </div>
+                  <div className="text-[11px] font-bold text-[#1A2530]/70 mt-0.5">
+                    {card.sub}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {(pendingOffersCount > 0 || awaitingChoiceCount > 0) && (
+              <div className="mt-3 px-3.5 py-2 rounded-xl bg-[#FFF6B3] border border-[#E2C96B] text-[#1A2530] text-xs font-extrabold flex items-center justify-between">
+                <span>
+                  {awaitingChoiceCount > 0
+                    ? `⚠️ لديك ${awaitingChoiceCount} عروض مقبولة تنتظر اختيارك النهائي على السبورة!`
+                    : `⏳ بانتظار رد ${pendingOffersCount} من النجوم على عقودك...`}
+                </span>
+                <span className="underline">فحص العقود</span>
+              </div>
+            )}
+          </motion.div>
+
+          {/* 2. الخزنة الحديدية في الحائط (Wall Safe) -> تفتح الميزانية والمشتريات وباقات 10/30/50 والأصول */}
+          <motion.div
+            whileHover={{ y: -4, scale: 1.01 }}
+            onClick={() => openModalSheet('assets')}
+            className="lg:col-span-5 relative rounded-3xl bg-gradient-to-br from-[#2C3A47] via-[#1A2530] to-[#111921] border-8 border-[#D4AF37] p-5 sm:p-6 text-[#F9F6F0] shadow-[0_18px_40px_rgba(26,37,48,0.3)] cursor-pointer flex flex-col justify-between group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#D4AF37] text-[#1A2530] text-xs font-black">
+                <ShieldCheck className="w-4 h-4" />
+                <span>خزنة الإمبراطور في الحائط</span>
+              </span>
+              <span className="font-typewriter text-xs font-black text-[#D4AF37]">
+                SAFE // VAULT
+              </span>
+            </div>
+
+            <div className="my-4 flex items-center gap-4">
+              {/* Spinning Safe Wheel Visual */}
+              <div className="w-20 h-20 shrink-0 rounded-full border-4 border-[#D4AF37] bg-[#1A2530] flex items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.35)] group-hover:rotate-90 transition-transform duration-500">
+                <div className="w-10 h-10 rounded-full border-2 border-[#D4AF37] bg-[#D91624] flex items-center justify-center">
+                  <Coins className="w-5 h-5 text-[#D4AF37]" />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-display text-xl text-[#F9F6F0]">
+                  الميزانية والبلاتوهات وباقات الـ VIP
+                </h3>
+                <p className="text-xs text-[#F9F6F0]/80 font-bold mt-1 leading-relaxed">
+                  شراء البلاتوهات الثابتة (خصم -{assetBenefits.totalDiscountPercent}%) وشحن باقات الـ 10 و30 و50 جنيه ({vipCoins} عملة VIP)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-[#D4AF37]/30 text-xs font-extrabold text-[#D4AF37]">
+              <span>الأصول المملوكة: {(ownedStudioAssets || []).length}/5 بلاتوهات</span>
+              <span className="px-3 py-1 rounded-lg bg-[#D4AF37] text-[#1A2530]">
+                فتح الخزنة ←
+              </span>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* THE 3D EMPEROR'S WOODEN DESK SURFACE (سطح مكتب الإمبراطور الخشبي التفاعلي) */}
+        <div className="relative rounded-[32px] bg-gradient-to-b from-[#5C3A21] via-[#4A2E19] to-[#362010] border-8 border-[#D4AF37] p-5 sm:p-8 shadow-[0_28px_70px_rgba(26,37,48,0.45)]">
+          {/* Brass Desk Nameplate */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-6 pb-3 border-b-2 border-[#D4AF37]/40">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-display text-base sm:text-lg shadow-md">
+              <DirectorChairIcon className="w-5 h-5 text-[#1A2530]" />
+              <span>سطح مكتب الإمبراطور التفاعلي — اختر الأداة من فوق المكتب</span>
+            </div>
+            <span className="text-xs font-bold text-[#F9F6F0]/85">
+              اضغط مباشرة على ورق السيناريو أو الملف السري الأحمر أو الموبايل
+            </span>
+          </div>
+
+          {/* 3 Physical Props on the Emperor's Desk */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* PROP 1: ورق السيناريو على المكتب (Script Paper Stack -> Project Setup / Active Film) */}
             <motion.div
-              animate={{ y: [0, -4, 0] }}
-              transition={{
-                duration: 3.2,
-                repeat: Infinity,
-                ease: 'easeInOut',
+              whileHover={{ y: -6, rotate: -1 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                if (hasActiveProject) {
+                  handleResumeActiveProject();
+                } else {
+                  resetDraftForNewProject('PROJECT_SETUP');
+                }
               }}
-              className="shrink-0 rounded-2xl border-2 border-indigo-100 bg-white p-2 shadow-md shadow-indigo-500/10"
+              className="relative rounded-2xl bg-[#F9F6F0] text-[#1A2530] p-5 border-4 border-[#1A2530] shadow-[8px_12px_0px_#1A2530] cursor-pointer flex flex-col justify-between"
             >
-              <StudioLogoSvg config={logo} size={58} />
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="px-2.5 py-0.5 rounded bg-[#1A2530] text-[#F9F6F0] font-typewriter text-[11px] font-black">
+                    SCRIPT // {currentYear}
+                  </span>
+                  <FileText className="w-6 h-6 text-[#D91624]" />
+                </div>
+
+                <h3 className="font-display text-2xl text-[#1A2530] mb-1">
+                  {hasActiveProject
+                    ? `سيناريو «${draft.title}»`
+                    : 'ورق السيناريو (مشروع جديد)'}
+                </h3>
+
+                <p className="font-typewriter text-xs font-bold text-[#1A2530]/80 leading-relaxed">
+                  {hasActiveProject
+                    ? draft.filmingStartDay !== null
+                      ? `التصوير جاري في البلاتوه (${draft.filmingDaysElapsed}/${draft.filmingDurationDays})`
+                      : 'اضغط لاستكمال التعاقدات والتصوير على ورق السيناريو'
+                    : 'اضغط لفتح ورق السيناريو المطبوع بالآلة الكاتبة وبدء فيلم أو مسلسل جديد'}
+                </p>
+              </div>
+
+              <div className="mt-5 pt-3 border-t-2 border-dashed border-[#1A2530]/20 flex items-center justify-between">
+                <span className="font-ruqaa text-lg text-[#D91624]">
+                  نسخة المخرج المعتمدة
+                </span>
+                <span className="px-3.5 py-1.5 rounded-xl bg-[#D91624] text-white font-extrabold text-xs shadow">
+                  {hasActiveProject ? 'متابعة العمل ←' : 'إنشاء مشروع ←'}
+                </span>
+              </div>
             </motion.div>
 
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black text-violet-700">
-                  <Crown className="h-3 w-3 text-amber-500" />
-                  <span>{studioRankTitle}</span>
+            {/* PROP 2: الملف السري الأحمر المقفول بـ 5 أقفال ذهبية (Top Secret Folder -> The Star Forge) */}
+            <motion.div
+              whileHover={{ y: -6, scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setStarForgeOpen(true)}
+              className="relative rounded-2xl bg-gradient-to-br from-[#D91624] via-[#B3121E] to-[#7D0912] text-[#F9F6F0] p-5 border-4 border-[#D4AF37] shadow-[8px_12px_0px_#1A2530] cursor-pointer flex flex-col justify-between overflow-hidden"
+            >
+              {/* Top Secret Stamp */}
+              <div className="flex items-center justify-between mb-3">
+                <span className="px-2.5 py-0.5 rounded bg-[#1A2530] text-[#D4AF37] font-typewriter text-[11px] font-black border border-[#D4AF37]">
+                  TOP SECRET // VIP
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-black text-cyan-800">
-                  <Sparkles className="h-3 w-3" />
-                  <span>{formatGameDate(gameDay, currentYear)}</span>
+                <span className="text-xs font-extrabold text-[#D4AF37]">
+                  {starForgeLocksOpened >= 5
+                    ? 'الأقفال الـ 5 مفتوحة ✓'
+                    : `${starForgeLocksOpened}/5 أقفال`}
                 </span>
               </div>
 
-              <h1 className="font-display mt-1 text-xl font-black leading-snug text-slate-900 sm:text-2xl">
-                {studioName}
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-600">
-                <span>
-                  المدير: <strong className="text-indigo-700">{ceoName}</strong>
+              <div>
+                <h3 className="font-display text-2xl text-[#F9F6F0] mb-1">
+                  الملف السري (غرفة صناعة النجوم)
+                </h3>
+                <p className="text-xs font-bold text-[#F9F6F0]/90 leading-relaxed">
+                  افتح الأقفال الذهبية الـ 5 وادخل كابينة الكاستينج لتصميم نجمك الخاص بالرادار السداسي والكارت الألماظ!
+                </p>
+
+                {/* 5 Golden Locks Row on the Folder */}
+                <div className="grid grid-cols-5 gap-1.5 mt-4">
+                  {[0, 1, 2, 3, 4].map((idx) => {
+                    const unlocked = idx < (starForgeLocksOpened || 0);
+                    return (
+                      <div
+                        key={idx}
+                        className={`py-1.5 rounded-lg flex flex-col items-center justify-center border ${
+                          unlocked
+                            ? 'bg-[#D4AF37] text-[#1A2530] border-white'
+                            : 'bg-[#1A2530]/80 text-[#D4AF37] border-[#D4AF37]/50'
+                        }`}
+                      >
+                        {unlocked ? (
+                          <Unlock className="w-3.5 h-3.5" />
+                        ) : (
+                          <Lock className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-[#D4AF37]/40 flex items-center justify-between">
+                <span className="text-xs font-extrabold text-[#D4AF37]">
+                  The Star Forge · VIP
                 </span>
-                <span className="text-violet-600">
-                  ·{' '}
-                  {founderPerk === 'visionary_director'
-                    ? '★ مخرج عبقري (+10% جودة)'
-                    : founderPerk === 'marketing_whale'
-                    ? '★ حوت تسويق (+15% إيرادات)'
-                    : '★ مفاوض شرس (-15% أجور)'}
+                <span className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-[#1A2530] font-extrabold text-xs shadow">
+                  فتح الملف السري ←
                 </span>
               </div>
-            </div>
-          </div>
+            </motion.div>
 
-          {/* Compact Reputation Badge */}
-          <div className="hidden shrink-0 flex-col items-end rounded-2xl border border-indigo-100 bg-white/90 px-3 py-2 shadow-2xs sm:flex">
-            <span className="text-[10px] font-black text-slate-500">
-              السمعة الفنية
-            </span>
-            <span className="font-display text-base font-black text-violet-700 tabular-nums">
-              {reputation}%
-            </span>
+            {/* PROP 3: الموبايل على المكتب (Smartphone -> Electronic Committees & Trend War Room) */}
+            <motion.div
+              whileHover={{ y: -6, rotate: 1 }}
+              whileTap={{ scale: 0.98 }}
+              animate={
+                hasUnresolvedCrisis
+                  ? { rotate: [-1.5, 1.5, -1.5, 1.5, 0] }
+                  : undefined
+              }
+              transition={{ duration: 0.5, repeat: hasUnresolvedCrisis ? Infinity : 0 }}
+              onClick={() => setPrWarRoomOpen(true)}
+              className="relative rounded-[28px] bg-[#1A2530] text-[#F9F6F0] p-5 border-4 border-[#D4AF37] shadow-[8px_12px_0px_#0F171E] cursor-pointer flex flex-col justify-between"
+            >
+              {/* Phone Speaker Notch */}
+              <div className="w-16 h-1.5 rounded-full bg-[#D4AF37]/40 mx-auto mb-3" />
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#D91624] text-white text-[10px] font-extrabold">
+                    <Flame className="w-3 h-3" />
+                    <span>موبايل الإمبراطور المباشر</span>
+                  </span>
+                  <Smartphone className="w-5 h-5 text-[#D4AF37]" />
+                </div>
+
+                <h3 className="font-display text-2xl text-[#F9F6F0] mb-1">
+                  اللجان الإلكترونية والتريند
+                </h3>
+                <p className="text-xs font-bold text-[#F9F6F0]/80 leading-relaxed">
+                  شاشة موبايل حية لمتابعة تعليقات الجمهور، توجيه اللجان لدعم الفيلم (2M) أو نشر إشاعة عن فيلم المنافس (5M)!
+                </p>
+              </div>
+
+              <div className="mt-4 p-2.5 rounded-xl bg-[#F9F6F0]/10 border border-[#D4AF37]/30 text-[11px] font-bold text-[#D4AF37]">
+                💬 «الجمهور بيتكلم عن أعمالك على X وتيك توك الآن...»
+              </div>
+
+              <div className="mt-4 flex items-center justify-between">
+                <span className="font-typewriter text-xs text-[#F9F6F0]/70">
+                  5G // TREND RADAR
+                </span>
+                <span className="px-3.5 py-1.5 rounded-xl bg-[#D91624] text-white font-extrabold text-xs border border-[#D4AF37]">
+                  فتح شاشة الموبايل ←
+                </span>
+              </div>
+            </motion.div>
           </div>
         </div>
 
-        {/* Interactive Animated 2.5D Studio Lot Graphic */}
-        <div className="mt-3">
-          <AnimatedStudioLotGraphic
-            studioName={studioName}
-            hasActiveProject={hasActiveProject}
-            activeProjectTitle={draft.title}
-            isFilming={Boolean(
-              draft.filmingStartDay !== null &&
-                draft.filmingDaysElapsed < draft.filmingDurationDays
-            )}
-          />
-        </div>
-
-        {/* Dual Financial Separation Row inside Command Card */}
-        <div className="mt-3 grid grid-cols-2 gap-2.5 tabular-nums">
-          <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/80 via-white to-white px-3.5 py-2.5 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-emerald-800">
-                خزينة السيولة النقدية
-              </span>
-              <Wallet className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-            </div>
-            <div
-              data-testid="hub-cash-value"
-              className="font-display mt-0.5 flex items-baseline gap-1 text-base font-black text-emerald-700 whitespace-nowrap sm:text-lg"
-            >
-              <span dir="ltr" className="font-mono tabular-nums">
-                {formatMoney(cash)}
-              </span>
-              <span className="text-[10px] font-bold">ج.م</span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50/80 via-white to-white px-3.5 py-2.5 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-violet-800">
-                القيمة السوقية للشركة
-              </span>
-              <TrendingUp className="h-3.5 w-3.5 shrink-0 text-violet-600" />
-            </div>
-            <div
-              data-testid="hub-market-value"
-              className="font-display mt-0.5 flex items-baseline gap-1 text-base font-black text-violet-700 whitespace-nowrap sm:text-lg"
-            >
-              <span dir="ltr" className="font-mono tabular-nums">
-                {formatMoney(marketValue)}
-              </span>
-              <span className="text-[10px] font-bold">ج.م</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Active Project Status Ribbon (if active) */}
-        {hasActiveProject && (
-          <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-amber-50/90 px-3.5 py-2.5">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1 text-[10px] font-black text-amber-800">
-                <Flame className="h-3.5 w-3.5 text-amber-600" />
-                <span>مشروع جاري: «{draft.title}»</span>
-              </div>
-              <div className="text-[11px] font-bold leading-relaxed text-slate-600">
-                {draft.filmingStartDay !== null &&
-                draft.filmingDaysElapsed >= draft.filmingDurationDays
-                  ? 'اكتمل التصوير وجاهز للعرض الجماهيري!'
-                  : draft.filmingStartDay !== null
-                  ? `جاري التصوير الفعلي (اليوم ${draft.filmingDaysElapsed}/${draft.filmingDurationDays})`
-                  : awaitingChoiceCount > 0
-                  ? `${awaitingChoiceCount} نجوم وافقوا وينتظرون حسمك النهائي!`
-                  : pendingOffersCount > 0
-                  ? `بانتظار رد ${pendingOffersCount} نجوم على العروض...`
-                  : 'مرحلة التعاقدات وتجهيز الطاقم'}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleResumeActiveProject}
-              className="shrink-0 rounded-xl bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white shadow-2xs hover:bg-amber-600"
-            >
-              استئناف
-            </button>
-          </div>
-        )}
-
-        {/* Primary Play / Produce CTA */}
-        <button
-          type="button"
-          onClick={() => {
-            if (hasActiveProject) {
-              handleResumeActiveProject();
-            } else {
-              resetDraftForNewProject('PROJECT_SETUP');
-            }
-          }}
-          className="mt-3 flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-2xl border-b-4 border-indigo-950/40 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-indigo-500/25 transition hover:brightness-105 active:border-b-0 active:translate-y-1 sm:text-base"
-        >
-          <Play className="h-5 w-5 fill-current" />
-          <span>
-            {hasActiveProject
-              ? 'متابعة إنتاج العمل الحالي'
-              : `إنتاج عمل فني جديد في عام ${currentYear} (فيلم / مسلسل)`}
-          </span>
-        </button>
-      </motion.div>
-
-      {/* Magical 3x2 Modal & Screen Launcher Grid (Zero Scrolling Needed) */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        <button
-          type="button"
-          onClick={() => openModalSheet('markets')}
-          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-3.5 text-right shadow-2xs transition hover:border-cyan-400 active:border-b-2 active:translate-y-0.5"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 transition group-hover:scale-110">
-            <Globe className="h-5 w-5" />
-          </div>
-          <div className="mt-2">
-            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-              خريطة الأسواق العالمية
-            </div>
-            <div className="mt-0.5 text-[10px] font-bold text-cyan-700">
-              {unlockedRegions.length} من 4 أسواق دولية
-            </div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => openModalSheet('archive')}
-          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-3.5 text-right shadow-2xs transition hover:border-violet-400 active:border-b-2 active:translate-y-0.5"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700 transition group-hover:scale-110">
-            <Film className="h-5 w-5" />
-          </div>
-          <div className="mt-2">
-            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-              أرشيف الأعمال
-            </div>
-            <div className="mt-0.5 text-[10px] font-bold text-violet-700">
-              {releasedProjects.length} أعمال ({formatMoney(lifetimeBoxOffice)} ج.م)
-            </div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => openModalSheet('leaderboard')}
-          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-3.5 text-right shadow-2xs transition hover:border-amber-400 active:border-b-2 active:translate-y-0.5"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600 transition group-hover:scale-110">
-            <Trophy className="h-5 w-5" />
-          </div>
-          <div className="mt-2">
-            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-              ترتيب الشركات
-            </div>
-            <div className="mt-0.5 text-[10px] font-bold text-amber-700">
-              سباق القيمة السوقية
-            </div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => openModalSheet('history')}
-          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-3.5 text-right shadow-2xs transition hover:border-rose-400 active:border-b-2 active:translate-y-0.5"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-600 transition group-hover:scale-110">
-            <History className="h-5 w-5" />
-          </div>
-          <div className="mt-2">
-            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-              السجل التاريخي
-            </div>
-            <div className="mt-0.5 text-[10px] font-bold text-rose-600">
-              {worldHistory.length} أحداث موثقة
-            </div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveScreen('FESTIVALS_AWARDS')}
-          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-amber-200 border-b-4 border-b-amber-300 bg-gradient-to-br from-amber-50/90 to-white p-3.5 text-right shadow-2xs transition hover:border-amber-400 active:border-b-2 active:translate-y-0.5"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600 transition group-hover:scale-110">
-            <Award className="h-5 w-5" />
-          </div>
-          <div className="mt-2">
-            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-              قاعة الجوائز السنوية
-            </div>
-            <div className="mt-0.5 text-[10px] font-bold text-amber-800 tabular-nums">
-              أعمالك: {currentYearProjectsCount} · بعد {daysUntilAnnualAwards} يوم ({totalAwards} جائزة)
-            </div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => openModalSheet('assets')}
-          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-emerald-200 border-b-4 border-b-emerald-300 bg-gradient-to-br from-emerald-50/90 to-white p-3.5 text-right shadow-2xs transition hover:border-emerald-400 active:border-b-2 active:translate-y-0.5"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 transition group-hover:scale-110">
-            <Building2 className="h-5 w-5" />
-          </div>
-          <div className="mt-2">
-            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-              أصول الاستوديو الثابتة
-            </div>
-            <div className="mt-0.5 text-[10px] font-bold text-emerald-800 tabular-nums">
-              مملوك: {(ownedStudioAssets || []).length}/5 · خصم -{assetBenefits.totalDiscountPercent}%
-            </div>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setPrWarRoomOpen(true)}
-          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-fuchsia-200 border-b-4 border-b-fuchsia-300 bg-gradient-to-br from-fuchsia-50/90 to-white p-3.5 text-right shadow-2xs transition hover:border-fuchsia-400 active:border-b-2 active:translate-y-0.5"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-fuchsia-100 text-fuchsia-700 transition group-hover:scale-110">
-            <Megaphone className="h-5 w-5" />
-          </div>
-          <div className="mt-2">
-            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-              محرك التريند واللجان
-            </div>
-            <div className="mt-0.5 text-[10px] font-bold text-fuchsia-800">
-              حملات تيك توك وX وضرب المنافسين
-            </div>
-          </div>
-        </button>
-
-        {onOpenSettings && (
+        {/* EMPEROR'S TROPHY & ARCHIVE SHELF (رف الجوائز والأرشيف والأسواق والترتيب) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
           <button
             type="button"
-            onClick={onOpenSettings}
-            className="group flex flex-col items-start justify-between rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-3.5 text-right shadow-2xs transition hover:border-violet-400 active:border-b-2 active:translate-y-0.5 sm:col-span-2"
+            onClick={() => setActiveScreen('FESTIVALS_AWARDS')}
+            className="flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition text-right cursor-pointer"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:scale-110">
-              <Settings className="h-5 w-5" />
+            <div className="w-11 h-11 shrink-0 rounded-xl bg-[#D4AF37] text-[#1A2530] flex items-center justify-center">
+              <Award className="w-6 h-6" />
             </div>
-            <div className="mt-2">
-              <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-                الإعدادات والبيانات السحابية
+            <div>
+              <div className="font-display text-sm sm:text-base text-[#1A2530]">
+                قاعة الجوائز ({totalAwards})
               </div>
-              <div className="mt-0.5 text-[10px] font-bold text-slate-500">
-                تخصيص الحزم أو مزامنة الحساب
+              <div className="text-[11px] font-bold text-[#1A2530]/70">
+                الحفل بعد {daysUntilAnnualAwards} يوم
               </div>
             </div>
           </button>
-        )}
-      </div>
+
+          <button
+            type="button"
+            onClick={() => openModalSheet('archive')}
+            className="flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition text-right cursor-pointer"
+          >
+            <div className="w-11 h-11 shrink-0 rounded-xl bg-[#D91624] text-white flex items-center justify-center">
+              <Film className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="font-display text-sm sm:text-base text-[#1A2530]">
+                أرشيف الأفلام ({releasedProjects.length})
+              </div>
+              <div className="font-typewriter text-[11px] font-bold text-[#1A2530]/70">
+                {formatMoney(lifetimeBoxOffice)} ج.م
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openModalSheet('markets')}
+            className="flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition text-right cursor-pointer"
+          >
+            <div className="w-11 h-11 shrink-0 rounded-xl bg-[#1A2530] text-[#D4AF37] flex items-center justify-center">
+              <Globe className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="font-display text-sm sm:text-base text-[#1A2530]">
+                الأسواق العالمية
+              </div>
+              <div className="text-[11px] font-bold text-[#1A2530]/70">
+                {unlockedRegions.length} من 4 أسواق مفتوحة
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openModalSheet('leaderboard')}
+            className="flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition text-right cursor-pointer"
+          >
+            <div className="w-11 h-11 shrink-0 rounded-xl bg-[#1A2530] text-[#F9F6F0] flex items-center justify-center">
+              <Trophy className="w-6 h-6 text-[#D4AF37]" />
+            </div>
+            <div>
+              <div className="font-display text-sm sm:text-base text-[#1A2530]">
+                ترتيب الشركات
+              </div>
+              <div className="text-[11px] font-bold text-[#1A2530]/70">
+                بورصة القيمة السوقية
+              </div>
+            </div>
+          </button>
+        </div>
       </div>
 
-      {/* Magical Step-Paginated Modal Overlay */}
+      {/* Modal Sheets (Wall Safe / Assets / Markets / Archive / Leaderboard) */}
       <AnimatePresence>
         {activeSheet && (
           <motion.div
@@ -499,106 +657,117 @@ export function StudioHubView({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setActiveSheet(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md overscroll-contain touch-none select-none sm:p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2530]/80 p-3 backdrop-blur-md overscroll-contain sm:p-4"
           >
             <motion.div
               initial={{ scale: 0.94, y: 24, opacity: 0 }}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.94, y: 24, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 340, damping: 28 }}
               onClick={(e) => e.stopPropagation()}
-              className="my-auto max-h-[88dvh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-2 border-indigo-100 bg-[#F4F7FF] p-5 shadow-2xl"
+              className="my-auto max-h-[88dvh] w-full max-w-3xl overflow-y-auto rounded-3xl border-4 border-[#D4AF37] bg-[#F9F6F0] p-5 sm:p-6 text-[#1A2530] shadow-2xl"
             >
-              <div className="mb-3.5 flex items-center justify-between border-b border-indigo-100 pb-3">
+              <div className="mb-4 flex items-center justify-between border-b-2 border-[#1A2530]/15 pb-3">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-violet-600" />
-                  <h2 className="font-display text-base font-black text-slate-900 sm:text-lg">
+                  <Sparkles className="h-5 w-5 text-[#D91624]" />
+                  <h2 className="font-display text-xl text-[#1A2530]">
                     {activeSheet === 'markets' && 'خريطة التوزيع الإقليمية والعالمية'}
                     {activeSheet === 'archive' && 'أرشيف الأفلام والمسلسلات المنتجة'}
                     {activeSheet === 'history' && 'السجل التاريخي للاستوديو'}
                     {activeSheet === 'leaderboard' && 'الترتيب الرسمي لشركات الإنتاج'}
-                    {activeSheet === 'assets' && 'أصول الاستوديو الثابتة (البلاتوهات ومعدات المونتاج)'}
+                    {activeSheet === 'assets' &&
+                      'خزنة الإمبراطور — البلاتوهات الثابتة وباقات الـ VIP'}
                   </h2>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveSheet(null)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-700 shadow-xs hover:bg-rose-50 hover:text-rose-600"
-                  aria-label="إغلاق النافذة"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1A2530] text-[#F9F6F0] hover:bg-[#D91624] transition cursor-pointer"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
               {activeSheet === 'assets' && (
-                <div className="space-y-3">
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs font-black text-emerald-950">
-                        مزايا البنية التحتية المملوكة حالياً:
-                      </span>
-                      <span className="rounded-xl bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white">
-                        خصم دائم -{assetBenefits.totalDiscountPercent}% على تكاليف الإنتاج
-                      </span>
+                <div className="space-y-4">
+                  {/* VIP Packages Top-up Inside the Wall Safe (باقات الـ 10 و30 و50 جنيه) */}
+                  <div className="rounded-2xl bg-[#1A2530] text-[#F9F6F0] p-4 border-2 border-[#D4AF37]">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <div>
+                        <h3 className="font-display text-lg text-[#D4AF37]">
+                          شحن سبائك وعملات الـ VIP (لفتح الأقفال وترقية النجوم لـ 99)
+                        </h3>
+                        <p className="text-xs text-[#F9F6F0]/80">
+                          رصيدك الحالي: <strong className="font-typewriter text-[#D4AF37]">{vipCoins}</strong> عملة VIP ذهبية
+                        </p>
+                      </div>
                     </div>
-                    <p className="mt-1 text-[11px] font-bold text-slate-600">
-                      امتلاك البلاتوهات ووحدات المونتاج يخفض تكاليف أعمالك القادمة تلقائياً ويمنحك درع حسم مجاني لأزمات التصوير في المرحلة الرابعة.
-                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <button
+                        onClick={() => buyVipGemPackage(10)}
+                        className="p-3 rounded-xl bg-[#F9F6F0] text-[#1A2530] hover:bg-[#D4AF37] font-extrabold text-xs transition cursor-pointer text-center"
+                      >
+                        <div className="font-display text-base text-[#D91624]">باقة 10 جنيه</div>
+                        <div>+150 عملة VIP + 12M ج.م</div>
+                      </button>
+                      <button
+                        onClick={() => buyVipGemPackage(30)}
+                        className="p-3 rounded-xl bg-[#D4AF37] text-[#1A2530] hover:brightness-110 font-extrabold text-xs transition cursor-pointer text-center"
+                      >
+                        <div className="font-display text-base">باقة 30 جنيه</div>
+                        <div>+500 عملة VIP + 40M ج.م</div>
+                      </button>
+                      <button
+                        onClick={() => buyVipGemPackage(50)}
+                        className="p-3 rounded-xl bg-gradient-to-r from-[#38BDF8] via-[#E0F2FE] to-[#D4AF37] text-[#1A2530] font-black text-xs shadow-lg transition cursor-pointer text-center"
+                      >
+                        <div className="font-display text-base">باقة الإمبراطور 50 جنيه</div>
+                        <div>+1200 عملة VIP + 90M ج.م</div>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="space-y-2.5">
+                  {/* Fixed Studio Assets */}
+                  <div className="space-y-3">
                     {STUDIO_FIXED_ASSETS.map((asset) => {
                       const isOwned = (ownedStudioAssets || []).includes(asset.id);
                       const isBusy = purchasingAssetId === asset.id;
                       return (
                         <div
                           key={asset.id}
-                          className={`rounded-2xl border-2 p-3.5 transition ${
+                          className={`rounded-2xl border-2 p-4 transition ${
                             isOwned
-                              ? 'border-emerald-400 border-b-4 border-b-emerald-600 bg-white'
-                              : 'border-indigo-100 bg-white/95'
+                              ? 'border-[#15803D] bg-white'
+                              : 'border-[#1A2530]/20 bg-white'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <span className="inline-block rounded-lg bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">
+                              <span className="inline-block rounded bg-[#1A2530] px-2.5 py-0.5 text-[10px] font-bold text-[#D4AF37]">
                                 {asset.categoryLabel}
                               </span>
-                              <h3 className="mt-1 font-display text-sm font-black text-slate-900">
+                              <h3 className="mt-1 font-display text-base text-[#1A2530]">
                                 {asset.name}
                               </h3>
                             </div>
-                            <span className="shrink-0 rounded-xl bg-emerald-50 px-2.5 py-1 font-mono text-xs font-black text-emerald-800 tabular-nums">
+                            <span className="shrink-0 rounded-xl bg-[#1A2530] px-3 py-1 font-typewriter text-xs font-black text-[#D4AF37]">
                               {formatMoney(asset.price)} ج.م
                             </span>
                           </div>
 
-                          <p className="mt-1.5 text-xs font-bold leading-relaxed text-slate-600">
+                          <p className="mt-1.5 text-xs font-bold leading-relaxed text-[#1A2530]/80">
                             {asset.description}
                           </p>
 
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-black">
-                            <span className="rounded-lg bg-violet-100 px-2 py-0.5 text-violet-800">
-                              خصم تكاليف -{asset.costDiscountPercent}%
-                            </span>
-                            <span className="rounded-lg bg-amber-100 px-2 py-0.5 text-amber-900">
-                              جودة +{asset.qualityBonus} · ضجة +{asset.hypeBonus}
-                            </span>
-                            <span className="rounded-lg bg-cyan-100 px-2 py-0.5 text-cyan-900">
-                              +{formatMoney(asset.marketValueBoost)} ج.م قيمة سوقية
-                            </span>
-                          </div>
-
-                          <div className="mt-2 flex items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-2.5 py-1.5 text-[11px] font-bold text-emerald-950">
-                            <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                          <div className="mt-2 flex items-center gap-1.5 text-xs font-extrabold text-[#15803D]">
+                            <ShieldCheck className="h-4 w-4 shrink-0" />
                             <span>{asset.crisisShieldLabel}</span>
                           </div>
 
-                          <div className="mt-3 border-t border-indigo-50 pt-2.5">
+                          <div className="mt-3 pt-2.5 border-t border-[#1A2530]/10">
                             {isOwned ? (
-                              <div className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2 text-xs font-black text-white">
+                              <div className="flex items-center justify-center gap-1.5 rounded-xl bg-[#15803D] py-2 text-xs font-black text-white">
                                 <CheckCircle2 className="h-4 w-4" />
-                                <span>أصل ثابت مملوك وموثق في خزينة الاستوديو ✓</span>
+                                <span>أصل ثابت مملوك وموثق في خزنة الاستوديو ✓</span>
                               </div>
                             ) : (
                               <button
@@ -609,12 +778,12 @@ export function StudioHubView({
                                   await purchaseStudioAsset(asset.id);
                                   setPurchasingAssetId(null);
                                 }}
-                                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2.5 px-4 text-xs font-black text-white shadow-sm transition hover:brightness-105 disabled:opacity-50"
+                                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#D91624] py-2.5 px-4 text-xs font-black text-white border border-[#D4AF37] shadow transition hover:brightness-110 cursor-pointer disabled:opacity-50"
                               >
                                 {isBusy ? (
                                   <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
-                                    <span>جاري توثيق الملكية عبر الخادم...</span>
+                                    <span>جاري توثيق الملكية...</span>
                                   </>
                                 ) : (
                                   <>
@@ -635,131 +804,70 @@ export function StudioHubView({
               )}
 
               {activeSheet === 'markets' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {MARKET_CONFIGS.map((cfg) => {
-                      const regId = cfg.id;
-                      const unlocked = unlockedRegions.includes(regId);
-                      const isSelectedForNextProject =
-                        activeDistMarkets.includes(regId);
-                      const bonusPct = Math.round(cfg.revenueBonusFactor * 100);
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {MARKET_CONFIGS.map((cfg) => {
+                    const regId = cfg.id;
+                    const unlocked = unlockedRegions.includes(regId);
+                    const isSelectedForNextProject = activeDistMarkets.includes(regId);
+                    const bonusPct = Math.round(cfg.revenueBonusFactor * 100);
 
-                      return (
-                        <div
-                          key={regId}
-                          className={`flex flex-col justify-between rounded-2xl border-2 p-3.5 text-right transition ${
-                            isSelectedForNextProject
-                              ? 'border-cyan-600 border-b-4 border-b-cyan-700 bg-white shadow-sm'
-                              : unlocked
-                              ? 'border-indigo-100 bg-white'
-                              : 'border-slate-200 bg-white/85'
-                          }`}
-                        >
-                          <div>
-                            <div className="flex items-center justify-between">
-                              {unlocked ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700">
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                  سوق مفتوح
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500">
-                                  سوق إقليمي إضافي
-                                </span>
-                              )}
-                              <span className="rounded-lg bg-violet-100 px-2 py-0.5 text-[10px] font-black text-violet-700">
-                                {regId === 'egypt'
-                                  ? 'عائد أساسي 100%'
-                                  : `+${bonusPct}% إيرادات`}
-                              </span>
-                            </div>
-
-                            <div className="font-display mt-1.5 text-sm font-black text-slate-900">
-                              {cfg.name}
-                            </div>
-                            <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-slate-600">
-                              {cfg.description}
-                            </p>
-
-                            <div className="mt-1.5 text-[10px] font-black text-slate-700 tabular-nums">
-                              {cfg.distributionFeePerProject === 0
-                                ? 'تكلفة التوزيع: مشمولة بالميزانية'
-                                : `رسوم توزيع العمل: ${formatMoney(cfg.distributionFeePerProject)} ج.م`}
-                            </div>
+                    return (
+                      <div
+                        key={regId}
+                        className="flex flex-col justify-between rounded-2xl border-2 border-[#1A2530]/20 bg-white p-4 text-right"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-extrabold text-[#15803D]">
+                              {unlocked ? 'سوق مفتوح ✓' : 'سوق إقليمي'}
+                            </span>
+                            <span className="rounded bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-black text-[#D4AF37]">
+                              {regId === 'egypt' ? '100% أساسي' : `+${bonusPct}% إيرادات`}
+                            </span>
                           </div>
-
-                          <div className="mt-2.5 border-t border-indigo-50 pt-2.5">
-                            {unlocked ? (
-                              <button
-                                type="button"
-                                disabled={regId === 'egypt'}
-                                onClick={() => {
-                                  toggleDraftDistributionMarket(regId);
-                                  showToast(
-                                    isSelectedForNextProject
-                                      ? `تم إيقاف التوزيع الدولي في «${cfg.name}» للمشروع الحالي`
-                                      : `تم تفعيل التوزيع في «${cfg.name}» (+${bonusPct}% عائد إضافي)!`,
-                                    isSelectedForNextProject ? 'info' : 'success'
-                                  );
-                                }}
-                                className={`w-full rounded-xl py-2 px-3 text-[11px] font-black transition ${
-                                  regId === 'egypt'
-                                    ? 'cursor-default bg-emerald-100 text-emerald-800'
-                                    : isSelectedForNextProject
-                                    ? 'bg-cyan-600 text-white hover:bg-cyan-700'
-                                    : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100'
-                                }`}
-                              >
-                                {regId === 'egypt'
-                                  ? 'مفعل دائماً كسوق أساسي ✓'
-                                  : isSelectedForNextProject
-                                  ? 'مفعل لتوزيع عملك القادم ✓ (إلغاء)'
-                                  : 'تفعيل التوزيع لعملك القادم'}
-                              </button>
-                            ) : (
-                              <div className="space-y-1.5">
-                                <div className="text-[10px] font-bold text-slate-500">
-                                  يتاح تلقائياً عند قيمة سوقية{' '}
-                                  <strong>{formatMoney(cfg.unlockMarketValue)} ج.م</strong>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (cash < cfg.earlyLicenseCost) {
-                                      showToast(
-                                        'الرصيد النقدي في الخزينة غير كافٍ لفتح المكتب حالياً',
-                                        'warning',
-                                        `تحتاج إلى ${formatMoney(cfg.earlyLicenseCost)} ج.م لفتح ${cfg.name}`
-                                      );
-                                      return;
-                                    }
-                                    const ok = unlockMarketRegionWithCash(regId);
-                                    if (ok) {
-                                      showToast(
-                                        `تم فتح مكتب التوزيع الإقليمي في ${cfg.name} وتفعيله لأعمالك!`,
-                                        'success'
-                                      );
-                                    }
-                                  }}
-                                  className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2 px-3 text-[11px] font-black text-white shadow-xs transition hover:brightness-105"
-                                >
-                                  فتح مكتب مبكر ({formatMoney(cfg.earlyLicenseCost)} ج.م)
-                                </button>
-                              </div>
-                            )}
+                          <div className="font-display mt-1.5 text-base text-[#1A2530]">
+                            {cfg.name}
                           </div>
+                          <p className="mt-1 text-xs font-bold text-[#1A2530]/75">
+                            {cfg.description}
+                          </p>
                         </div>
-                      );
-                    })}
-                  </div>
+
+                        <div className="mt-3 pt-2.5 border-t border-[#1A2530]/10">
+                          {unlocked ? (
+                            <button
+                              type="button"
+                              disabled={regId === 'egypt'}
+                              onClick={() => toggleDraftDistributionMarket(regId)}
+                              className="w-full rounded-xl py-2 px-3 text-xs font-black bg-[#1A2530] text-[#F9F6F0] cursor-pointer"
+                            >
+                              {regId === 'egypt'
+                                ? 'مفعل دائماً كسوق أساسي ✓'
+                                : isSelectedForNextProject
+                                ? 'مفعل لتوزيع عملك القادم ✓'
+                                : 'تفعيل التوزيع لعملك القادم'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => unlockMarketRegionWithCash(regId)}
+                              className="w-full rounded-xl bg-[#D91624] py-2 px-3 text-xs font-black text-white cursor-pointer"
+                            >
+                              فتح مكتب مبكر ({formatMoney(cfg.earlyLicenseCost)} ج.م)
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
               {activeSheet === 'archive' && (
                 <div className="space-y-3">
                   {releasedProjects.length === 0 ? (
-                    <div className="rounded-2xl bg-white p-8 text-center text-xs font-bold text-slate-500">
-                      لم تقم بإصدار أي عمل فني بعد. اضغط على «إنتاج عمل فني جديد» في الشاشة الرئيسية!
+                    <div className="rounded-2xl bg-white p-8 text-center text-sm font-bold text-[#1A2530]/70">
+                      لم تقم بإصدار أي عمل فني بعد. اضغط على «ورق السيناريو» فوق مكتب الإمبراطور للبدء!
                     </div>
                   ) : (
                     <>
@@ -771,58 +879,51 @@ export function StudioHubView({
                           return (
                             <div
                               key={proj.id}
-                              className="rounded-2xl border-2 border-indigo-100 bg-white p-3.5"
+                              className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-4"
                             >
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="font-black text-violet-700">
-                                  {proj.format === 'film' ? 'فيلم' : 'مسلسل'} ·{' '}
-                                  {genreName}
+                              <div className="flex items-center justify-between text-xs font-bold">
+                                <span className="text-[#D91624]">
+                                  {proj.format === 'film' ? 'فيلم' : 'مسلسل'} · {genreName}
                                 </span>
-                                <span className="font-bold text-slate-400">
-                                  عام {proj.year}
-                                </span>
+                                <span className="font-typewriter">عام {proj.year}</span>
                               </div>
-                              <div className="font-display mt-1 text-base font-black text-slate-900">
+                              <div className="font-display mt-1 text-lg text-[#1A2530]">
                                 {proj.title}
                               </div>
-                              <div className="mt-1.5 flex items-center justify-between text-xs tabular-nums">
-                                <span className="font-black text-emerald-600">
+                              <div className="mt-1.5 flex items-center justify-between text-xs font-typewriter font-bold">
+                                <span className="text-[#15803D]">
                                   الإيرادات: {formatMoney(proj.totalGrossRevenue)} ج.م
                                 </span>
-                                <span className="font-bold text-slate-700">
-                                  النقاد: {proj.criticScore}/10 · الجمهور:{' '}
-                                  {proj.audienceScore}/10
+                                <span>
+                                  النقاد: {proj.criticScore}/10 · الجمهور: {proj.audienceScore}/10
                                 </span>
                               </div>
                             </div>
                           );
                         })}
                       </div>
-
                       {archiveTotalPages > 1 && (
-                        <div className="flex items-center justify-between border-t border-indigo-100 pt-3">
+                        <div className="flex items-center justify-between pt-3">
                           <button
                             type="button"
                             disabled={modalPage === 0}
                             onClick={() => setModalPage((p) => Math.max(0, p - 1))}
-                            className="flex items-center justify-center rounded-xl border border-indigo-200 bg-white px-4 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
+                            className="px-4 py-2 rounded-xl bg-white border border-[#1A2530] text-xs font-bold"
                           >
-                            <span>السابق</span>
+                            السابق
                           </button>
-                          <span className="text-xs font-black text-slate-600 tabular-nums">
+                          <span className="text-xs font-bold">
                             صفحة {modalPage + 1} من {archiveTotalPages}
                           </span>
                           <button
                             type="button"
                             disabled={modalPage >= archiveTotalPages - 1}
                             onClick={() =>
-                              setModalPage((p) =>
-                                Math.min(archiveTotalPages - 1, p + 1)
-                              )
+                              setModalPage((p) => Math.min(archiveTotalPages - 1, p + 1))
                             }
-                            className="flex items-center justify-center rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
+                            className="px-4 py-2 rounded-xl bg-[#D91624] text-white text-xs font-bold"
                           >
-                            <span>التالي</span>
+                            التالي
                           </button>
                         </div>
                       )}
@@ -832,50 +933,38 @@ export function StudioHubView({
               )}
 
               {activeSheet === 'history' && (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    {visibleHistoryItems.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-start gap-3 rounded-2xl border border-indigo-100 bg-white p-3.5 text-xs"
-                      >
-                        <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
-                        <div>
-                          <span className="font-black text-violet-700">
-                            [{item.year}]
-                          </span>{' '}
-                          <span className="font-medium text-slate-700">
-                            {item.eventText}
-                          </span>
-                        </div>
+                <div className="space-y-2.5">
+                  {visibleHistoryItems.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-3 rounded-2xl border border-[#1A2530]/20 bg-white p-3.5 text-xs font-bold"
+                    >
+                      <History className="w-4 h-4 text-[#D91624] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-typewriter text-[#D91624]">[{item.year}]</span>{' '}
+                        <span>{item.eventText}</span>
                       </div>
-                    ))}
-                  </div>
-
+                    </div>
+                  ))}
                   {historyTotalPages > 1 && (
-                    <div className="flex items-center justify-between border-t border-indigo-100 pt-3">
+                    <div className="flex items-center justify-between pt-2">
                       <button
                         type="button"
                         disabled={modalPage === 0}
                         onClick={() => setModalPage((p) => Math.max(0, p - 1))}
-                        className="flex items-center justify-center rounded-xl border border-indigo-200 bg-white px-4 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
+                        className="px-4 py-1.5 rounded-xl bg-white border border-[#1A2530] text-xs font-bold"
                       >
-                        <span>السابق</span>
+                        السابق
                       </button>
-                      <span className="text-xs font-black text-slate-600 tabular-nums">
-                        صفحة {modalPage + 1} من {historyTotalPages}
-                      </span>
                       <button
                         type="button"
                         disabled={modalPage >= historyTotalPages - 1}
                         onClick={() =>
-                          setModalPage((p) =>
-                            Math.min(historyTotalPages - 1, p + 1)
-                          )
+                          setModalPage((p) => Math.min(historyTotalPages - 1, p + 1))
                         }
-                        className="flex items-center justify-center rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
+                        className="px-4 py-1.5 rounded-xl bg-[#D91624] text-white text-xs font-bold"
                       >
-                        <span>التالي</span>
+                        التالي
                       </button>
                     </div>
                   )}
