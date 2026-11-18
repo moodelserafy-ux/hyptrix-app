@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 import {
   evaluateTalentOfferDeep,
   RoleBillingSize,
@@ -8,72 +7,127 @@ import {
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
-const GROQ_TEXT_MODELS = [
-  'openai/gpt-oss-120b',
-  'openai/gpt-oss-20b',
-  'qwen/qwen3.8-27b',
-] as const;
+export type GroqTaskModel =
+  | 'openai/gpt-oss-120b'
+  | 'openai/gpt-oss-20b'
+  | 'qwen/qwen3.8-27b';
 
-const GEMINI_TEXT_MODELS = [
-  'gemini-4-hydrogen',
-  'gemini-3.1-flash-lite',
-] as const;
+/**
+ * Automatically selects the optimal Groq model order based on the specific game task:
+ * - Heavy World & Box-Office Reasoning -> openai/gpt-oss-120b first
+ * - Creative Arabic Drama, PR Media Responses & Story Generation -> qwen/qwen3.8-27b first
+ * - Fast Real-Time Contract Negotiations & Daily Ticks -> openai/gpt-oss-20b first
+ */
+function getTaskOrderedGroqModels(
+  taskMode: string,
+  preferredModel?: string
+): GroqTaskModel[] {
+  const allThree: GroqTaskModel[] = [
+    'openai/gpt-oss-120b',
+    'qwen/qwen3.8-27b',
+    'openai/gpt-oss-20b',
+  ];
+
+  let taskPrimary: GroqTaskModel = 'openai/gpt-oss-120b';
+
+  if (
+    taskMode === 'evaluate_talent_offer' ||
+    taskMode === 'generate_character_role' ||
+    taskMode === 'generate_daily_news' ||
+    taskMode === 'evaluate_series_episode'
+  ) {
+    taskPrimary = 'openai/gpt-oss-20b';
+  } else if (
+    taskMode === 'generate_pr_media_response' ||
+    taskMode === 'generate_script_idea' ||
+    taskMode === 'discover_ai_rising_star' ||
+    taskMode === 'generate_ai_memory_news' ||
+    taskMode === 'mid_production_crises'
+  ) {
+    taskPrimary = 'qwen/qwen3.8-27b';
+  } else {
+    // evaluate_release, analyze_script_synopsis, generate_ai_rival_releases, discover_ai_emerging_studio, evaluate_festival_ceremony
+    taskPrimary = 'openai/gpt-oss-120b';
+  }
+
+  const ordered: GroqTaskModel[] = [taskPrimary];
+  if (
+    preferredModel &&
+    (preferredModel === 'openai/gpt-oss-120b' ||
+      preferredModel === 'openai/gpt-oss-20b' ||
+      preferredModel === 'qwen/qwen3.8-27b') &&
+    !ordered.includes(preferredModel)
+  ) {
+    ordered.push(preferredModel);
+  }
+  for (const m of allThree) {
+    if (!ordered.includes(m)) {
+      ordered.push(m);
+    }
+  }
+  return ordered;
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { mode, payload, groqKeyOverride, preferredModel } = body;
     const p = (payload || body || {}) as Record<string, unknown>;
+    const taskTag = String(mode || 'evaluate_release');
 
     if (mode === 'generate_script_idea') {
-      return await handleGenerateScriptIdea(p, groqKeyOverride, preferredModel);
+      return await handleGenerateScriptIdea(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'analyze_script_synopsis') {
-      return await handleAnalyzeScriptSynopsis(p, groqKeyOverride, preferredModel);
+      return await handleAnalyzeScriptSynopsis(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'generate_character_role') {
-      return await handleGenerateCharacterRole(p, groqKeyOverride, preferredModel);
+      return await handleGenerateCharacterRole(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'evaluate_talent_offer') {
-      return await handleEvaluateTalentOffer(p, groqKeyOverride, preferredModel);
+      return await handleEvaluateTalentOffer(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'evaluate_series_episode') {
-      return await handleEvaluateSeriesEpisode(p, groqKeyOverride, preferredModel);
+      return await handleEvaluateSeriesEpisode(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'generate_daily_news') {
-      return await handleGenerateDailyNews(p, groqKeyOverride, preferredModel);
+      return await handleGenerateDailyNews(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'mid_production_crises') {
-      return await handleGenerateCrises(p, groqKeyOverride, preferredModel);
+      return await handleGenerateCrises(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'evaluate_festival_ceremony') {
-      return await handleEvaluateFestivalCeremony(p, groqKeyOverride, preferredModel);
+      return await handleEvaluateFestivalCeremony(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'discover_ai_rising_star') {
-      return await handleDiscoverAiRisingStar(p, groqKeyOverride, preferredModel);
+      return await handleDiscoverAiRisingStar(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'discover_ai_emerging_studio') {
-      return await handleDiscoverAiEmergingStudio(p, groqKeyOverride, preferredModel);
+      return await handleDiscoverAiEmergingStudio(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'generate_ai_rival_releases') {
-      return await handleGenerateAiRivalReleases(p, groqKeyOverride, preferredModel);
+      return await handleGenerateAiRivalReleases(p, groqKeyOverride, taskTag);
     }
 
     if (mode === 'generate_ai_memory_news') {
-      return await handleGenerateAiMemoryNews(p, groqKeyOverride, preferredModel);
+      return await handleGenerateAiMemoryNews(p, groqKeyOverride, taskTag);
     }
 
-    return await handleEvaluateRelease(p, groqKeyOverride, preferredModel);
+    if (mode === 'generate_pr_media_response') {
+      return await handleGeneratePrMediaResponse(p, groqKeyOverride, preferredModel);
+    }
+
+    return await handleEvaluateRelease(p, groqKeyOverride, taskTag);
   } catch (err) {
     console.error('Narrative Engine Error:', err);
     return NextResponse.json(buildGroundedEgyptianReleaseEvaluation({}), { status: 200 });
@@ -123,36 +177,10 @@ async function callGroqJson(
   systemPrompt: string,
   userPrompt: string,
   groqKeyOverride?: string,
-  _preferredModel?: string
+  taskModeOrPreferred?: string
 ): Promise<{ data: Record<string, unknown>; modelUsed: string } | null> {
   const strictJsonSystemPrompt = `${systemPrompt}\n\nتنبيه تقني صارم جداً: يجب أن يكون ردك عبارة عن كائن JSON صالح فقط يبدأ بـ { وينتهي بـ } بدون أي نص إضافي خارج الـ JSON، وتجنب تكرار أي جمل نمطية.`;
 
-  // 1. Primary Server-Side Gemini Engine (@google/genai)
-  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
-  if (geminiKey && geminiKey !== 'MY_GEMINI_API_KEY') {
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
-    for (const modelName of GEMINI_TEXT_MODELS) {
-      try {
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: `${strictJsonSystemPrompt}\n\n${userPrompt}`,
-          config: {
-            responseMimeType: 'application/json',
-            temperature: 0.85,
-          },
-        });
-        const text = response.text || '';
-        const extracted = extractJsonFromText(text);
-        if (extracted) {
-          return { data: extracted, modelUsed: modelName };
-        }
-      } catch {
-        // Fallback to next Gemini model or Groq
-      }
-    }
-  }
-
-  // 2. Secondary Groq Engine (if configured)
   const groqKey = (
     groqKeyOverride ||
     process.env.GROQ_API_KEY ||
@@ -161,11 +189,10 @@ async function callGroqJson(
   ).trim();
 
   if (groqKey && groqKey !== 'MY_GROQ_API_KEY') {
-    const orderedModels = [
-      'openai/gpt-oss-120b',
-      'qwen/qwen3.8-27b',
-      'openai/gpt-oss-20b',
-    ] as const;
+    const orderedModels = getTaskOrderedGroqModels(
+      taskModeOrPreferred || 'evaluate_release',
+      taskModeOrPreferred
+    );
 
     for (const model of orderedModels) {
       try {
@@ -177,8 +204,8 @@ async function callGroqJson(
           },
           body: JSON.stringify({
             model,
-            temperature: 0.82,
-            max_completion_tokens: 2048,
+            temperature: 0.84,
+            max_completion_tokens: 1800,
             messages: [
               { role: 'system', content: strictJsonSystemPrompt },
               { role: 'user', content: userPrompt },
@@ -195,7 +222,7 @@ async function callGroqJson(
           }
         }
       } catch {
-        // Try next model or deterministic engine
+        // Automatically switch to the next Groq model in the task chain
       }
     }
   }
@@ -1805,3 +1832,116 @@ async function handleEvaluateRelease(
     ...buildGroundedEgyptianReleaseEvaluation(payload),
   });
 }
+
+/**
+ * AI-Powered Contextual PR & Media Response Handler (via Groq qwen/qwen3.8-27b / openai/gpt-oss-120b / openai/gpt-oss-20b)
+ */
+async function handleGeneratePrMediaResponse(
+  payload: Record<string, unknown>,
+  groqKeyOverride?: string,
+  preferredModel?: string
+) {
+  const studioName = String(payload?.studioName || 'العقرب ستوديوز');
+  const ceoName = String(payload?.ceoName || 'المنتج');
+  const activeProjectTitle = String(payload?.activeProjectTitle || 'العمل الجديد');
+  const rivalStudioName = String(payload?.rivalStudioName || 'المتحدون ميديا جروب');
+  const rivalFilmTitle = String(payload?.rivalFilmTitle || 'العمل المنافس');
+  const campaignId = String(payload?.campaignId || 'support_film_trolls');
+  const situationHeadline = String(payload?.situationHeadline || '');
+  const situationDetail = String(payload?.situationDetail || '');
+  const customPlayerAngle = String(payload?.customPlayerAngle || '');
+  const isAttack =
+    campaignId === 'rival_rumor_trolls' || campaignId === 'rival_smear_campaign';
+
+  const systemPrompt = `أنت محرك السوشيال ميديا والردود الإعلامية واللجان الإلكترونية في صناعة السينما المصرية والعربية.
+شركة اللاعب: "${studioName}" بقيادة "${ceoName}".
+عمل اللاعب الحالي: "${activeProjectTitle}".
+الشركة المنافسة المستهدفة: "${rivalStudioName}" وعملها "${rivalFilmTitle}".
+نوع التحرك الإعلامي: "${campaignId}" (${isAttack ? 'هجوم إعلامي وإشاعات مضادة لضرب المنافس' : 'رد إعلامي رسمي وتوجيه اللجان لدعم عمل الاستوديو وتصدير التريند'}).
+${situationHeadline ? `الموقف أو الخبر الذي نرد عليه الآن: "${situationHeadline} — ${situationDetail}"` : ''}
+${customPlayerAngle ? `توجيه خاص من المنتج للرد الإعلامي: "${customPlayerAngle}"` : ''}
+
+المطلوب:
+1. صياغة بيان أو عنوان رد إعلامي ناري وذكي جداً يناسب هذا الموقف تحديداً (officialStatement).
+2. توليد 3 منشورات تفاعلية حية على منصتي X و TikTok باللهجة المصرية السينمائية الطبيعية تتفاعل مع هذا الرد أو الإشاعة وتذكر أسماء الأعمال والشركات.
+3. تحديد التأثير الرقمي المنطقي على ضجة الفيلم (hypeDelta بين 8 و 22) والسمعة (reputationDelta بين -2 و 6).
+
+أرجع JSON فقط بهذا الشكل:
+{
+  "officialStatement": "نص الرد الإعلامي أو التكتيك الذي انتشر في الصحافة والسوشيال ميديا",
+  "impactHeadline": "ملخص النتيجة الفورية للرد الإعلامي",
+  "hypeDelta": 14,
+  "reputationDelta": 3,
+  "posts": [
+    {
+      "platform": "X",
+      "authorName": "اسم الحساب",
+      "handle": "@HandleEG",
+      "content": "نص التغريدة أو التعليق",
+      "hashtag": "#هاشتاج_مناسب",
+      "likes": "64.2K",
+      "shares": "19.1K"
+    },
+    {
+      "platform": "TikTok",
+      "authorName": "اسم صانع المحتوى",
+      "handle": "@CreatorEG",
+      "content": "نص الفيديو أو التعليق الرائج",
+      "hashtag": "#هاشتاج_تيك_توك",
+      "likes": "182K",
+      "shares": "41.5K"
+    }
+  ]
+}`;
+
+  const userPrompt = `ولّد الرد الإعلامي التفاعلي ومنشورات X و TikTok الآن بصيغة JSON.`;
+  const groqRes = await callGroqJson(
+    systemPrompt,
+    userPrompt,
+    groqKeyOverride,
+    preferredModel || 'generate_pr_media_response'
+  );
+
+  if (groqRes && Array.isArray(groqRes.data.posts) && groqRes.data.posts.length > 0) {
+    const cleanPosts = (groqRes.data.posts as Record<string, unknown>[])
+      .slice(0, 3)
+      .map((p, idx) => ({
+        id: `groq_pr_${Date.now()}_${idx}`,
+        platform: p.platform === 'TikTok' ? ('TikTok' as const) : ('X' as const),
+        authorName: String(p.authorName || 'ناقد سينمائي'),
+        handle: String(p.handle || '@CinemaTrendEG'),
+        content: String(p.content || ''),
+        hashtag: String(p.hashtag || `#${activeProjectTitle.replace(/\s+/g, '_')}`),
+        likes: String(p.likes || '52.4K'),
+        shares: String(p.shares || '14.8K'),
+        sentiment: isAttack ? ('rival_attack' as const) : ('viral_boost' as const),
+        timestampLabel: 'الآن · رد إعلامي مباشر',
+      }));
+
+    return NextResponse.json({
+      ok: true,
+      modelUsed: groqRes.modelUsed,
+      officialStatement: String(
+        groqRes.data.officialStatement ||
+          `بيان عاجل من «${studioName}» يقلب موازين التريند لصالح «${activeProjectTitle}»!`
+      ),
+      impactHeadline: String(
+        groqRes.data.impactHeadline || 'تفاعل جماهيري واسع على منصتي X وTikTok'
+      ),
+      hypeDelta: Math.min(24, Math.max(6, Number(groqRes.data.hypeDelta || 14))),
+      reputationDelta: Math.min(8, Math.max(-3, Number(groqRes.data.reputationDelta || 3))),
+      posts: cleanPosts,
+    });
+  }
+
+  return NextResponse.json({
+    ok: false,
+    officialStatement: isAttack
+      ? `تسريبات حصرية تكشف ارتباكاً داخل «${rivalStudioName}» وتراجع الحجوزات لـ «${rivalFilmTitle}» أمام زخم «${activeProjectTitle}»!`
+      : `المكتب الإعلامي لـ «${studioName}» يطلق حملة تفاعلية موسعة لـ «${activeProjectTitle}» تتصدر التريند المصري والعربي!`,
+    hypeDelta: 12,
+    reputationDelta: 2,
+    posts: [],
+  });
+}
+

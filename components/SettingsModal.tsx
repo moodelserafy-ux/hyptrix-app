@@ -22,31 +22,31 @@ export function SettingsModal({ isOpen, open, onClose }: SettingsModalProps) {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md overscroll-contain touch-none select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3.5 backdrop-blur-md overscroll-contain touch-none select-none"
       dir="rtl"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[88dvh] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-[#F4F7FF] p-5 shadow-2xl"
+        className="max-h-[88dvh] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-4 border-[#D4AF37] bg-[#F9F6F0] p-4 sm:p-5 text-[#1A2530] shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+        <div className="flex items-center justify-between border-b-2 border-[#1A2530]/15 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1A2530] text-[#D4AF37] border border-[#D4AF37]">
               <Settings className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-display text-base font-black text-slate-900">
-                إعدادات الاستوديو وحزم البيانات
+              <h2 className="font-display text-base sm:text-lg font-black text-[#1A2530]">
+                إعدادات مكتب الإمبراطور والأرشيف
               </h2>
-              <p className="text-[11px] font-bold text-slate-500">
-                إدارة حزم الأسماء والشعارات المخصصة أو إعادة تأسيس الشركة
+              <p className="text-[11px] font-bold text-[#1A2530]/70">
+                إدارة حزم الأسماء والشعارات المخصصة أو إعادة تأسيس الاستوديو
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-white p-2 text-slate-600 shadow-2xs hover:bg-rose-50 hover:text-rose-600"
+            className="rounded-xl bg-[#1A2530] p-2 text-[#F9F6F0] hover:bg-[#D91624] transition cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
@@ -54,12 +54,12 @@ export function SettingsModal({ isOpen, open, onClose }: SettingsModalProps) {
 
         <CustomDbLoaderPanel compact />
 
-        <div className="flex items-center justify-between border-t border-indigo-100 pt-3">
+        <div className="flex items-center justify-between border-t-2 border-[#1A2530]/15 pt-3">
           {!confirmReset ? (
             <button
               type="button"
               onClick={() => setConfirmReset(true)}
-              className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-black text-rose-700 hover:bg-rose-100"
+              className="flex min-h-[40px] items-center gap-1.5 rounded-xl border-2 border-[#D91624] bg-[#D91624]/10 px-3.5 py-2 text-xs font-black text-[#D91624] hover:bg-[#D91624] hover:text-white transition cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>إعادة تأسيس الاستوديو من الصفر</span>
@@ -73,14 +73,14 @@ export function SettingsModal({ isOpen, open, onClose }: SettingsModalProps) {
                   setConfirmReset(false);
                   onClose();
                 }}
-                className="min-h-[40px] rounded-xl bg-rose-600 px-3.5 py-2 text-xs font-black text-white"
+                className="min-h-[40px] rounded-xl bg-[#D91624] px-3.5 py-2 text-xs font-black text-white cursor-pointer"
               >
                 تأكيد المسح النهائي
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmReset(false)}
-                className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700"
+                className="min-h-[40px] rounded-xl border border-[#1A2530]/25 bg-white px-3.5 py-2 text-xs font-bold text-[#1A2530] cursor-pointer"
               >
                 تراجع
               </button>
@@ -90,10 +90,10 @@ export function SettingsModal({ isOpen, open, onClose }: SettingsModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="flex min-h-[40px] items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white shadow-xs hover:bg-violet-700"
+            className="flex min-h-[40px] items-center gap-1.5 rounded-xl bg-[#1A2530] border-2 border-[#D4AF37] px-5 py-2 text-xs font-black text-[#F9F6F0] shadow-xs hover:brightness-110 cursor-pointer"
           >
-            <Check className="h-4 w-4" />
-            <span>تم</span>
+            <Check className="h-4 w-4 text-[#D4AF37]" />
+            <span>حفظ وإغلاق</span>
           </button>
         </div>
       </div>

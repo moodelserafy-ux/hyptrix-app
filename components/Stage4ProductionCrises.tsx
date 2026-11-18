@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   useGameStore,
+  formatGameDate,
   CrisisEventItem,
   DailyAiNewsItem,
   getStudioAssetBenefits,
@@ -149,7 +150,10 @@ export function Stage4ProductionCrises() {
           day: gameDay,
           year: useGameStore.getState().currentYear,
           category: 'production_news',
-          badgeLabel: `تغطية كواليس البلاتوه · اليوم ${gameDay}`,
+          badgeLabel: `تغطية كواليس البلاتوه · ${formatGameDate(
+            gameDay,
+            useGameStore.getState().currentYear
+          )}`,
           headline: newsItem.headline,
           detail: newsItem.detail,
           highlightName: draft.title,

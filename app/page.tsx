@@ -361,54 +361,95 @@ export default function HomePage() {
   ]);
 
   const isStepScreen = studioCreated && activeScreen !== 'STUDIO_HUB';
+  const dayProgressPercent = Math.min(
+    100,
+    Math.max(
+      4,
+      Math.round(
+        ((DAY_DURATION_SECONDS - secondsLeft) / DAY_DURATION_SECONDS) * 100
+      )
+    )
+  );
 
   return (
     <div
-      className="relative min-h-screen w-full bg-[#F9F6F0] text-[#1A2530] pb-10"
+      className="relative min-h-screen w-full bg-[#F9F6F0] text-[#1A2530] pb-14"
       dir="rtl"
     >
       {/* Global Clapperboard Transitions, Flying Cash Deltas & Crisis Red Alert */}
       <GameFeelEffects />
 
-      {/* Minimal Cinema Clapperboard Strip ONLY when inside sub-stages (No traditional Navbar on Emperor's Desk) */}
+      {/* ALWAYS-VISIBLE FLOATING TIME & CALENDAR HUD WIDGET (ودجت التاريخ والوقت العائم في كل الصفحات) */}
+      {studioCreated && (
+        <div
+          className={`fixed top-2.5 left-2.5 sm:top-3.5 sm:left-4 z-40 transition-all duration-300 ${
+            isAnyModalOpen
+              ? 'pointer-events-none opacity-45 scale-95'
+              : 'opacity-100 scale-100'
+          }`}
+        >
+          <div className="relative overflow-hidden rounded-2xl bg-[#1A2530]/95 text-[#F9F6F0] border-2 border-[#D4AF37] px-3 py-1.5 shadow-[0_10px_28px_rgba(26,37,48,0.35)] backdrop-blur-md">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#D91624] text-[#D4AF37] border border-[#D4AF37]/60">
+                <Calendar className="w-3.5 h-3.5" />
+              </span>
+              <div className="leading-tight">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] sm:text-xs font-extrabold tracking-tight text-[#F9F6F0] whitespace-nowrap">
+                    {formatGameDate(gameDay, currentYear)}
+                  </span>
+                  <span
+                    dir="ltr"
+                    className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-typewriter text-[10px] font-black ${
+                      isAnyModalOpen || !isPageActive
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                        : 'bg-[#15803D] text-white'
+                    }`}
+                  >
+                    <Clock className="w-2.5 h-2.5" />
+                    {isAnyModalOpen || !isPageActive ? 'مؤقت' : `${secondsLeft}s`}
+                  </span>
+                </div>
+                {/* Animated Daily Progress Bar */}
+                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/15">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-l from-[#D4AF37] to-[#D91624] transition-all duration-500"
+                    style={{ width: `${dayProgressPercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Minimal Cinema Clapperboard Strip ONLY when inside sub-stages */}
       {isStepScreen && (
         <div
-          className={`sticky top-0 z-40 bg-[#1A2530] text-[#F9F6F0] border-b-4 border-[#D4AF37] px-3 sm:px-6 py-2.5 shadow-lg ${
+          className={`sticky top-0 z-30 bg-[#1A2530] text-[#F9F6F0] border-b-4 border-[#D4AF37] px-3 sm:px-6 py-2.5 shadow-lg ${
             isAnyModalOpen ? 'pointer-events-none opacity-40' : ''
           }`}
         >
-          <div className="mx-auto max-w-5xl flex items-center justify-between gap-2">
+          <div className="mx-auto max-w-4xl flex items-center justify-between gap-2 pl-36 sm:pl-44">
             <button
               type="button"
               onClick={() => setActiveScreen('STUDIO_HUB')}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-sm border border-[#D4AF37] shadow cursor-pointer transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-xs sm:text-sm border border-[#D4AF37] shadow cursor-pointer transition shrink-0"
             >
               <DirectorChairIcon className="w-4 h-4 text-[#D4AF37]" />
-              <span>العودة لمكتب الإمبراطور</span>
+              <span>مكتب الإمبراطور</span>
             </button>
 
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#F9F6F0]/10 border border-[#D4AF37]/40">
-                <Coins className="w-4 h-4 text-[#D4AF37]" />
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F9F6F0]/10 border border-[#D4AF37]/40">
+                <Coins className="w-3.5 h-3.5 text-[#D4AF37]" />
                 <span
                   dir="ltr"
-                  className="font-typewriter text-xs sm:text-sm font-black text-[#F9F6F0]"
+                  className="font-typewriter text-xs font-black text-[#F9F6F0]"
                 >
                   {formatMoney(cash)}
                 </span>
-                <span className="text-[11px] font-bold text-[#D4AF37]">ج.م</span>
-              </div>
-
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#F9F6F0]/10 border border-[#D4AF37]/30 text-xs font-bold">
-                <Calendar className="w-3.5 h-3.5 text-[#D4AF37]" />
-                <span>{formatGameDate(gameDay, currentYear)}</span>
-                <span
-                  dir="ltr"
-                  className="font-typewriter text-[11px] text-[#D4AF37] flex items-center gap-0.5"
-                >
-                  <Clock className="w-3 h-3" />
-                  {secondsLeft}s
-                </span>
+                <span className="text-[10px] font-bold text-[#D4AF37]">ج.م</span>
               </div>
 
               <button
@@ -417,7 +458,7 @@ export default function HomePage() {
                 className="p-1.5 rounded-lg bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 text-[#D4AF37] border border-[#D4AF37]/40 cursor-pointer"
                 title="إعدادات الاستوديو"
               >
-                <FilmReelSettingsIcon className="w-5 h-5" />
+                <FilmReelSettingsIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
           </div>
@@ -427,28 +468,28 @@ export default function HomePage() {
       {/* Main Content Container */}
       <main
         aria-hidden={isTopOverlayOpen}
-        className={`mx-auto px-3 sm:px-6 pt-4 transition-opacity ${
-          activeScreen === 'STUDIO_HUB' ? 'max-w-6xl' : 'max-w-4xl'
+        className={`mx-auto px-3 sm:px-5 pt-13 sm:pt-6 transition-opacity ${
+          activeScreen === 'STUDIO_HUB' ? 'max-w-5xl' : 'max-w-4xl'
         } ${isTopOverlayOpen ? 'pointer-events-none select-none opacity-40' : ''}`}
       >
         <AnimatePresence mode="wait">
           {!studioCreated ? (
             <motion.div
               key="stage1"
-              initial={{ opacity: 0, scale: 0.98, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.98, y: -12 }}
-              transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
             >
               <Stage1StudioCreation />
             </motion.div>
           ) : (
             <motion.div
               key={activeScreen}
-              initial={{ opacity: 0, scale: 0.985, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.985, y: -10 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
             >
               {activeScreen === 'STUDIO_HUB' && (
                 <StudioHubView

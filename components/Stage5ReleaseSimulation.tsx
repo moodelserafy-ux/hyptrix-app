@@ -967,7 +967,7 @@ export function Stage5ReleaseSimulation() {
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#D91624] text-white text-[10px] font-typewriter font-black mb-1">
                     <Activity className="w-3.5 h-3.5 animate-pulse" />
-                    <span>BOX OFFICE STOCK EXCHANGE // شاشة بورصة التذاكر</span>
+                    <span>مؤشر شباك التذاكر المباشر · شاشة بورصة الإيرادات</span>
                   </div>
                   <h3 className="font-display text-xl sm:text-2xl text-[#F9F6F0]">
                     عداد إيرادات «{lastReleasedProject.title}» المباشر

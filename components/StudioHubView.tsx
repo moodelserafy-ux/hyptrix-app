@@ -371,7 +371,7 @@ export function StudioHubView({
                 <span>خزنة الإمبراطور في الحائط</span>
               </span>
               <span className="font-typewriter text-xs font-black text-[#D4AF37]">
-                SAFE // VAULT
+                خزنة مصفحة
               </span>
             </div>
 
@@ -433,7 +433,7 @@ export function StudioHubView({
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <span className="px-2.5 py-0.5 rounded bg-[#1A2530] text-[#F9F6F0] font-typewriter text-[11px] font-black">
-                    SCRIPT // {currentYear}
+                    مسودة سيناريو · {currentYear}
                   </span>
                   <FileText className="w-6 h-6 text-[#D91624]" />
                 </div>
@@ -473,7 +473,7 @@ export function StudioHubView({
               {/* Top Secret Stamp */}
               <div className="flex items-center justify-between mb-3">
                 <span className="px-2.5 py-0.5 rounded bg-[#1A2530] text-[#D4AF37] font-typewriter text-[11px] font-black border border-[#D4AF37]">
-                  TOP SECRET // VIP
+                  ملف سري للغاية · VIP
                 </span>
                 <span className="text-xs font-extrabold text-[#D4AF37]">
                   {starForgeLocksOpened >= 5
@@ -516,7 +516,7 @@ export function StudioHubView({
 
               <div className="mt-4 pt-3 border-t border-[#D4AF37]/40 flex items-center justify-between">
                 <span className="text-xs font-extrabold text-[#D4AF37]">
-                  The Star Forge · VIP
+                  كابينة الكاستينج الملكية · VIP
                 </span>
                 <span className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-[#1A2530] font-extrabold text-xs shadow">
                   فتح الملف السري ←
@@ -563,7 +563,7 @@ export function StudioHubView({
 
               <div className="mt-4 flex items-center justify-between">
                 <span className="font-typewriter text-xs text-[#F9F6F0]/70">
-                  5G // TREND RADAR
+                  بث مباشر · رادار التريند
                 </span>
                 <span className="px-3.5 py-1.5 rounded-xl bg-[#D91624] text-white font-extrabold text-xs border border-[#D4AF37]">
                   فتح شاشة الموبايل ←

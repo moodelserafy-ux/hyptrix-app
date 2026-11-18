@@ -20,16 +20,22 @@ export default function sitemap(): MetadataRoute.Sitemap {
       },
     },
     {
+      url: `${APP_URL}/about-us`,
+      lastModified: now,
+      changeFrequency: 'daily',
+      priority: 0.98,
+    },
+    {
       url: `${APP_URL}/llms.txt`,
       lastModified: now,
       changeFrequency: 'weekly',
-      priority: 0.9,
+      priority: 0.95,
     },
     {
       url: `${APP_URL}/llms-full.txt`,
       lastModified: now,
       changeFrequency: 'weekly',
-      priority: 0.9,
+      priority: 0.95,
     },
   ];
 }

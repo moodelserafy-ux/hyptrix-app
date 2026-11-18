@@ -35,11 +35,8 @@
     scroll-behavior: smooth;
     background-color: #F9F6F0;
     background-image:
-      radial-gradient(at 15% 10%, rgba(212, 175, 55, 0.14) 0px, transparent 50%),
-      radial-gradient(at 85% 15%, rgba(217, 22, 36, 0.08) 0px, transparent 50%),
-      radial-gradient(at 50% 85%, rgba(26, 37, 48, 0.05) 0px, transparent 55%),
-      url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.032'/%3E%3C/svg%3E");
-    background-attachment: fixed;
+      radial-gradient(at 15% 10%, rgba(212, 175, 55, 0.13) 0px, transparent 50%),
+      radial-gradient(at 85% 15%, rgba(217, 22, 36, 0.07) 0px, transparent 50%);
     color: #1A2530;
     font-family: var(--font-sans);
     font-weight: 600;

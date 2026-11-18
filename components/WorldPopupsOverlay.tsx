@@ -544,31 +544,102 @@ export function WorldPopupsOverlay() {
                     </div>
                   )}
 
-                  {/* Action CTAs */}
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        dismissBreakingNewsModal();
-                        setPrWarRoomOpen(true);
-                      }}
-                      className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-fuchsia-300 bg-gradient-to-r from-fuchsia-50 via-violet-50 to-cyan-50 px-4 py-2 text-xs font-black text-fuchsia-950 transition hover:border-fuchsia-500"
-                    >
-                      <Megaphone className="h-4 w-4 text-fuchsia-600" />
-                      <span>
-                        رد إعلامي: فتح غرفة عمليات التريند ومنصات X وتيك توك
-                      </span>
-                    </button>
+                  {/* Contextual AI Media Response (يظهر فقط في المواقف التي تستدعي رداً إعلامياً وليس عمال على بطال) */}
+                  {(() => {
+                    const textBlob = `${currentNews.headline} ${currentNews.detail} ${currentNews.extraStatBadge || ''}`;
+                    const isControversialOrNegative =
+                      /رفض|أزمة|خلاف|هجوم|تحدي|منافس|تسريب|انسحاب|اعتذار|جدل|انتقاد|تراجع|كارثة|سخرية|إشاعة|-/.test(
+                        textBlob
+                      );
+                    const warrantsMediaResponse =
+                      currentNews.category === 'rival_project' ||
+                      currentNews.category === 'new_studio' ||
+                      (currentNews.category === 'production_news' &&
+                        isControversialOrNegative) ||
+                      (currentNews.category === 'contract_reply' &&
+                        isControversialOrNegative);
 
-                    <button
-                      type="button"
-                      onClick={dismissBreakingNewsModal}
-                      className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-105"
-                    >
-                      <Check className="h-4 w-4" />
-                      <span>متابعة إدارة الاستوديو</span>
-                    </button>
-                  </div>
+                    if (!warrantsMediaResponse) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={dismissBreakingNewsModal}
+                          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-[#1A2530] hover:bg-[#1A2530]/90 border-2 border-[#D4AF37] px-5 py-2.5 text-xs font-black text-[#F9F6F0] shadow-md transition cursor-pointer"
+                        >
+                          <Check className="h-4 w-4 text-[#D4AF37]" />
+                          <span>متابعة إدارة الاستوديو</span>
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-2.5 rounded-2xl border-2 border-[#D4AF37] bg-[#F9F6F0] p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#D91624]">
+                            <Megaphone className="h-3.5 w-3.5" />
+                            <span>موقف ساخن يستدعي تحركاً من المكتب الإعلامي</span>
+                          </span>
+                          <span className="rounded-lg bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-bold text-[#D4AF37]">
+                            تكلفة الحملة: 2.0M ج.م
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            disabled={launchingCampaignId !== null}
+                            onClick={async () => {
+                              setLaunchingCampaignId('contextual_ai_defense');
+                              playSocialNotifPop();
+                              const ok = await launchSocialPrCampaign(
+                                'support_film_trolls',
+                                currentNews.highlightName,
+                                {
+                                  headline: currentNews.headline,
+                                  detail: currentNews.detail,
+                                  customAngle:
+                                    'بيان صحفي رسمي حاسم من الاستوديو يقلب الموقف لصالحنا ويشعل حماس الجمهور',
+                                }
+                              );
+                              if (ok) playCashRegisterChaChing();
+                              setLaunchingCampaignId(null);
+                              dismissBreakingNewsModal();
+                            }}
+                            className="flex items-center justify-center gap-1.5 rounded-xl bg-[#15803D] hover:brightness-110 px-3 py-2 text-[11px] font-black text-white border border-[#D4AF37] shadow transition cursor-pointer disabled:opacity-50"
+                          >
+                            {launchingCampaignId === 'contextual_ai_defense' ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-3.5 w-3.5 text-[#D4AF37]" />
+                            )}
+                            <span>إصدار بيان صحفي حاسم للصحافة</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={launchingCampaignId !== null}
+                            onClick={() => {
+                              dismissBreakingNewsModal();
+                              setPrWarRoomOpen(true);
+                            }}
+                            className="flex items-center justify-center gap-1.5 rounded-xl bg-[#D91624] hover:brightness-110 px-3 py-2 text-[11px] font-black text-white border border-[#D4AF37] shadow transition cursor-pointer"
+                          >
+                            <Flame className="h-3.5 w-3.5 text-[#D4AF37]" />
+                            <span>فتح غرفة اللجان والهجوم المضاد</span>
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={dismissBreakingNewsModal}
+                          className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-xl bg-[#1A2530] hover:bg-[#1A2530]/90 px-4 py-2 text-xs font-black text-[#F9F6F0] transition cursor-pointer"
+                        >
+                          <Check className="h-4 w-4 text-[#D4AF37]" />
+                          <span>تجاهل الموقف ومتابعة العمل</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </motion.div>
             )}

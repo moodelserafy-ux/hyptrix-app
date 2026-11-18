@@ -592,11 +592,13 @@ export interface ActiveDraftProject {
 }
 
 export type GroqModelId =
+  | 'auto'
   | 'openai/gpt-oss-120b'
   | 'openai/gpt-oss-20b'
   | 'qwen/qwen3.8-27b';
 
 export const GROQ_MODEL_OPTIONS: { id: GroqModelId; label: string; provider: string }[] = [
+  { id: 'auto', label: 'تبديل تلقائي ذكي (Auto)', provider: 'Groq Task Router' },
   { id: 'openai/gpt-oss-120b', label: 'openai/gpt-oss-120b', provider: 'OpenAI (120B)' },
   { id: 'openai/gpt-oss-20b', label: 'openai/gpt-oss-20b', provider: 'OpenAI (20B Fast)' },
   { id: 'qwen/qwen3.8-27b', label: 'qwen/qwen3.8-27b', provider: 'Alibaba Cloud (Qwen 3.8)' },
@@ -613,7 +615,8 @@ export type ActiveStageScreen =
   | 'LEADERBOARD_SETTINGS';
 
 /**
- * Maps a 120-day game year (10 days per month × 12 months) into a realistic calendar date!
+ * Maps a 120-day game year (10 game ticks per month × 12 months) into a realistic calendar date
+ * such as "9 نوفمبر 2037" (Never prints raw cumulative day numbers like "اليوم 1421").
  */
 export function formatGameDate(gameDay: number, year: number): string {
   const months = [
@@ -632,7 +635,9 @@ export function formatGameDate(gameDay: number, year: number): string {
   ];
   const dayInYear = Math.max(0, (gameDay - 1) % DAYS_PER_GAME_YEAR); // 0..119
   const monthIdx = Math.min(11, Math.floor(dayInYear / 10));
-  return `اليوم ${gameDay} · ${months[monthIdx]} ${year}`;
+  const stepInMonth = dayInYear % 10; // 0..9
+  const calendarDay = Math.min(30, stepInMonth * 3 + 3); // 3, 6, 9, 12, 15, 18, 21, 24, 27, 30
+  return `${calendarDay} ${months[monthIdx]} ${year}`;
 }
 
 export function getDaysRemainingUntilAnnualAwards(gameDay: number): number {
@@ -1337,7 +1342,12 @@ export interface HyptrixGameState {
   resolveCrisisWithStudioAsset: (crisisId: string) => void;
   launchSocialPrCampaign: (
     campaignId: SocialPrCampaignItem['id'],
-    targetRivalStudio?: string
+    targetRivalStudio?: string,
+    contextSituation?: {
+      headline?: string;
+      detail?: string;
+      customAngle?: string;
+    }
   ) => Promise<boolean>;
   verifyWalletWithServer: () => Promise<void>;
   showToast: (
@@ -1505,7 +1515,7 @@ export const useGameStore = create<HyptrixGameState>()(
       customDbUrl: '',
       supabaseUserEmail: null,
       groqApiKeyClient: '',
-      preferredGroqModel: 'openai/gpt-oss-120b',
+      preferredGroqModel: 'auto',
       ownedStudioAssets: [],
       ledgerSignature: '',
       socialFeedLog: [],
@@ -1774,7 +1784,11 @@ export const useGameStore = create<HyptrixGameState>()(
           };
         }),
 
-      launchSocialPrCampaign: async (campaignId, targetRivalStudio) => {
+      launchSocialPrCampaign: async (
+        campaignId,
+        targetRivalStudio,
+        contextSituation
+      ) => {
         const state = get();
         const campaign = SOCIAL_PR_CAMPAIGNS.find((c) => c.id === campaignId);
         if (!campaign) return false;
@@ -1831,8 +1845,52 @@ export const useGameStore = create<HyptrixGameState>()(
         const cleanTag = activeProjectTitle.replace(/\s+/g, '_');
         const rivalTag = rivalFilmTitle.replace(/\s+/g, '_');
 
-        const newPosts: LiveSocialFeedPost[] = [];
-        if (campaign.id === 'support_film_trolls') {
+        // Call Groq AI (qwen/qwen3.8-27b / openai/gpt-oss-120b / openai/gpt-oss-20b) for contextual media response
+        let aiGeneratedPosts: LiveSocialFeedPost[] = [];
+        let aiOfficialStatement = '';
+        try {
+          const aiRes = await fetch('/api/generate-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'generate_pr_media_response',
+              groqKeyOverride: state.groqApiKeyClient,
+              preferredModel: state.preferredGroqModel,
+              payload: {
+                studioName: state.studioName,
+                ceoName: state.ceoName,
+                activeProjectTitle,
+                rivalStudioName: rivalStudio,
+                rivalFilmTitle,
+                campaignId: campaign.id,
+                situationHeadline:
+                  contextSituation?.headline ||
+                  state.breakingNewsQueue?.[0]?.headline ||
+                  '',
+                situationDetail:
+                  contextSituation?.detail ||
+                  state.breakingNewsQueue?.[0]?.detail ||
+                  '',
+                customPlayerAngle: contextSituation?.customAngle || '',
+              },
+            }),
+          });
+          if (aiRes.ok) {
+            const aiData = await aiRes.json();
+            if (Array.isArray(aiData?.posts) && aiData.posts.length > 0) {
+              aiGeneratedPosts = aiData.posts;
+            }
+            if (typeof aiData?.officialStatement === 'string') {
+              aiOfficialStatement = aiData.officialStatement;
+            }
+          }
+        } catch {
+          // Fallback to deterministic posts below if offline
+        }
+
+        const newPosts: LiveSocialFeedPost[] = [...aiGeneratedPosts];
+        if (newPosts.length === 0) {
+          if (campaign.id === 'support_film_trolls') {
           newPosts.push(
             {
               id: `supp_${Date.now()}_1`,
@@ -1980,6 +2038,7 @@ export const useGameStore = create<HyptrixGameState>()(
             sentiment: 'viral_boost',
             timestampLabel: 'الآن · عرض النقاد الخاص',
           });
+          }
         }
 
         set((cur) => {
@@ -2168,7 +2227,8 @@ export const useGameStore = create<HyptrixGameState>()(
         });
 
         get().showToast(
-          `تم إطلاق «${campaign.title}» وتصدر المشهد على منصات التواصل!`,
+          aiOfficialStatement ||
+            `تم إطلاق «${campaign.title}» وتصدر المشهد على منصات التواصل!`,
           'success',
           campaign.impactSummary
         );

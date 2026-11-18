@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   useGameStore,
+  formatGameDate,
   OfferRoleSlot,
   SLOT_ARABIC_NAMES,
   getLiveActorsWithEvolution,
@@ -616,10 +617,14 @@ export function Stage3CrewCastCards() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-black text-amber-950">
               <Clock className="h-3.5 w-3.5 text-amber-600 animate-spin" />
-              <span>قيد دراسة الوكيل الفني (اليوم {offer.submittedDay} ← اليوم {offer.responseDueDay})</span>
+              <span>
+                قيد دراسة الوكيل الفني ({formatGameDate(offer.submittedDay, currentYear)} ←{' '}
+                {formatGameDate(offer.responseDueDay, currentYear)})
+              </span>
             </span>
             <span className="rounded-lg bg-amber-500 px-2 py-0.5 font-mono text-[10px] font-black text-slate-950 tabular-nums">
-              متبقي {daysLeft} {daysLeft === 1 ? 'يوم' : 'أيام'} (رد في اليوم {offer.responseDueDay})
+              متبقي {daysLeft} {daysLeft === 1 ? 'يوم' : 'أيام'} (رد في{' '}
+              {formatGameDate(offer.responseDueDay, currentYear)})
             </span>
           </div>
           <p className="mt-1 text-[11px] font-bold text-amber-900">
@@ -1169,7 +1174,7 @@ export function Stage3CrewCastCards() {
             <div className="rounded-2xl bg-gradient-to-r from-[#D91624] via-[#A90F1B] to-[#1A2530] p-4 text-[#F9F6F0] border-2 border-[#D4AF37] shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-typewriter font-black text-[#D4AF37]">
-                  THE STAR FORGE // كاستينج الـ VIP
+                  غرفة صناعة النجوم · كاستينج الـ VIP
                 </div>
                 <h3 className="font-display text-lg text-[#F9F6F0]">
                   هل تبحث عن أسطورة خاصة باستوديوك؟ اصنع نجمك بكارت ألماظ (99 OVR)!
