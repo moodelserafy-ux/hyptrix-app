@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '@/lib/store';
 import { CustomDbLoaderPanel } from './CustomDbLoaderPanel';
 import { Settings, X, RotateCcw, Check } from 'lucide-react';
@@ -17,26 +17,17 @@ export function SettingsModal({ isOpen, open, onClose }: SettingsModalProps) {
 
   const visible = isOpen ?? open ?? false;
 
-  useEffect(() => {
-    if (!visible) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [visible]);
-
   if (!visible) return null;
 
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm overscroll-contain"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md overscroll-contain touch-none select-none"
       dir="rtl"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[88dvh] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-[#F4F7FF] p-5 shadow-2xl"
+        className="max-h-[88dvh] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-[#F4F7FF] p-5 shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
           <div className="flex items-center gap-2">

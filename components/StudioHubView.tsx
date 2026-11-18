@@ -56,6 +56,7 @@ export function StudioHubView({
     toggleDraftDistributionMarket,
     resetDraftForNewProject,
     setActiveScreen,
+    setChildModalOpen,
     showToast,
   } = useGameStore();
 
@@ -65,13 +66,9 @@ export function StudioHubView({
   const [modalPage, setModalPage] = useState(0);
 
   useEffect(() => {
-    if (!activeSheet) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [activeSheet]);
+    setChildModalOpen(Boolean(activeSheet));
+    return () => setChildModalOpen(false);
+  }, [activeSheet, setChildModalOpen]);
 
   const totalAwards = releasedProjects.reduce(
     (sum, p) => sum + p.awardsWon.length,
@@ -159,6 +156,13 @@ export function StudioHubView({
 
   return (
     <div className="mx-auto max-w-xl space-y-3 py-1">
+      <div
+        className={
+          activeSheet
+            ? 'pointer-events-none select-none space-y-3 opacity-35 transition-opacity'
+            : 'space-y-3'
+        }
+      >
       {/* Unified Compact Command Card (Studio Identity + 2.5D Lot + Dual Treasury + Primary Play CTA) */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -241,13 +245,16 @@ export function StudioHubView({
               <span className="text-[10px] font-black text-emerald-800">
                 خزينة السيولة النقدية
               </span>
-              <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+              <Wallet className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
             </div>
             <div
               data-testid="hub-cash-value"
-              className="font-display mt-0.5 text-base font-black text-emerald-700 whitespace-nowrap sm:text-lg"
+              className="font-display mt-0.5 flex items-baseline gap-1 text-base font-black text-emerald-700 whitespace-nowrap sm:text-lg"
             >
-              {formatMoney(cash)} <span className="text-[10px] font-bold">ج.م</span>
+              <span dir="ltr" className="font-mono tabular-nums">
+                {formatMoney(cash)}
+              </span>
+              <span className="text-[10px] font-bold">ج.م</span>
             </div>
           </div>
 
@@ -256,13 +263,15 @@ export function StudioHubView({
               <span className="text-[10px] font-black text-violet-800">
                 القيمة السوقية للشركة
               </span>
-              <TrendingUp className="h-3.5 w-3.5 text-violet-600" />
+              <TrendingUp className="h-3.5 w-3.5 shrink-0 text-violet-600" />
             </div>
             <div
               data-testid="hub-market-value"
-              className="font-display mt-0.5 text-base font-black text-violet-700 whitespace-nowrap sm:text-lg"
+              className="font-display mt-0.5 flex items-baseline gap-1 text-base font-black text-violet-700 whitespace-nowrap sm:text-lg"
             >
-              {formatMoney(marketValue)}{' '}
+              <span dir="ltr" className="font-mono tabular-nums">
+                {formatMoney(marketValue)}
+              </span>
               <span className="text-[10px] font-bold">ج.م</span>
             </div>
           </div>
@@ -432,6 +441,7 @@ export function StudioHubView({
           </button>
         )}
       </div>
+      </div>
 
       {/* Magical Step-Paginated Modal Overlay */}
       <AnimatePresence>
@@ -441,7 +451,7 @@ export function StudioHubView({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setActiveSheet(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/55 p-3 backdrop-blur-xs sm:p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-md overscroll-contain touch-none select-none sm:p-4"
           >
             <motion.div
               initial={{ scale: 0.94, y: 24, opacity: 0 }}
@@ -449,7 +459,7 @@ export function StudioHubView({
               exit={{ scale: 0.94, y: 24, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 340, damping: 28 }}
               onClick={(e) => e.stopPropagation()}
-              className="my-auto max-h-[88dvh] w-full max-w-2xl overflow-y-auto rounded-3xl border-2 border-indigo-100 bg-[#F4F7FF] p-5 shadow-2xl"
+              className="my-auto max-h-[88dvh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-2 border-indigo-100 bg-[#F4F7FF] p-5 shadow-2xl"
             >
               <div className="mb-3.5 flex items-center justify-between border-b border-indigo-100 pb-3">
                 <div className="flex items-center gap-2">

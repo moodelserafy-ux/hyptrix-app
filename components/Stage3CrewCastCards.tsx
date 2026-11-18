@@ -103,6 +103,7 @@ export function Stage3CrewCastCards() {
     toggleCrewSelectionForSlot,
     confirmMultiAcceptedChoice,
     removeTalentFromDraft,
+    setChildModalOpen,
     showToast,
     groqApiKeyClient,
     preferredGroqModel,
@@ -144,17 +145,11 @@ export function Stage3CrewCastCards() {
   const [isEvaluatingOffer, setIsEvaluatingOffer] = useState(false);
   const [isGeneratingRole, setIsGeneratingRole] = useState(false);
 
-  // Lock background scroll when modal is open
+  // Sync negotiation modal state with central background scroll/interaction lock
   useEffect(() => {
-    if (negotiatingTarget) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [negotiatingTarget]);
+    setChildModalOpen(Boolean(negotiatingTarget));
+    return () => setChildModalOpen(false);
+  }, [negotiatingTarget, setChildModalOpen]);
 
   const primaryGenreObj = useMemo(
     () => GENRES.find((g) => g.id === draft.primaryGenre),
@@ -761,6 +756,13 @@ export function Stage3CrewCastCards() {
 
   return (
     <div className="space-y-3.5 pb-28">
+      <div
+        className={
+          negotiatingTarget
+            ? 'pointer-events-none select-none space-y-3.5 opacity-35 transition-opacity'
+            : 'space-y-3.5'
+        }
+      >
       {/* Clean Single-Line Current Activity Header (No Step Numbers or Future Step List) */}
       <div className="glass-panel rounded-3xl px-4 py-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1549,6 +1551,7 @@ export function Stage3CrewCastCards() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
 
       {/* NEGOTIATION MODAL (Sends Offer for 2–3 Days AI Evaluation!) */}
       <AnimatePresence>
@@ -1557,14 +1560,15 @@ export function Stage3CrewCastCards() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-md"
+            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md overscroll-contain touch-none select-none"
           >
             <motion.div
               initial={{ scale: 0.94, y: 18, opacity: 0 }}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.94, y: 18, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="glass-modal max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl p-5 space-y-4"
+              className="glass-modal max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain touch-pan-y rounded-3xl p-5 space-y-4"
             >
               <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
                 <div className="flex items-center gap-3">
@@ -1750,8 +1754,16 @@ export function Stage3CrewCastCards() {
       </AnimatePresence>
 
       {/* FLOATING STICKY BOTTOM NAVIGATION BOX */}
-      <div className="pointer-events-none fixed right-0 bottom-3 left-0 z-40 px-3">
-        <div className="glass-nav pointer-events-auto mx-auto flex max-w-xl items-center justify-between rounded-2xl px-4 py-3">
+      <div
+        className={`pointer-events-none fixed right-0 bottom-3 left-0 z-40 px-3 ${
+          negotiatingTarget ? 'opacity-25' : ''
+        }`}
+      >
+        <div
+          className={`glass-nav mx-auto flex max-w-xl items-center justify-between rounded-2xl px-4 py-3 ${
+            negotiatingTarget ? 'pointer-events-none select-none' : 'pointer-events-auto'
+          }`}
+        >
           <button
             type="button"
             onClick={handlePrevStep}

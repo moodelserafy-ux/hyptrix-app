@@ -12,8 +12,6 @@ import {
   Check,
   AlertTriangle,
   Newspaper,
-  Landmark,
-  Flame,
   Clapperboard,
 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -30,7 +28,6 @@ export function Stage4ProductionCrises() {
     aiMemoryLog,
     customDbPatch,
     resolveCrisisOption,
-    applyEmergencyGulfBailout,
     pushBreakingNewsModal,
     showToast,
     groqApiKeyClient,
@@ -162,16 +159,12 @@ export function Stage4ProductionCrises() {
     const chosen = option === 'A' ? crisis.optionA : crisis.optionB;
     if (chosen.cost > 0 && cash < chosen.cost) {
       showToast(
-        'سيولة الخزينة لا تكفي لتغطية هذا الخيار! يمكنك طلب تمويل خليجي طارئ أو اختيار الحل البديل.',
+        'سيولة الخزينة الحالية لا تكفي لتغطية تكلفة هذا الخيار! يرجى اختيار الحل البديل.',
         'warning'
       );
       return;
     }
     resolveCrisisOption(crisis.id, option);
-  };
-
-  const handleBailout = (crisisId: string) => {
-    applyEmergencyGulfBailout(crisisId);
   };
 
   const handleFinishFilming = () => {
@@ -357,15 +350,6 @@ export function Stage4ProductionCrises() {
                     {crisis.optionB.hypeDelta}
                   </span>
                 </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleBailout(crisis.id)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 py-2 text-[11px] font-black text-amber-900 transition hover:bg-amber-100"
-              >
-                <Landmark className="h-3.5 w-3.5" />
-                <span>تدخل تمويلي خليجي طارئ (+30M ج.م للخزينة +6 جودة +12 ضجة)</span>
               </button>
             </div>
           )}

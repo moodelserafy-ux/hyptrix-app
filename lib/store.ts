@@ -257,7 +257,7 @@ export interface CrisisEventItem {
     qualityDelta: number;
   };
   resolved?: boolean;
-  chosenOption?: 'A' | 'B' | 'VIP_BAILOUT';
+  chosenOption?: 'A' | 'B';
 }
 
 export interface CriticReviewItem {
@@ -1097,6 +1097,7 @@ export interface HyptrixGameState {
   breakingNewsQueue: WorldBreakingNewsModalItem[];
   festivalModalQueue: AutomaticFestivalCeremonyItem[];
   activeToast: FloatingToastItem | null;
+  isChildModalOpen: boolean;
   customDbPatch: Partial<MasterDatabase> | null;
   customDbUrl: string;
   supabaseUserEmail: string | null;
@@ -1104,6 +1105,7 @@ export interface HyptrixGameState {
   preferredGroqModel: GroqModelId;
 
   // Actions
+  setChildModalOpen: (open: boolean) => void;
   showToast: (
     message: string,
     type?: FloatingToastItem['type'],
@@ -1132,7 +1134,6 @@ export interface HyptrixGameState {
   toggleVipDinnerForTalent: (talentId: string) => void;
   setBackendPointsForTalent: (talentId: string, points: number) => void;
   watchVipAdStep: () => void;
-  applyEmergencyGulfBailout: (crisisId: string) => void;
   resolveCrisisOption: (crisisId: string, choice: 'A' | 'B') => void;
   completeProjectRelease: (record: ReleasedProjectRecord) => void;
   advanceReleaseTrackingDay: (
@@ -1265,11 +1266,14 @@ export const useGameStore = create<HyptrixGameState>()(
       breakingNewsQueue: [],
       festivalModalQueue: [],
       activeToast: null,
+      isChildModalOpen: false,
       customDbPatch: null,
       customDbUrl: '',
       supabaseUserEmail: null,
       groqApiKeyClient: '',
       preferredGroqModel: 'openai/gpt-oss-120b',
+
+      setChildModalOpen: (open) => set({ isChildModalOpen: open }),
 
       showToast: (message, type = 'warning', subtext) =>
         set({
@@ -2125,19 +2129,6 @@ export const useGameStore = create<HyptrixGameState>()(
           };
         }),
 
-      applyEmergencyGulfBailout: (crisisId) =>
-        set((state) => ({
-          cash: state.cash + 30_000_000,
-          draft: {
-            ...state.draft,
-            hypeScore: Math.min(100, state.draft.hypeScore + 12),
-            qualityModifier: state.draft.qualityModifier + 6,
-            crises: state.draft.crises.map((c) =>
-              c.id === crisisId ? { ...c, resolved: true, chosenOption: 'VIP_BAILOUT' } : c
-            ),
-          },
-        })),
-
       resolveCrisisOption: (crisisId, choice) =>
         set((state) => {
           const crisis = state.draft.crises.find((c) => c.id === crisisId);
@@ -2817,6 +2808,11 @@ export const useGameStore = create<HyptrixGameState>()(
     {
       name: 'hyptrix_tycoon_state_v2',
       storage: createJSONStorage(() => hybridStorage),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isChildModalOpen = false;
+        }
+      },
     }
   )
 );

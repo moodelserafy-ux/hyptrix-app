@@ -1,13 +1,35 @@
 import type { MetadataRoute } from 'next';
 
+const APP_URL =
+  process.env.APP_URL ||
+  'https://ais-pre-rocpe6ymx4aaq2syvt4glo-1004117229529.europe-west2.run.app';
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.APP_URL || 'https://hyptrix.com';
+  const now = new Date();
   return [
     {
-      url: baseUrl,
-      lastModified: new Date(),
+      url: APP_URL,
+      lastModified: now,
       changeFrequency: 'daily',
       priority: 1.0,
+      alternates: {
+        languages: {
+          ar: APP_URL,
+          'ar-EG': APP_URL,
+        },
+      },
+    },
+    {
+      url: `${APP_URL}/llms.txt`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.9,
+    },
+    {
+      url: `${APP_URL}/llms-full.txt`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.9,
     },
   ];
 }

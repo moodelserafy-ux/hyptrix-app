@@ -46,18 +46,6 @@ export function WorldPopupsOverlay() {
     return () => clearTimeout(timer);
   }, [activeToast, dismissToast]);
 
-  // Lock background body scroll whenever a modal popup is active
-  useEffect(() => {
-    if (currentFestival || currentNews) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [currentFestival, currentNews]);
-
   const toggleRevealCategory = (categoryName: string) => {
     if (!currentFestival) return;
     const key = `${currentFestival.id}_${categoryName}`;
@@ -176,7 +164,8 @@ export function WorldPopupsOverlay() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-3.5 backdrop-blur-md"
+            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3.5 backdrop-blur-md overscroll-contain touch-none select-none"
             dir="rtl"
           >
             {/* 1. ANNUAL FESTIVAL & AWARDS CEREMONY MODAL */}
@@ -187,7 +176,7 @@ export function WorldPopupsOverlay() {
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.93, y: 20, opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                className="glass-modal relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl shadow-2xl"
+                className="glass-modal relative max-h-[90vh] w-full max-w-xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl shadow-2xl"
               >
                 {/* Royal Gold & Velvet Header */}
                 <div className="relative overflow-hidden bg-gradient-to-l from-slate-950 via-indigo-950 to-slate-900 px-5 py-4 text-white">
@@ -395,7 +384,7 @@ export function WorldPopupsOverlay() {
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.92, y: 20, opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-                className="glass-modal relative w-full max-w-md overflow-hidden rounded-3xl shadow-2xl"
+                className="glass-modal relative max-h-[90vh] w-full max-w-md overflow-y-auto overscroll-contain touch-pan-y rounded-3xl shadow-2xl"
               >
                 {/* Editorial Magazine Header Ribbon */}
                 <div
