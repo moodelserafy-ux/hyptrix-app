@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useGameStore, formatGameDate } from '@/lib/store';
+import {
+  useGameStore,
+  formatGameDate,
+  SOCIAL_PR_CAMPAIGNS,
+  SocialPrCampaignItem,
+} from '@/lib/store';
+import { formatMoney } from '@/lib/game-engine';
 import {
   Newspaper,
   Sparkles,
@@ -16,6 +22,11 @@ import {
   X,
   TrendingUp,
   Quote,
+  Megaphone,
+  Flame,
+  Heart,
+  Share2,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -26,9 +37,35 @@ export function WorldPopupsOverlay() {
     festivalModalQueue,
     dismissFestivalCeremonyModal,
     studioName,
+    cash,
+    draft,
+    lastReleasedProject,
+    yearlyRivalReleases,
+    socialFeedLog,
+    isPrWarRoomOpen,
+    setPrWarRoomOpen,
+    launchSocialPrCampaign,
     activeToast,
     dismissToast,
   } = useGameStore();
+
+  const [launchingCampaignId, setLaunchingCampaignId] = useState<string | null>(
+    null
+  );
+  const [selectedRivalTarget, setSelectedRivalTarget] = useState<string>(
+    'المتحدون ميديا جروب'
+  );
+
+  const rivalStudioOptions = Array.from(
+    new Set([
+      ...(lastReleasedProject?.rivalReleases?.map((r) => r.studioName) || []),
+      ...(yearlyRivalReleases?.map((r) => r.studioName) || []),
+      'المتحدون ميديا جروب',
+      'سيرجي للإنتاج الفني',
+      'العدلي جروب للدراما',
+      'نيو سينما للقرن الجديد',
+    ])
+  ).slice(0, 6);
 
   const currentFestival = festivalModalQueue[0] || null;
   const currentNews = !currentFestival ? breakingNewsQueue[0] || null : null;
@@ -157,9 +194,9 @@ export function WorldPopupsOverlay() {
         )}
       </AnimatePresence>
 
-      {/* MODAL OVERLAY FOR ANNUAL AWARDS GALA OR EDITORIAL BREAKING NEWS */}
+      {/* MODAL OVERLAY FOR ANNUAL AWARDS GALA, EDITORIAL BREAKING NEWS, OR PR WAR ROOM */}
       <AnimatePresence>
-        {(currentFestival || currentNews) && (
+        {(currentFestival || currentNews || isPrWarRoomOpen) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -500,15 +537,261 @@ export function WorldPopupsOverlay() {
                     </div>
                   )}
 
-                  {/* Action CTA */}
-                  <button
-                    type="button"
-                    onClick={dismissBreakingNewsModal}
-                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-105"
-                  >
-                    <Check className="h-4 w-4" />
-                    <span>متابعة إدارة الاستوديو</span>
-                  </button>
+                  {/* Action CTAs */}
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        dismissBreakingNewsModal();
+                        setPrWarRoomOpen(true);
+                      }}
+                      className="flex min-h-[42px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-fuchsia-300 bg-gradient-to-r from-fuchsia-50 via-violet-50 to-cyan-50 px-4 py-2 text-xs font-black text-fuchsia-950 transition hover:border-fuchsia-500"
+                    >
+                      <Megaphone className="h-4 w-4 text-fuchsia-600" />
+                      <span>
+                        رد إعلامي: فتح غرفة عمليات التريند ومنصات X وتيك توك
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={dismissBreakingNewsModal}
+                      className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-105"
+                    >
+                      <Check className="h-4 w-4" />
+                      <span>متابعة إدارة الاستوديو</span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* 3. PR & SOCIAL MEDIA WAR ROOM MODAL (TikTok & X Trend Engine + Electronic Committees) */}
+            {!currentFestival && !currentNews && isPrWarRoomOpen && (
+              <motion.div
+                key="pr_war_room_modal"
+                initial={{ scale: 0.93, y: 20, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.93, y: 20, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                className="glass-modal relative max-h-[90vh] w-full max-w-2xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl shadow-2xl"
+              >
+                {/* Header */}
+                <div className="relative overflow-hidden bg-gradient-to-l from-slate-950 via-fuchsia-950 to-indigo-950 px-5 py-4 text-white">
+                  <div className="pointer-events-none absolute -top-10 -left-10 h-32 w-32 rounded-full bg-fuchsia-500/20 blur-2xl" />
+                  <div className="relative flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-fuchsia-500 to-cyan-500 text-white shadow-lg">
+                        <Megaphone className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-black text-cyan-300">
+                          <Flame className="h-3 w-3 text-amber-400" />
+                          <span>محرك السوشيال ميديا واللجان الإلكترونية</span>
+                        </span>
+                        <h2 className="mt-0.5 font-display text-base font-black text-white sm:text-lg">
+                          غرفة عمليات التريند ومنصتي X وTikTok
+                        </h2>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setPrWarRoomOpen(false)}
+                      className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/15 text-white transition hover:bg-white/25"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-4 sm:p-5">
+                  {/* Treasury & Active Work Strip */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/75 px-3.5 py-2.5">
+                    <div className="text-xs font-bold text-slate-700">
+                      العمل المستهدف:{' '}
+                      <strong className="font-black text-violet-900">
+                        «{lastReleasedProject?.title || draft.title || 'مشروع الاستوديو'}»
+                      </strong>{' '}
+                      · الضجة الحالية:{' '}
+                      <strong className="font-mono font-black text-amber-700">
+                        {draft.hypeScore}%
+                      </strong>
+                    </div>
+                    <div className="rounded-xl bg-emerald-600 px-3 py-1 font-mono text-xs font-black text-white tabular-nums">
+                      السيولة: {formatMoney(cash)} ج.م
+                    </div>
+                  </div>
+
+                  {/* Rival Studio Target Selector for Attack Campaigns */}
+                  <div className="rounded-2xl border border-rose-200/80 bg-rose-50/60 p-3">
+                    <label className="block text-[11px] font-black text-rose-950">
+                      حدد الشركة المنافسة المستهدفة في حال إطلاق حملة لجان مضادة:
+                    </label>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {rivalStudioOptions.map((stName) => (
+                        <button
+                          key={stName}
+                          type="button"
+                          onClick={() => setSelectedRivalTarget(stName)}
+                          className={`rounded-xl px-2.5 py-1 text-[11px] font-black transition ${
+                            selectedRivalTarget === stName
+                              ? 'bg-rose-600 text-white shadow-xs'
+                              : 'border border-rose-200 bg-white text-slate-700 hover:bg-rose-100'
+                          }`}
+                        >
+                          {stName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Campaigns Grid */}
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {SOCIAL_PR_CAMPAIGNS.map((camp: SocialPrCampaignItem) => {
+                      const isAttack = camp.type === 'attack_rival';
+                      const isBusy = launchingCampaignId === camp.id;
+                      return (
+                        <div
+                          key={camp.id}
+                          className={`flex flex-col justify-between rounded-2xl border-2 p-3.5 transition ${
+                            isAttack
+                              ? 'border-rose-200 bg-gradient-to-br from-rose-50/70 to-white'
+                              : 'border-indigo-100 bg-white'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span
+                                className={`rounded-lg px-2 py-0.5 text-[10px] font-black ${
+                                  camp.platform === 'TikTok'
+                                    ? 'bg-slate-900 text-cyan-300'
+                                    : isAttack
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-indigo-100 text-indigo-800'
+                                }`}
+                              >
+                                {camp.badgeLabel}
+                              </span>
+                              <span className="font-mono text-xs font-black text-emerald-700 tabular-nums">
+                                {formatMoney(camp.cost)} ج.م
+                              </span>
+                            </div>
+
+                            <h3 className="mt-1.5 font-display text-xs font-black text-slate-950 sm:text-sm">
+                              {camp.title}
+                            </h3>
+                            <p className="mt-1 text-[11px] font-bold leading-relaxed text-slate-600">
+                              {camp.description}
+                            </p>
+                            <div className="mt-2 rounded-xl bg-slate-100/90 px-2.5 py-1 text-[10px] font-black text-violet-800">
+                              {camp.impactSummary}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={async () => {
+                              setLaunchingCampaignId(camp.id);
+                              await launchSocialPrCampaign(
+                                camp.id,
+                                isAttack ? selectedRivalTarget : undefined
+                              );
+                              setLaunchingCampaignId(null);
+                            }}
+                            className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 px-3 text-xs font-black text-white shadow-xs transition hover:brightness-105 disabled:opacity-50 ${
+                              isAttack
+                                ? 'bg-gradient-to-r from-rose-600 to-orange-600'
+                                : 'bg-gradient-to-r from-violet-600 to-indigo-600'
+                            }`}
+                          >
+                            {isBusy ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                <span>جاري التنفيذ...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Flame className="h-3.5 w-3.5" />
+                                <span>
+                                  {isAttack
+                                    ? `ضرب «${selectedRivalTarget}» الآن`
+                                    : 'تمويل وتصدير التريند الآن'}
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Live Simulated X & TikTok Feed */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-950 p-3.5 text-white">
+                    <div className="mb-2.5 flex items-center justify-between">
+                      <span className="text-xs font-black text-cyan-300">
+                        البث الحي لمنصات التواصل (X & TikTok Live)
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400">
+                        تحديث فوري مع كل حملة
+                      </span>
+                    </div>
+
+                    {(!socialFeedLog || socialFeedLog.length === 0) ? (
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center text-xs font-bold text-slate-400">
+                        لم تطلق أي حملة تريند أو لجان إلكترونية بعد. اختر إحدى الحملات بالأعلى لتصدير عملك أو ضرب المنافسين!
+                      </div>
+                    ) : (
+                      <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+                        {socialFeedLog.slice(0, 6).map((post) => (
+                          <div
+                            key={post.id}
+                            className="rounded-xl border border-white/10 bg-white/5 p-2.5"
+                          >
+                            <div className="flex items-center justify-between text-[10px]">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`rounded px-1.5 py-0.5 font-black ${
+                                    post.platform === 'TikTok'
+                                      ? 'bg-cyan-500/20 text-cyan-300'
+                                      : 'bg-white/15 text-white'
+                                  }`}
+                                >
+                                  {post.platform}
+                                </span>
+                                <span className="font-black text-white">
+                                  {post.authorName}
+                                </span>
+                                <span dir="ltr" className="text-slate-400">
+                                  {post.handle}
+                                </span>
+                              </div>
+                              <span className="text-amber-300 font-bold">
+                                {post.timestampLabel}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs font-bold leading-relaxed text-slate-100">
+                              {post.content}
+                            </p>
+                            <div className="mt-1.5 flex items-center justify-between text-[10px] font-black">
+                              <span className="text-cyan-400">{post.hashtag}</span>
+                              <div className="flex items-center gap-3 text-slate-300">
+                                <span className="inline-flex items-center gap-1">
+                                  <Heart className="h-3 w-3 text-rose-400" />
+                                  {post.likes}
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <Share2 className="h-3 w-3 text-emerald-400" />
+                                  {post.shares}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             )}

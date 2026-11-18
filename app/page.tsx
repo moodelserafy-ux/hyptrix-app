@@ -53,6 +53,7 @@ export default function HomePage() {
     breakingNewsQueue,
     festivalModalQueue,
     isChildModalOpen,
+    isPrWarRoomOpen,
     draft,
     groqApiKeyClient,
     preferredGroqModel,
@@ -69,6 +70,7 @@ export default function HomePage() {
 
   const isTopOverlayOpen =
     settingsOpen ||
+    isPrWarRoomOpen ||
     breakingNewsQueue.length > 0 ||
     festivalModalQueue.length > 0;
   const isAnyModalOpen = isTopOverlayOpen || isChildModalOpen;

@@ -6,6 +6,8 @@ import {
   useGameStore,
   formatGameDate,
   getDaysRemainingUntilAnnualAwards,
+  STUDIO_FIXED_ASSETS,
+  getStudioAssetBenefits,
 } from '@/lib/store';
 import { GENRES } from '@/lib/db-resolver';
 import {
@@ -31,6 +33,10 @@ import {
   Flame,
   Crown,
   Settings,
+  Building2,
+  ShieldCheck,
+  Megaphone,
+  Loader2,
 } from 'lucide-react';
 
 export function StudioHubView({
@@ -57,13 +63,19 @@ export function StudioHubView({
     resetDraftForNewProject,
     setActiveScreen,
     setChildModalOpen,
+    setPrWarRoomOpen,
+    ownedStudioAssets,
+    purchaseStudioAsset,
     showToast,
   } = useGameStore();
 
   const [activeSheet, setActiveSheet] = useState<
-    null | 'markets' | 'archive' | 'history' | 'leaderboard'
+    null | 'markets' | 'archive' | 'history' | 'leaderboard' | 'assets'
   >(null);
   const [modalPage, setModalPage] = useState(0);
+  const [purchasingAssetId, setPurchasingAssetId] = useState<string | null>(null);
+
+  const assetBenefits = getStudioAssetBenefits(ownedStudioAssets);
 
   useEffect(() => {
     setChildModalOpen(Boolean(activeSheet));
@@ -127,7 +139,7 @@ export function StudioHubView({
   };
 
   const openModalSheet = (
-    sheet: 'markets' | 'archive' | 'history' | 'leaderboard'
+    sheet: 'markets' | 'archive' | 'history' | 'leaderboard' | 'assets'
   ) => {
     setModalPage(0);
     setActiveSheet(sheet);
@@ -421,21 +433,57 @@ export function StudioHubView({
           </div>
         </button>
 
+        <button
+          type="button"
+          onClick={() => openModalSheet('assets')}
+          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-emerald-200 border-b-4 border-b-emerald-300 bg-gradient-to-br from-emerald-50/90 to-white p-3.5 text-right shadow-2xs transition hover:border-emerald-400 active:border-b-2 active:translate-y-0.5"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 transition group-hover:scale-110">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div className="mt-2">
+            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
+              أصول الاستوديو الثابتة
+            </div>
+            <div className="mt-0.5 text-[10px] font-bold text-emerald-800 tabular-nums">
+              مملوك: {(ownedStudioAssets || []).length}/5 · خصم -{assetBenefits.totalDiscountPercent}%
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPrWarRoomOpen(true)}
+          className="group flex flex-col items-start justify-between rounded-2xl border-2 border-fuchsia-200 border-b-4 border-b-fuchsia-300 bg-gradient-to-br from-fuchsia-50/90 to-white p-3.5 text-right shadow-2xs transition hover:border-fuchsia-400 active:border-b-2 active:translate-y-0.5"
+        >
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-fuchsia-100 text-fuchsia-700 transition group-hover:scale-110">
+            <Megaphone className="h-5 w-5" />
+          </div>
+          <div className="mt-2">
+            <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
+              محرك التريند واللجان
+            </div>
+            <div className="mt-0.5 text-[10px] font-bold text-fuchsia-800">
+              حملات تيك توك وX وضرب المنافسين
+            </div>
+          </div>
+        </button>
+
         {onOpenSettings && (
           <button
             type="button"
             onClick={onOpenSettings}
-            className="group flex flex-col items-start justify-between rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-3.5 text-right shadow-2xs transition hover:border-violet-400 active:border-b-2 active:translate-y-0.5"
+            className="group flex flex-col items-start justify-between rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-3.5 text-right shadow-2xs transition hover:border-violet-400 active:border-b-2 active:translate-y-0.5 sm:col-span-2"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:scale-110">
               <Settings className="h-5 w-5" />
             </div>
             <div className="mt-2">
               <div className="font-display text-xs font-black text-slate-900 sm:text-sm">
-                الإعدادات والبيانات
+                الإعدادات والبيانات السحابية
               </div>
               <div className="mt-0.5 text-[10px] font-bold text-slate-500">
-                تخصيص الحزم أو إعادة الضبط
+                تخصيص الحزم أو مزامنة الحساب
               </div>
             </div>
           </button>
@@ -469,6 +517,7 @@ export function StudioHubView({
                     {activeSheet === 'archive' && 'أرشيف الأفلام والمسلسلات المنتجة'}
                     {activeSheet === 'history' && 'السجل التاريخي للاستوديو'}
                     {activeSheet === 'leaderboard' && 'الترتيب الرسمي لشركات الإنتاج'}
+                    {activeSheet === 'assets' && 'أصول الاستوديو الثابتة (البلاتوهات ومعدات المونتاج)'}
                   </h2>
                 </div>
                 <button
@@ -480,6 +529,110 @@ export function StudioHubView({
                   <X className="h-5 w-5" />
                 </button>
               </div>
+
+              {activeSheet === 'assets' && (
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-black text-emerald-950">
+                        مزايا البنية التحتية المملوكة حالياً:
+                      </span>
+                      <span className="rounded-xl bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white">
+                        خصم دائم -{assetBenefits.totalDiscountPercent}% على تكاليف الإنتاج
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] font-bold text-slate-600">
+                      امتلاك البلاتوهات ووحدات المونتاج يخفض تكاليف أعمالك القادمة تلقائياً ويمنحك درع حسم مجاني لأزمات التصوير في المرحلة الرابعة.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {STUDIO_FIXED_ASSETS.map((asset) => {
+                      const isOwned = (ownedStudioAssets || []).includes(asset.id);
+                      const isBusy = purchasingAssetId === asset.id;
+                      return (
+                        <div
+                          key={asset.id}
+                          className={`rounded-2xl border-2 p-3.5 transition ${
+                            isOwned
+                              ? 'border-emerald-400 border-b-4 border-b-emerald-600 bg-white'
+                              : 'border-indigo-100 bg-white/95'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="inline-block rounded-lg bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">
+                                {asset.categoryLabel}
+                              </span>
+                              <h3 className="mt-1 font-display text-sm font-black text-slate-900">
+                                {asset.name}
+                              </h3>
+                            </div>
+                            <span className="shrink-0 rounded-xl bg-emerald-50 px-2.5 py-1 font-mono text-xs font-black text-emerald-800 tabular-nums">
+                              {formatMoney(asset.price)} ج.م
+                            </span>
+                          </div>
+
+                          <p className="mt-1.5 text-xs font-bold leading-relaxed text-slate-600">
+                            {asset.description}
+                          </p>
+
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-black">
+                            <span className="rounded-lg bg-violet-100 px-2 py-0.5 text-violet-800">
+                              خصم تكاليف -{asset.costDiscountPercent}%
+                            </span>
+                            <span className="rounded-lg bg-amber-100 px-2 py-0.5 text-amber-900">
+                              جودة +{asset.qualityBonus} · ضجة +{asset.hypeBonus}
+                            </span>
+                            <span className="rounded-lg bg-cyan-100 px-2 py-0.5 text-cyan-900">
+                              +{formatMoney(asset.marketValueBoost)} ج.م قيمة سوقية
+                            </span>
+                          </div>
+
+                          <div className="mt-2 flex items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-2.5 py-1.5 text-[11px] font-bold text-emerald-950">
+                            <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                            <span>{asset.crisisShieldLabel}</span>
+                          </div>
+
+                          <div className="mt-3 border-t border-indigo-50 pt-2.5">
+                            {isOwned ? (
+                              <div className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2 text-xs font-black text-white">
+                                <CheckCircle2 className="h-4 w-4" />
+                                <span>أصل ثابت مملوك وموثق في خزينة الاستوديو ✓</span>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={async () => {
+                                  setPurchasingAssetId(asset.id);
+                                  await purchaseStudioAsset(asset.id);
+                                  setPurchasingAssetId(null);
+                                }}
+                                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2.5 px-4 text-xs font-black text-white shadow-sm transition hover:brightness-105 disabled:opacity-50"
+                              >
+                                {isBusy ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span>جاري توثيق الملكية عبر الخادم...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Building2 className="h-4 w-4" />
+                                    <span>
+                                      شراء وتوثيق الأصل ({formatMoney(asset.price)} ج.م)
+                                    </span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {activeSheet === 'markets' && (
                 <div className="space-y-3">

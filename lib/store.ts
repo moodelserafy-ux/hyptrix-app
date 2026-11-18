@@ -26,8 +26,199 @@ import {
   CompetitorStudio,
   getResolvedDatabase,
 } from './db-resolver';
+import {
+  verifyAndRecordServerTransaction,
+  fetchAuthoritativeStudioWallet,
+  getOrCreateStudioInstanceId,
+} from './supabase';
 
 export const DAYS_PER_GAME_YEAR = 120; // 10 game days per month × 12 months
+
+export interface StudioFixedAssetItem {
+  id: string;
+  name: string;
+  categoryLabel: string;
+  price: number;
+  marketValueBoost: number;
+  costDiscountPercent: number;
+  qualityBonus: number;
+  hypeBonus: number;
+  crisisShieldLabel: string;
+  description: string;
+}
+
+export const STUDIO_FIXED_ASSETS: StudioFixedAssetItem[] = [
+  {
+    id: 'soundstage_complex',
+    name: 'مجمع بلاتوهات التصوير الخاصة',
+    categoryLabel: 'بنية تحتية واستوديوهات',
+    price: 28_000_000,
+    marketValueBoost: 38_000_000,
+    costDiscountPercent: 12,
+    qualityBonus: 4,
+    hypeBonus: 3,
+    crisisShieldLabel: 'حماية فورية من أزمات المواقع والديكور وتأخر التصاريح الميدانية',
+    description:
+      'امتلاك بلاتوهات داخلية وخارجية مجهزة بالكامل يخفض تكلفة الديكور والمواقع في كافة أعمالك القادمة بنسبة 12% ويحميك مجاناً من أزمات البلاتوه.',
+  },
+  {
+    id: 'vfx_post_suite',
+    name: 'وحدة مونتاج ومؤثرات بصرية وتلوين دولية',
+    categoryLabel: 'ما بعد الإنتاج والمؤثرات',
+    price: 22_000_000,
+    marketValueBoost: 30_000_000,
+    costDiscountPercent: 10,
+    qualityBonus: 6,
+    hypeBonus: 4,
+    crisisShieldLabel: 'حسم مجاني لأزمات الجرافيكس والمونتاج وتلف النسخ المصورة',
+    description:
+      'غرف مونتاج وتصحيح ألوان وسيرفرات مؤثرات خاصة تقلل تكاليف الجرافيكس والأكشن 10% وتمنح كل عمل +6 نقاط جودة فنية.',
+  },
+  {
+    id: 'cinema_camera_fleet',
+    name: 'أسطول كاميرات وعدسات سينمائية IMAX',
+    categoryLabel: 'معدات تصوير وإضاءة',
+    price: 16_000_000,
+    marketValueBoost: 22_000_000,
+    costDiscountPercent: 8,
+    qualityBonus: 5,
+    hypeBonus: 2,
+    crisisShieldLabel: 'حماية كاملة من أعطال الكاميرات والإضاءة والصوت في موقع التصوير',
+    description:
+      'تملك أحدث الكاميرات والعدسات السينمائية بدلاً من إيجارها لكل فيلم، مما يوفر 8% من ميزانية الإنتاج ويرفع جودة الصورة.',
+  },
+  {
+    id: 'legal_censorship_shield',
+    name: 'القطاع القانوني ومكتب العلاقات الرقابية',
+    categoryLabel: 'حماية قانونية وتراخيص',
+    price: 14_000_000,
+    marketValueBoost: 18_000_000,
+    costDiscountPercent: 5,
+    qualityBonus: 2,
+    hypeBonus: 4,
+    crisisShieldLabel: 'تحييد فوري لأزمات الرقابة والدعاوى القضائية وخلافات العقود',
+    description:
+      'فريق مستشارين قانونيين يحسم أي نزاع رقابي أو أزمة عقود في البلاتوه بصفر تكلفة إضافية ويحمي سمعة الاستوديو.',
+  },
+  {
+    id: 'talent_academy',
+    name: 'أكاديمية تدريب الأبطال وورش التمثيل',
+    categoryLabel: 'تطوير مواهب وبروفات',
+    price: 19_000_000,
+    marketValueBoost: 25_000_000,
+    costDiscountPercent: 7,
+    qualityBonus: 4,
+    hypeBonus: 6,
+    crisisShieldLabel: 'منع أزمات إرهاق الممثلين وتأخر البروفات ومشاكل الأداء',
+    description:
+      'مركز بروفات وتأهيل بدني وتمثيلي يرفع جاهزية النجوم ويوفر 7% من نفقات التحضير والملابس والمجاميع.',
+  },
+];
+
+export function getStudioAssetBenefits(ownedAssets: string[] = []) {
+  const ownedItems = STUDIO_FIXED_ASSETS.filter((a) =>
+    ownedAssets.includes(a.id)
+  );
+  const totalDiscountPercent = Math.min(
+    35,
+    ownedItems.reduce((sum, item) => sum + item.costDiscountPercent, 0)
+  );
+  const totalQualityBonus = ownedItems.reduce(
+    (sum, item) => sum + item.qualityBonus,
+    0
+  );
+  const totalHypeBonus = ownedItems.reduce(
+    (sum, item) => sum + item.hypeBonus,
+    0
+  );
+  const totalMarketValueBoost = ownedItems.reduce(
+    (sum, item) => sum + item.marketValueBoost,
+    0
+  );
+  return {
+    ownedItems,
+    totalDiscountPercent,
+    costMultiplier: Number((1 - totalDiscountPercent / 100).toFixed(2)),
+    totalQualityBonus,
+    totalHypeBonus,
+    totalMarketValueBoost,
+  };
+}
+
+export interface SocialPrCampaignItem {
+  id:
+    | 'tiktok_viral_wave'
+    | 'x_hashtag_storm'
+    | 'rival_smear_campaign'
+    | 'critics_vip_screening';
+  title: string;
+  platform: 'TikTok' | 'X' | 'Mix';
+  cost: number;
+  type: 'boost_player' | 'attack_rival';
+  badgeLabel: string;
+  impactSummary: string;
+  description: string;
+}
+
+export const SOCIAL_PR_CAMPAIGNS: SocialPrCampaignItem[] = [
+  {
+    id: 'tiktok_viral_wave',
+    title: 'حملة مشاهد ومقاطع تريند على TikTok',
+    platform: 'TikTok',
+    cost: 4_500_000,
+    type: 'boost_player',
+    badgeLabel: 'تيك توك · #1 تريند المشاهدات',
+    impactSummary: '+15 ضجة جماهيرية · +0.5 تقييم جمهور · +12% دفعة إيرادات',
+    description:
+      'تمويل صناع المحتوى لنشر أقوى مشاهد وكواليس عملك على تيك توك لجذب جمهور الشباب والعائلات لقاعات العرض والمنصات.',
+  },
+  {
+    id: 'x_hashtag_storm',
+    title: 'عاصفة هاشتاج متصدر على منصة X',
+    platform: 'X',
+    cost: 6_000_000,
+    type: 'boost_player',
+    badgeLabel: 'منصة X · تصدر النقاشات الفنية',
+    impactSummary: '+18 ضجة جماهيرية · +14M قيمة سوقية · +15% دفعة شباك تذاكر',
+    description:
+      'إطلاق حملة حسابات ترويجية واسعة على إكس لتصدير اسم عملك واستوديوك في المركز الأول بالتريند المصري والعربي.',
+  },
+  {
+    id: 'rival_smear_campaign',
+    title: 'حملة لجان إلكترونية مضادة لضرب المنافسين',
+    platform: 'Mix',
+    cost: 8_500_000,
+    type: 'attack_rival',
+    badgeLabel: 'حرب تكسير عظام · ضرب المنافسين',
+    impactSummary: '-22% إيرادات المنافس · -48M من قيمة الشركة المنافسة · تقدم في الترتيب',
+    description:
+      'توجيه لجان إلكترونية على X وتيك توك لكشف ثغرات العمل المنافس وإثارة الجدل حوله لسحب البساط الجماهيري لصالحك.',
+  },
+  {
+    id: 'critics_vip_screening',
+    title: 'عرض خاص لكبار النقاد والمؤثرين السينمائيين',
+    platform: 'X',
+    cost: 5_500_000,
+    type: 'boost_player',
+    badgeLabel: 'علاقات عامة VIP · إشادات نقدية',
+    impactSummary: '+0.6 تقييم النقاد · +4% سمعة الاستوديو · +10 ضجة جماهيرية',
+    description:
+      'تنظيم عرض سجادة حمراء خاص لأبرز نقاد السينما وكتاب الرأي لرفع التقييم النقدي وتعزيز فرص العمل في جوائز نهاية العام.',
+  },
+];
+
+export interface LiveSocialFeedPost {
+  id: string;
+  platform: 'X' | 'TikTok';
+  authorName: string;
+  handle: string;
+  content: string;
+  hashtag: string;
+  likes: string;
+  shares: string;
+  sentiment: 'viral_boost' | 'rival_attack';
+  timestampLabel: string;
+}
 
 // Hybrid IndexedDB + localStorage storage adapter
 const hybridStorage: StateStorage = {
@@ -1103,9 +1294,21 @@ export interface HyptrixGameState {
   supabaseUserEmail: string | null;
   groqApiKeyClient: string;
   preferredGroqModel: GroqModelId;
+  ownedStudioAssets: string[];
+  ledgerSignature: string;
+  socialFeedLog: LiveSocialFeedPost[];
+  isPrWarRoomOpen: boolean;
 
   // Actions
   setChildModalOpen: (open: boolean) => void;
+  setPrWarRoomOpen: (open: boolean) => void;
+  purchaseStudioAsset: (assetId: string) => Promise<boolean>;
+  resolveCrisisWithStudioAsset: (crisisId: string) => void;
+  launchSocialPrCampaign: (
+    campaignId: SocialPrCampaignItem['id'],
+    targetRivalStudio?: string
+  ) => Promise<boolean>;
+  verifyWalletWithServer: () => Promise<void>;
   showToast: (
     message: string,
     type?: FloatingToastItem['type'],
@@ -1272,8 +1475,447 @@ export const useGameStore = create<HyptrixGameState>()(
       supabaseUserEmail: null,
       groqApiKeyClient: '',
       preferredGroqModel: 'openai/gpt-oss-120b',
+      ownedStudioAssets: [],
+      ledgerSignature: '',
+      socialFeedLog: [],
+      isPrWarRoomOpen: false,
 
       setChildModalOpen: (open) => set({ isChildModalOpen: open }),
+      setPrWarRoomOpen: (open) => set({ isPrWarRoomOpen: open }),
+
+      verifyWalletWithServer: async () => {
+        const state = get();
+        const instanceId = getOrCreateStudioInstanceId();
+        const res = await fetchAuthoritativeStudioWallet(
+          instanceId,
+          state.cash,
+          state.marketValue,
+          state.ownedStudioAssets || [],
+          state.ledgerSignature || ''
+        );
+        if (res && res.ok) {
+          if (res.tamperDetected) {
+            set({
+              cash: res.correctedCash,
+              marketValue: res.correctedMarketValue,
+              ownedStudioAssets: res.ownedAssets,
+              ledgerSignature: res.ledgerSignature,
+            });
+            get().showToast(
+              res.message ||
+                'تمت مطابقة خزينة الاستوديو مع السجل المالي الموثق على الخادم.',
+              'warning'
+            );
+          } else {
+            set({
+              ledgerSignature: res.ledgerSignature,
+              ownedStudioAssets:
+                res.ownedAssets.length > 0
+                  ? res.ownedAssets
+                  : state.ownedStudioAssets,
+            });
+          }
+        }
+      },
+
+      purchaseStudioAsset: async (assetId) => {
+        const state = get();
+        const asset = STUDIO_FIXED_ASSETS.find((a) => a.id === assetId);
+        if (!asset) return false;
+        if ((state.ownedStudioAssets || []).includes(assetId)) {
+          state.showToast('هذا الأصل مملوك بالفعل ضمن أصول الاستوديو الثابتة!', 'info');
+          return false;
+        }
+        if (state.cash < asset.price) {
+          state.showToast(
+            'السيولة النقدية في الخزينة لا تكفي لشراء هذا الأصل الثابت حالياً!',
+            'warning',
+            `تحتاج إلى ${formatMoney(asset.price)} ج.م لإتمام الشراء.`
+          );
+          return false;
+        }
+
+        const previousCash = state.cash;
+        const optimisticCash = previousCash - asset.price;
+        const nextAssets = [...(state.ownedStudioAssets || []), assetId];
+        const nextMvMod = (state.marketValueModifier || 0) + asset.marketValueBoost;
+        const nextMarketVal = calculateStudioMarketValue({
+          cash: optimisticCash,
+          reputation: state.reputation,
+          releasedProjects: state.releasedProjects,
+          marketValueModifier: nextMvMod,
+        });
+
+        // Verify purchase on server
+        const verification = await verifyAndRecordServerTransaction({
+          studioInstanceId: getOrCreateStudioInstanceId(),
+          studioName: state.studioName,
+          ceoName: state.ceoName,
+          userEmail: state.supabaseUserEmail,
+          transactionType: 'PURCHASE_STUDIO_ASSET',
+          amountDelta: -asset.price,
+          previousCash,
+          expectedNewCash: optimisticCash,
+          marketValue: nextMarketVal,
+          reputation: state.reputation,
+          ownedAssets: nextAssets,
+          itemId: asset.id,
+          itemLabel: asset.name,
+          previousSignature: state.ledgerSignature,
+        });
+
+        const finalCash = verification.ok
+          ? verification.correctedCash
+          : optimisticCash;
+        const finalAssets = verification.ok
+          ? verification.ownedAssets
+          : nextAssets;
+
+        set((cur) => ({
+          cash: finalCash,
+          ownedStudioAssets: finalAssets,
+          marketValueModifier: nextMvMod,
+          marketValue: nextMarketVal,
+          ledgerSignature: verification.ledgerSignature || cur.ledgerSignature,
+          draft: {
+            ...cur.draft,
+            qualityModifier: cur.draft.qualityModifier + asset.qualityBonus,
+            hypeScore: Math.min(100, cur.draft.hypeScore + asset.hypeBonus),
+          },
+          worldHistory: [
+            {
+              year: cur.currentYear,
+              eventText: `استحواذ استراتيجي: شراء «${asset.name}» بقيمة ${formatMoney(asset.price)} ج.م كأصل ثابت يخفض تكاليف الإنتاج ويحمي من أزمات التصوير.`,
+              category: 'milestone',
+            },
+            ...cur.worldHistory,
+          ],
+          aiMemoryLog: [
+            `اشترت شركة "${cur.studioName}" الأصل الثابت "${asset.name}" بقيمة ${formatMoney(asset.price)} ج.م مما رفع قيمتها السوقية وخفض تكاليف إنتاجها.`,
+            ...(cur.aiMemoryLog || []),
+          ].slice(0, 25),
+        }));
+
+        get().showToast(
+          `تم شراء وتوثيق «${asset.name}» ضمن أصول الاستوديو الثابتة!`,
+          'success',
+          `خصم دائم -${asset.costDiscountPercent}% على تكاليف الإنتاج + درع حماية في البلاتوه`
+        );
+        return true;
+      },
+
+      resolveCrisisWithStudioAsset: (crisisId) =>
+        set((state) => {
+          const crisis = state.draft.crises.find((c) => c.id === crisisId);
+          if (!crisis || crisis.resolved) return state;
+          const benefits = getStudioAssetBenefits(state.ownedStudioAssets);
+          if (benefits.ownedItems.length === 0) return state;
+
+          const bonusQuality = Math.max(4, crisis.optionA.qualityDelta, crisis.optionB.qualityDelta);
+          const bonusHype = Math.max(4, crisis.optionA.hypeDelta, crisis.optionB.hypeDelta);
+
+          return {
+            reputation: Math.min(100, state.reputation + 2),
+            draft: {
+              ...state.draft,
+              hypeScore: Math.min(100, state.draft.hypeScore + bonusHype),
+              qualityModifier: state.draft.qualityModifier + bonusQuality,
+              crises: state.draft.crises.map((c) =>
+                c.id === crisisId ? { ...c, resolved: true, chosenOption: 'A' } : c
+              ),
+            },
+          };
+        }),
+
+      launchSocialPrCampaign: async (campaignId, targetRivalStudio) => {
+        const state = get();
+        const campaign = SOCIAL_PR_CAMPAIGNS.find((c) => c.id === campaignId);
+        if (!campaign) return false;
+        if (state.cash < campaign.cost) {
+          state.showToast(
+            'السيولة النقدية في الخزينة لا تكفي لتمويل هذه الحملة الإعلامية!',
+            'warning',
+            `تحتاج إلى ${formatMoney(campaign.cost)} ج.م لإطلاق الحملة.`
+          );
+          return false;
+        }
+
+        const previousCash = state.cash;
+        const expectedNewCash = previousCash - campaign.cost;
+
+        const verification = await verifyAndRecordServerTransaction({
+          studioInstanceId: getOrCreateStudioInstanceId(),
+          studioName: state.studioName,
+          ceoName: state.ceoName,
+          userEmail: state.supabaseUserEmail,
+          transactionType: 'LAUNCH_PR_CAMPAIGN',
+          amountDelta: -campaign.cost,
+          previousCash,
+          expectedNewCash,
+          marketValue: state.marketValue,
+          reputation: state.reputation,
+          ownedAssets: state.ownedStudioAssets || [],
+          itemId: campaign.id,
+          itemLabel: campaign.title,
+          previousSignature: state.ledgerSignature,
+        });
+
+        const finalCash = verification.ok
+          ? verification.correctedCash
+          : expectedNewCash;
+
+        const activeProjectTitle =
+          state.lastReleasedProject?.title ||
+          state.draft.title ||
+          'العمل الجديد';
+        const rivalStudio =
+          targetRivalStudio ||
+          state.lastReleasedProject?.rivalReleases?.[0]?.studioName ||
+          state.yearlyRivalReleases?.[0]?.studioName ||
+          'المتحدون ميديا جروب';
+        const rivalFilmTitle =
+          state.lastReleasedProject?.rivalReleases?.find(
+            (r) => r.studioName === rivalStudio
+          )?.title ||
+          state.yearlyRivalReleases?.find((r) => r.studioName === rivalStudio)
+            ?.title ||
+          'العمل المنافس';
+
+        const cleanTag = activeProjectTitle.replace(/\s+/g, '_');
+        const rivalTag = rivalFilmTitle.replace(/\s+/g, '_');
+
+        const newPosts: LiveSocialFeedPost[] = [];
+        if (campaign.id === 'tiktok_viral_wave') {
+          newPosts.push(
+            {
+              id: `tt_${Date.now()}_1`,
+              platform: 'TikTok',
+              authorName: 'عمر سينما ريفيو',
+              handle: '@OmarCinemaEG',
+              content: `مشهد المواجهة في «${activeProjectTitle}» من إنتاج ${state.studioName} كسر الدنيا على تيك توك! الإخراج والتمثيل في حتة تانية خالص 🔥🎬`,
+              hashtag: `#${cleanTag}`,
+              likes: '284K',
+              shares: '49.2K',
+              sentiment: 'viral_boost',
+              timestampLabel: 'الآن · تريند #1 تيك توك',
+            },
+            {
+              id: `tt_${Date.now()}_2`,
+              platform: 'TikTok',
+              authorName: 'سارة تريندات الفن',
+              handle: '@SaraPopTrends',
+              content: `القاعة كلها كانت بتصقف في عرض «${activeProjectTitle}».. لازم تشوفوه في الويك إند ده! 🍿✨`,
+              hashtag: `#${cleanTag}_يكتسح`,
+              likes: '162K',
+              shares: '28.5K',
+              sentiment: 'viral_boost',
+              timestampLabel: 'الآن · مقطع رائج',
+            }
+          );
+        } else if (campaign.id === 'x_hashtag_storm') {
+          newPosts.push(
+            {
+              id: `x_${Date.now()}_1`,
+              platform: 'X',
+              authorName: 'مرصد شباك التذاكر المصري',
+              handle: '@BoxOffice_Masr',
+              content: `تصدر هاشتاج #${cleanTag} قائمة الأكثر تداولاً في مصر والخليج بعد إقبال جماهيري قياسي على حفلات شركة «${state.studioName}» بقيادة ${state.ceoName}.`,
+              hashtag: `#${cleanTag}`,
+              likes: '54.8K',
+              shares: '19.4K',
+              sentiment: 'viral_boost',
+              timestampLabel: 'الآن · متصدر في مصر',
+            },
+            {
+              id: `x_${Date.now()}_2`,
+              platform: 'X',
+              authorName: 'عشاق الفن السابع',
+              handle: '@ArabicFilmClub',
+              content: `«${state.studioName}» تثبت هذا الموسم أنها الرقم الأصعب في معادلة الإنتاج الضخم مع «${activeProjectTitle}» 👏🔥`,
+              hashtag: `#${state.studioName.replace(/\s+/g, '_')}`,
+              likes: '31.2K',
+              shares: '9.1K',
+              sentiment: 'viral_boost',
+              timestampLabel: 'منذ دقيقتين',
+            }
+          );
+        } else if (campaign.id === 'rival_smear_campaign') {
+          newPosts.push(
+            {
+              id: `smear_${Date.now()}_1`,
+              platform: 'X',
+              authorName: 'ناقد بدون مجاملة',
+              handle: '@NoFilterCritic',
+              content: `خيبة أمل كبيرة في مستوى «${rivalFilmTitle}» التابع لشركة «${rivalStudio}».. استسهال واضح في الكتابة ومط وتطويل أفقد الجمهور حماسه للعمل! 👎`,
+              hashtag: `#سقوط_${rivalTag}`,
+              likes: '41.6K',
+              shares: '16.3K',
+              sentiment: 'rival_attack',
+              timestampLabel: 'الآن · جدل واسع',
+            },
+            {
+              id: `smear_${Date.now()}_2`,
+              platform: 'TikTok',
+              authorName: 'كواليس السوشيال',
+              handle: '@SocialRadarEG',
+              content: `تراجع ملحوظ في إقبال الجمهور على «${rivalFilmTitle}» أمام زخم أعمال «${state.studioName}» هذا الأسبوع 📉`,
+              hashtag: `#مقارنة_الموسم`,
+              likes: '118K',
+              shares: '22.4K',
+              sentiment: 'rival_attack',
+              timestampLabel: 'الآن · تيك توك',
+            }
+          );
+        } else {
+          newPosts.push({
+            id: `vip_${Date.now()}_1`,
+            platform: 'X',
+            authorName: 'رابطة نقاد السينما',
+            handle: '@CairoCriticsGuild',
+            content: `إشادات نقدية واسعة بعد العرض الخاص لـ «${activeProjectTitle}» من إنتاج «${state.studioName}»؛ تكامل بصري ودرامي يضعه في صدارة ترشيحات جوائز العام 🏆🎬`,
+            hashtag: `#${cleanTag}`,
+            likes: '38.9K',
+            shares: '11.2K',
+            sentiment: 'viral_boost',
+            timestampLabel: 'الآن · عرض النقاد الخاص',
+          });
+        }
+
+        set((cur) => {
+          let nextLast = cur.lastReleasedProject;
+          let nextProjects = cur.releasedProjects;
+          const nextCompDelta = { ...cur.competitorNetWorthDelta };
+          let nextMvMod = cur.marketValueModifier || 0;
+          let nextRep = cur.reputation;
+          let nextHype = cur.draft.hypeScore;
+
+          if (campaign.id === 'tiktok_viral_wave') {
+            nextHype = Math.min(100, nextHype + 15);
+            if (nextLast) {
+              const revBoost = Math.round(nextLast.totalGrossRevenue * 0.12) + 6_500_000;
+              nextLast = {
+                ...nextLast,
+                audienceScore: Number(Math.min(9.6, nextLast.audienceScore + 0.5).toFixed(1)),
+                boxOfficeRevenue: nextLast.boxOfficeRevenue + revBoost,
+                totalGrossRevenue: nextLast.totalGrossRevenue + revBoost,
+                targetGrossRevenue: (nextLast.targetGrossRevenue || nextLast.totalGrossRevenue) + revBoost,
+                netProfit: nextLast.netProfit + revBoost,
+                viralTrendLabel: `#${cleanTag} يتصدر تيك توك بملايين المشاهدات 🔥`,
+              };
+            }
+          } else if (campaign.id === 'x_hashtag_storm') {
+            nextHype = Math.min(100, nextHype + 18);
+            nextMvMod += 14_000_000;
+            if (nextLast) {
+              const revBoost = Math.round(nextLast.totalGrossRevenue * 0.15) + 8_000_000;
+              nextLast = {
+                ...nextLast,
+                audienceScore: Number(Math.min(9.6, nextLast.audienceScore + 0.4).toFixed(1)),
+                boxOfficeRevenue: nextLast.boxOfficeRevenue + revBoost,
+                totalGrossRevenue: nextLast.totalGrossRevenue + revBoost,
+                targetGrossRevenue: (nextLast.targetGrossRevenue || nextLast.totalGrossRevenue) + revBoost,
+                netProfit: nextLast.netProfit + revBoost,
+                viralTrendLabel: `#${cleanTag} تريند رقم #1 على منصة X 🚀`,
+              };
+            }
+          } else if (campaign.id === 'rival_smear_campaign') {
+            const prevRival = nextCompDelta[rivalStudio] || {
+              netWorthDelta: 0,
+              releasesDelta: 0,
+              awardsDelta: 0,
+            };
+            nextCompDelta[rivalStudio] = {
+              ...prevRival,
+              netWorthDelta: prevRival.netWorthDelta - 48_000_000,
+            };
+            if (nextLast) {
+              const updatedRivals = nextLast.rivalReleases.map((r) => {
+                if (r.studioName === rivalStudio || r.title === rivalFilmTitle) {
+                  const reducedRev = Math.max(
+                    18_000_000,
+                    Math.round(r.boxOfficeRevenue * 0.78)
+                  );
+                  return {
+                    ...r,
+                    boxOfficeRevenue: reducedRev,
+                    targetBoxOfficeRevenue: Math.round(
+                      (r.targetBoxOfficeRevenue || reducedRev) * 0.78
+                    ),
+                    criticScore: Number(Math.max(4.5, r.criticScore - 0.7).toFixed(1)),
+                  };
+                }
+                return r;
+              });
+              const allRevs = [
+                nextLast.totalGrossRevenue,
+                ...updatedRivals.map((r) => r.boxOfficeRevenue),
+              ].sort((a, b) => b - a);
+              const newRank = Math.max(
+                1,
+                allRevs.indexOf(nextLast.totalGrossRevenue) + 1
+              );
+              nextLast = {
+                ...nextLast,
+                rivalReleases: updatedRivals,
+                boxOfficeRank: newRank,
+              };
+            }
+          } else if (campaign.id === 'critics_vip_screening') {
+            nextRep = Math.min(100, nextRep + 4);
+            nextHype = Math.min(100, nextHype + 10);
+            if (nextLast) {
+              nextLast = {
+                ...nextLast,
+                criticScore: Number(Math.min(9.5, nextLast.criticScore + 0.6).toFixed(1)),
+              };
+            }
+          }
+
+          if (nextLast) {
+            nextProjects = cur.releasedProjects.map((p) =>
+              p.id === nextLast!.id ? nextLast! : p
+            );
+          }
+
+          const nextMarketVal = calculateStudioMarketValue({
+            cash: finalCash,
+            reputation: nextRep,
+            releasedProjects: nextProjects,
+            marketValueModifier: nextMvMod,
+          });
+
+          return {
+            cash: finalCash,
+            reputation: nextRep,
+            marketValueModifier: nextMvMod,
+            marketValue: nextMarketVal,
+            competitorNetWorthDelta: nextCompDelta,
+            lastReleasedProject: nextLast,
+            releasedProjects: nextProjects,
+            ledgerSignature:
+              verification.ledgerSignature || cur.ledgerSignature,
+            draft: {
+              ...cur.draft,
+              hypeScore: nextHype,
+            },
+            socialFeedLog: [...newPosts, ...(cur.socialFeedLog || [])].slice(
+              0,
+              20
+            ),
+            aiMemoryLog: [
+              `أطلقت شركة "${cur.studioName}" حملة (${campaign.title}) بتكلفة ${formatMoney(campaign.cost)} ج.م على منصات التواصل الاجتماعي.`,
+              ...(cur.aiMemoryLog || []),
+            ].slice(0, 25),
+          };
+        });
+
+        get().showToast(
+          `تم إطلاق «${campaign.title}» وتصدر المشهد على منصات التواصل!`,
+          'success',
+          campaign.impactSummary
+        );
+        return true;
+      },
 
       showToast: (message, type = 'warning', subtext) =>
         set({
@@ -2474,24 +3116,29 @@ export const useGameStore = create<HyptrixGameState>()(
           if (state.aiGeneratedActors.some((a) => a.name === actor.name)) {
             return state;
           }
+          const cleanActor: ActorItem = {
+            ...actor,
+            isAiGenerated: false,
+            lastEvolutionNote: undefined,
+          };
           const newsItem: WorldBreakingNewsModalItem = {
-            id: `ai_star_${actor.id}_${Date.now()}`,
+            id: `ai_star_${cleanActor.id}_${Date.now()}`,
             day: state.gameDay,
             year: state.currentYear,
             category: 'rising_talent',
-            badgeLabel: 'موهبة صاعدة جديدة في الساحة ✨',
+            badgeLabel: 'اكتشاف سينمائي جديد ⭐',
             headline:
               newsHeadline ||
-              `اكتشاف الموهبة الصاعدة «${actor.name}» وانضمامه لبورصة النجوم!`,
+              `تألق الوجه السينمائي الجديد «${cleanActor.name}» وانضمامه لبورصة النجوم!`,
             detail:
               newsDetail ||
-              `لفت الوجه الجديد «${actor.name}» (${actor.age} سنة) أنظار صناع السينما والدراما بفضل حضوره القوي، وأصبح متاحاً الآن للتعاقد في سوق الممثلين.`,
-            highlightName: actor.name,
-            extraStatBadge: `تقييم ${actor.stats.overall} · العمر ${actor.age} سنة`,
-            gameImpactLabel: `تأثير الخبر: انضمام «${actor.name}» رسمياً لسوق الممثلين`,
+              `لفت الفنان الشاب «${cleanActor.name}» (${cleanActor.age} سنة) أنظار صناع السينما والدراما بفضل حضوره القوي، وأصبح متاحاً الآن للتعاقد في سوق الممثلين.`,
+            highlightName: cleanActor.name,
+            extraStatBadge: `تقييم ${cleanActor.stats.overall} · العمر ${cleanActor.age} سنة`,
+            gameImpactLabel: `تأثير الخبر: انضمام «${cleanActor.name}» رسمياً لسوق الممثلين`,
           };
           return {
-            aiGeneratedActors: [actor, ...state.aiGeneratedActors],
+            aiGeneratedActors: [cleanActor, ...state.aiGeneratedActors],
             breakingNewsQueue:
               state.breakingNewsQueue.length === 0
                 ? [newsItem]
@@ -2505,7 +3152,7 @@ export const useGameStore = create<HyptrixGameState>()(
               ...state.worldHistory,
             ],
             aiMemoryLog: [
-              `ظهر الممثل الصاعد الجديد "${actor.name}" (${actor.age} سنة) في الساحة الفنية بتقييم ${actor.stats.overall}.`,
+              `ظهر الفنان الشاب الجديد "${cleanActor.name}" (${cleanActor.age} سنة) في الساحة الفنية بتقييم ${cleanActor.stats.overall}.`,
               ...(state.aiMemoryLog || []),
             ].slice(0, 25),
           };
@@ -2811,6 +3458,24 @@ export const useGameStore = create<HyptrixGameState>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.isChildModalOpen = false;
+          state.isPrWarRoomOpen = false;
+          // Sanitize any legacy cached actors so no "موهبة صاعدة" or AI note remains
+          if (Array.isArray(state.aiGeneratedActors)) {
+            state.aiGeneratedActors = state.aiGeneratedActors.map((a) => ({
+              ...a,
+              isAiGenerated: false,
+              lastEvolutionNote:
+                a.lastEvolutionNote &&
+                (a.lastEvolutionNote.includes('موهبة صاعدة') ||
+                  a.lastEvolutionNote.includes('الذكاء'))
+                  ? undefined
+                  : a.lastEvolutionNote,
+            }));
+          }
+          // Trigger server-side financial verification on load
+          setTimeout(() => {
+            state.verifyWalletWithServer?.();
+          }, 400);
         }
       },
     }

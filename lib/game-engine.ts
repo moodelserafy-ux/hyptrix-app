@@ -615,13 +615,30 @@ export function evaluateTalentOfferDeep(params: {
     ? ROLE_BILLING_META[roleBillingSize]?.label.split(' ')[0] || 'الدور'
     : 'قيادة العمل';
 
+  const seedVal = Array.from(
+    `${params.talentName}_${projectTitle}_${offeredSalary}_${roleBillingSize}`
+  ).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+
   if (willAccept) {
     const directorClause = directorName
-      ? ` ووجود المخرج ${directorName}`
+      ? ` وبالتعاون مع المخرج ${directorName}`
       : '';
     const dinnerClause = vipDinner
-      ? ' وبعد جلسة القراءة الخاصة وعشاء العمل،'
+      ? ' وبعد جلسة القراءة الخاصة،'
       : '';
+    const roleText = customRoleDescription.trim() || roleBillingLabel;
+    const finText = `${formatMoney(offeredSalary)} ج.م${
+      backendPoints > 0 ? ` + ${backendPoints}% من الأرباح` : ''
+    }`;
+
+    const acceptVariants = [
+      `تحمست جداً لتفاصيل شخصية «${roleText}» في سيناريو «${projectTitle}»${directorClause}،${dinnerClause} كما أن العرض المالي (${finText}) يليق بحجم العمل ومكانتي الفنية. أوافق رسمياً على التوقيع!`,
+      `بعد مراجعة ورق «${projectTitle}» مع مكتب إدارة أعمالي، وجدت أن دور «${roleText}» يمثل نقلة فنية قوية في (${genreName})${directorClause}، والعقد المقدم (${finText}) عادل جداً. يسعدني الانضمام للفريق!`,
+      `أعجبتني حبكة «${projectTitle}» ومساحة دور «${roleText}» على الشاشة${directorClause}،${dinnerClause} والتقدير المادي (${finText}) يحسم قراري بالموافقة الفورية وبدء التحضيرات.`,
+      `مشروع «${projectTitle}» يمتلك كل مقومات النجاح الجماهيري والنقدي، ودور «${roleText}» مكتوب بعناية${directorClause}. أقبل العرض المالي (${finText}) ومستعد لدخول البلاتوه.`,
+      `رهاني هذا الموسم سيكون على «${projectTitle}»؛ شخصية «${roleText}» استفزت طاقتي التمثيلية${directorClause}، وبنود التعاقد (${finText}) مرضية تماماً لطرفينا.`,
+    ];
+
     return {
       willAccept: true,
       expectedMinimumSalary,
@@ -630,7 +647,7 @@ export function evaluateTalentOfferDeep(params: {
       financialRatio,
       roleFitVerdict,
       rejectionCategory: 'none',
-      detailedReason: `أعجبتني مساحة الدور (${customRoleDescription || roleBillingLabel}) في سيناريو «${projectTitle}»${directorClause}،${dinnerClause} والعرض المالي (${formatMoney(offeredSalary)} ج.م${backendPoints > 0 ? ` + ${backendPoints}% من الأرباح` : ''}) يعكس تقديراً احترافياً لمكانتي الفنية. يسعدني التوقيع معكم!`,
+      detailedReason: acceptVariants[seedVal % acceptVariants.length],
     };
   }
 
@@ -647,6 +664,13 @@ export function evaluateTalentOfferDeep(params: {
     };
   }
 
+  const rejectVariants = [
+    `رغم إعجابي بفكرة «${projectTitle}» ودور «${customRoleDescription || roleBillingLabel}»، إلا أن العرض المالي (${formatMoney(offeredSalary)} ج.م) يقل عن أجري السوقي المتوقع (${formatMoney(expectedMinimumSalary)} ج.م) لحجم التفرغ المطلوب.`,
+    `اعتذر وكيل أعمالي عن عدم إتمام التعاقد على «${projectTitle}»؛ القيمة المالية المعروضة (${formatMoney(offeredSalary)} ج.م) لا تتناسب مع أجر الفئة (${starTier}) الذي لا يقل عن ${formatMoney(expectedMinimumSalary)} ج.م.`,
+    `النص الدرامي لعمل «${projectTitle}» واعد، لكن الفجوة المالية بين عرضكم (${formatMoney(offeredSalary)} ج.م) ومتطلبات التعاقد (${formatMoney(expectedMinimumSalary)} ج.م) تحول دون توقيعي حالياً.`,
+    `بعد دراسة عرض «${projectTitle}»، أرى أن الميزانية المخصصة لأجري (${formatMoney(offeredSalary)} ج.م) تحتاج إلى مراجعة لتصل إلى حدود ${formatMoney(expectedMinimumSalary)} ج.م أو تعويضها بنسبة أرباح أعلى.`,
+  ];
+
   return {
     willAccept: false,
     expectedMinimumSalary,
@@ -655,7 +679,7 @@ export function evaluateTalentOfferDeep(params: {
     financialRatio,
     roleFitVerdict,
     rejectionCategory: 'underpaid',
-    detailedReason: `رغم اهتمامي بفكرة «${projectTitle}» ودور «${customRoleDescription || roleBillingLabel}»، إلا أن العرض المالي (${formatMoney(offeredSalary)} ج.م) أقل من أجري السوقي المتوقع (${formatMoney(expectedMinimumSalary)} ج.م) لحجم التفرغ المطلوب.`,
+    detailedReason: rejectVariants[seedVal % rejectVariants.length],
   };
 }
 

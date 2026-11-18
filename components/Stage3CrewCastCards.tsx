@@ -6,6 +6,7 @@ import {
   OfferRoleSlot,
   SLOT_ARABIC_NAMES,
   getLiveActorsWithEvolution,
+  getStudioAssetBenefits,
   TalentOfferRecord,
 } from '@/lib/store';
 import {
@@ -37,7 +38,6 @@ import {
   Award,
   Flame,
   Zap,
-  Wand2,
   Music,
   Camera,
   Film,
@@ -107,7 +107,13 @@ export function Stage3CrewCastCards() {
     showToast,
     groqApiKeyClient,
     preferredGroqModel,
+    ownedStudioAssets,
   } = useGameStore();
+
+  const studioAssetBenefits = useMemo(
+    () => getStudioAssetBenefits(ownedStudioAssets),
+    [ownedStudioAssets]
+  );
 
   const db = useMemo(() => getResolvedDatabase(customDbPatch), [customDbPatch]);
 
@@ -143,7 +149,6 @@ export function Stage3CrewCastCards() {
   const [roleBillingSize, setRoleBillingSize] = useState<RoleBillingSize>('lead_star');
   const [customRoleName, setCustomRoleName] = useState<string>('');
   const [isEvaluatingOffer, setIsEvaluatingOffer] = useState(false);
-  const [isGeneratingRole, setIsGeneratingRole] = useState(false);
 
   // Sync negotiation modal state with central background scroll/interaction lock
   useEffect(() => {
@@ -317,44 +322,9 @@ export function Stage3CrewCastCards() {
     setCustomRoleName(
       existingOffer?.customRoleName ||
         (target.kind === 'actor'
-          ? draft.castCustomRoles[target.item.id] ||
-            `شخصية محورية في أحداث «${draft.title}»`
+          ? draft.castCustomRoles[target.item.id] || ''
           : `قيادة ${SLOT_ARABIC_NAMES[target.item.role as OfferRoleSlot] || 'الطاقم الفني'} في «${draft.title}»`)
     );
-  };
-
-  // Character Role Generator inside Negotiation Modal
-  const handleGenerateRoleWithAI = async () => {
-    if (!negotiatingTarget || negotiatingTarget.kind !== 'actor') return;
-    setIsGeneratingRole(true);
-    try {
-      const actor = negotiatingTarget.item;
-      const res = await fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'generate_character_role',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            talentName: actor.name,
-            archetype: actor.archetype || 'نجم تمثيل',
-            roleBillingSize,
-            projectTitle: draft.title,
-            synopsis: draft.scriptSynopsis,
-            primaryGenre: primaryGenreObj?.name || 'دراما',
-          },
-        }),
-      });
-      const data = await res.json();
-      if (data?.roleDescription) {
-        setCustomRoleName(data.roleDescription);
-      }
-    } catch {
-      showToast('تعذر توليد وصف الشخصية حالياً، حاول مجدداً.', 'warning');
-    } finally {
-      setIsGeneratingRole(false);
-    }
   };
 
   // Multi-factor AI Talent Offer Submission (Wait 2–3 Game Days for Decision!)
@@ -536,13 +506,17 @@ export function Stage3CrewCastCards() {
       }
     }
 
-    const deptSpend =
+    const rawDeptSpend =
       draft.budgetAllocation.setsAndLocations +
       draft.budgetAllocation.costumesAndMakeup +
       draft.budgetAllocation.vfxAndStunts +
       draft.budgetAllocation.extrasAndCrowds;
 
-    return talentSpend + deptSpend;
+    const discountedDeptSpend = Math.round(
+      rawDeptSpend * studioAssetBenefits.costMultiplier
+    );
+
+    return talentSpend + discountedDeptSpend;
   };
 
   useEffect(() => {
@@ -1222,11 +1196,6 @@ export function Stage3CrewCastCards() {
                             <h3 className="font-display text-sm font-black text-slate-900">
                               {actor.name}
                             </h3>
-                            {(actor.isRisingDiscovery || actor.isAiGenerated) && (
-                              <span className="text-[11px] font-black text-purple-800">
-                                · موهبة صاعدة ✨
-                              </span>
-                            )}
                             {awardsCount > 0 && (
                               <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-amber-700">
                                 · <Award className="h-3.5 w-3.5" /> {awardsCount} جوائز
@@ -1273,11 +1242,13 @@ export function Stage3CrewCastCards() {
                       </div>
                     </div>
 
-                    {actor.lastEvolutionNote && (
-                      <div className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-2.5 py-1 text-[11px] font-bold text-amber-950">
-                        {actor.lastEvolutionNote}
-                      </div>
-                    )}
+                    {actor.lastEvolutionNote &&
+                      !actor.lastEvolutionNote.includes('موهبة صاعدة') &&
+                      !actor.lastEvolutionNote.includes('الذكاء') && (
+                        <div className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-2.5 py-1 text-[11px] font-bold text-amber-950">
+                          {actor.lastEvolutionNote}
+                        </div>
+                      )}
 
                     <div className="mt-3 grid grid-cols-4 gap-1.5 text-center">
                       <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
@@ -1690,33 +1661,24 @@ export function Stage3CrewCastCards() {
                 </span>
               </button>
 
-              {/* Character Role Description + Generator */}
+              {/* Character Role Description (Written by User) */}
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <label className="text-xs font-black text-slate-800">
-                    تفاصيل الدور والشخصية في «{draft.title}»
+                    {negotiatingTarget.kind === 'actor'
+                      ? `اكتب اسم وتفاصيل الدور والشخصية في «${draft.title}»`
+                      : `مهام التعاقد في «${draft.title}»`}
                   </label>
-                  {negotiatingTarget.kind === 'actor' && (
-                    <button
-                      type="button"
-                      onClick={handleGenerateRoleWithAI}
-                      disabled={isGeneratingRole}
-                      className="inline-flex items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-800 hover:bg-violet-100"
-                    >
-                      {isGeneratingRole ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Wand2 className="h-3 w-3" />
-                      )}
-                      <span>ابتكار ملامح الشخصية درامياً ✨</span>
-                    </button>
-                  )}
                 </div>
                 <input
                   type="text"
                   value={customRoleName}
                   onChange={(e) => setCustomRoleName(e.target.value)}
-                  placeholder="اكتب ملامح الشخصية لإقناع الفنان..."
+                  placeholder={
+                    negotiatingTarget.kind === 'actor'
+                      ? 'اكتب اسم الشخصية وملامح الدور بنفسك لإقناع الممثل...'
+                      : 'تفاصيل المهام الفنية...'
+                  }
                   className="w-full rounded-2xl border border-indigo-200 bg-indigo-50/50 px-3 py-2.5 text-xs font-bold text-slate-900 focus:border-violet-600 focus:bg-white focus:outline-none"
                 />
               </div>

@@ -1,7 +1,12 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useGameStore, CrisisEventItem, DailyAiNewsItem } from '@/lib/store';
+import {
+  useGameStore,
+  CrisisEventItem,
+  DailyAiNewsItem,
+  getStudioAssetBenefits,
+} from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
 import { AnimatedFilmingSetGraphic } from '@/components/CinematicGraphicsScene';
@@ -13,6 +18,7 @@ import {
   AlertTriangle,
   Newspaper,
   Clapperboard,
+  ShieldCheck,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -28,11 +34,18 @@ export function Stage4ProductionCrises() {
     aiMemoryLog,
     customDbPatch,
     resolveCrisisOption,
+    resolveCrisisWithStudioAsset,
+    ownedStudioAssets,
     pushBreakingNewsModal,
     showToast,
     groqApiKeyClient,
     preferredGroqModel,
   } = useGameStore();
+
+  const studioAssetBenefits = useMemo(
+    () => getStudioAssetBenefits(ownedStudioAssets),
+    [ownedStudioAssets]
+  );
 
   const db = useMemo(() => getResolvedDatabase(customDbPatch), [customDbPatch]);
 
@@ -351,6 +364,35 @@ export function Stage4ProductionCrises() {
                   </span>
                 </div>
               </button>
+
+              {studioAssetBenefits.ownedItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resolveCrisisWithStudioAsset(crisis.id);
+                    showToast(
+                      `تم احتواء الموقف مجاناً بفضل أصول الاستوديو الثابتة (${studioAssetBenefits.ownedItems[0].name})!`,
+                      'success'
+                    );
+                  }}
+                  className="flex w-full flex-col justify-between gap-2 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-3 text-right shadow-xs transition hover:border-emerald-600 sm:flex-row sm:items-center"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <span className="text-xs font-black text-emerald-950">
+                      درع أصول الاستوديو ({studioAssetBenefits.ownedItems[0].name}): حسم الموقف فوراً بدون تكلفة
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    <span className="rounded-md bg-emerald-600 px-2 py-0.5 font-mono text-[10px] font-black text-white">
+                      مجاناً (0 ج.م)
+                    </span>
+                    <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-900">
+                      جودة +4 · ضجة +4
+                    </span>
+                  </div>
+                </button>
+              )}
             </div>
           )}
         </motion.div>

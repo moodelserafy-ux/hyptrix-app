@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenAI } from '@google/genai';
 import {
   evaluateTalentOfferDeep,
   RoleBillingSize,
@@ -11,6 +12,11 @@ const GROQ_TEXT_MODELS = [
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
   'qwen/qwen3.8-27b',
+] as const;
+
+const GEMINI_TEXT_MODELS = [
+  'gemini-4-hydrogen',
+  'gemini-3.1-flash-lite',
 ] as const;
 
 export async function POST(req: NextRequest) {
@@ -117,10 +123,36 @@ async function callGroqJson(
   systemPrompt: string,
   userPrompt: string,
   groqKeyOverride?: string,
-  preferredModel?: string
+  _preferredModel?: string
 ): Promise<{ data: Record<string, unknown>; modelUsed: string } | null> {
-  const strictJsonSystemPrompt = `${systemPrompt}\n\nتنبيه تقني صارم جداً: يجب أن يكون ردك عبارة عن كائن JSON صالح فقط يبدأ بـ { وينتهي بـ } بدون أي نص إضافي خارج الـ JSON.`;
+  const strictJsonSystemPrompt = `${systemPrompt}\n\nتنبيه تقني صارم جداً: يجب أن يكون ردك عبارة عن كائن JSON صالح فقط يبدأ بـ { وينتهي بـ } بدون أي نص إضافي خارج الـ JSON، وتجنب تكرار أي جمل نمطية.`;
 
+  // 1. Primary Server-Side Gemini Engine (@google/genai)
+  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (geminiKey && geminiKey !== 'MY_GEMINI_API_KEY') {
+    const ai = new GoogleGenAI({ apiKey: geminiKey });
+    for (const modelName of GEMINI_TEXT_MODELS) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: `${strictJsonSystemPrompt}\n\n${userPrompt}`,
+          config: {
+            responseMimeType: 'application/json',
+            temperature: 0.85,
+          },
+        });
+        const text = response.text || '';
+        const extracted = extractJsonFromText(text);
+        if (extracted) {
+          return { data: extracted, modelUsed: modelName };
+        }
+      } catch {
+        // Fallback to next Gemini model or Groq
+      }
+    }
+  }
+
+  // 2. Secondary Groq Engine (if configured)
   const groqKey = (
     groqKeyOverride ||
     process.env.GROQ_API_KEY ||
@@ -129,7 +161,6 @@ async function callGroqJson(
   ).trim();
 
   if (groqKey && groqKey !== 'MY_GROQ_API_KEY') {
-    // Always prioritize the strongest model first and automatically switch/fallback in the background
     const orderedModels = [
       'openai/gpt-oss-120b',
       'qwen/qwen3.8-27b',
@@ -146,7 +177,7 @@ async function callGroqJson(
           },
           body: JSON.stringify({
             model,
-            temperature: 0.78,
+            temperature: 0.82,
             max_completion_tokens: 2048,
             messages: [
               { role: 'system', content: strictJsonSystemPrompt },
@@ -966,10 +997,9 @@ async function handleDiscoverAiRisingStar(
       },
       synergy_with: [],
       rivalries: [],
-      isAiGenerated: true,
+      isAiGenerated: false,
       isRisingDiscovery: true,
       status: 'active' as const,
-      lastEvolutionNote: 'موهبة صاعدة خطفت أنظار النقاد هذا الموسم ✨',
     };
 
     return NextResponse.json({
@@ -977,11 +1007,11 @@ async function handleDiscoverAiRisingStar(
       headline:
         typeof groqRes.data.headline === 'string'
           ? groqRes.data.headline
-          : `موهبة صاعدة تخطف الأنظار: انضمام «${actor.name}» لسوق النجوم!`,
+          : `انضمام الوجه السينمائي الجديد «${actor.name}» لبورصة النجوم!`,
       detail:
         typeof groqRes.data.detail === 'string'
           ? groqRes.data.detail
-          : `أشاد النقاد بحضور «${actor.name}» (${actor.age} سنة) كأبرز الوجوه الصاعدة هذا الموسم، وأصبحت بطاقته متاحة الآن للتعاقد.`,
+          : `أشاد النقاد بحضور «${actor.name}» (${actor.age} سنة) في العروض المسرحية والسينمائية الأخيرة، وأصبح متاحاً الآن للتعاقد.`,
     });
   }
 
@@ -1007,7 +1037,7 @@ async function handleDiscoverAiRisingStar(
     tier: 'C' as const,
     image_url: '',
     base_salary: (1.8 + (seed % 14) * 0.1) * 1_000_000,
-    archetype: isFem ? 'نجمة دراما وتشويق صاعدة بقوة' : 'بطل شاب صاعد في الأكشن والغموض',
+    archetype: isFem ? 'ممثلة دراما وتشويق شابة' : 'ممثل أكشن وغموض شاب',
     stats: {
       overall: ovr,
       acting: ovr + 3,
@@ -1025,16 +1055,15 @@ async function handleDiscoverAiRisingStar(
     },
     synergy_with: [],
     rivalries: [],
-    isAiGenerated: true,
+    isAiGenerated: false,
     isRisingDiscovery: true,
     status: 'active' as const,
-    lastEvolutionNote: 'موهبة صاعدة خطفت أنظار النقاد هذا الموسم ✨',
   };
 
   return NextResponse.json({
     actor: fallbackActor,
-    headline: `اكتشاف فني جديد: صعود الموهبة الشابة «${generatedName}» إلى دائرة الضوء!`,
-    detail: `لفت الوجه الصاعد «${generatedName}» (${age} سنة) أنظار المخرجين والنقاد بأدائه التلقائي، ليصبح متاحاً الآن للتعاقد أمام «${studioName}» والشركات المنافسة.`,
+    headline: `اكتشاف فني جديد: تألق «${generatedName}» وانضمامه لسوق النجوم!`,
+    detail: `لفت الفنان الشاب «${generatedName}» (${age} سنة) أنظار المخرجين والنقاد بأدائه المتقن، ليصبح متاحاً الآن للتعاقد أمام «${studioName}» والشركات المنافسة.`,
   });
 }
 
