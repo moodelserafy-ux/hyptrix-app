@@ -15,6 +15,8 @@ import {
   formatMoney,
   calculateStudioMarketValue,
   generateRivalReleases,
+  RoleBillingSize,
+  VIP_DINNER_COST,
 } from './game-engine';
 import {
   GenreId,
@@ -119,7 +121,7 @@ export type OfferRoleSlot =
   | 'cameo';
 
 export const SLOT_MAX_CAPACITY: Record<OfferRoleSlot, number> = {
-  director: 1,
+  director: 2,
   lead: 2,
   antagonist: 1,
   supporting: 4,
@@ -151,12 +153,12 @@ export interface TalentOfferRecord {
   talentId: string;
   talentName: string;
   roleSlot: OfferRoleSlot;
+  roleBillingSize?: RoleBillingSize;
   customRoleName?: string;
   offeredSalary: number;
   backendPoints: number;
   vipDinner: boolean;
   vipDinnerCost?: number;
-  roleFitScore?: number;
   submittedDay: number;
   responseDueDay: number;
   status: TalentOfferStatus;
@@ -218,6 +220,13 @@ export interface AutomaticFestivalCeremonyItem {
   playerWonCount: number;
 }
 
+export interface FloatingToastItem {
+  id: string;
+  message: string;
+  subtext?: string;
+  type: 'warning' | 'success' | 'info' | 'magic';
+}
+
 export interface ActorDynamicEvolutionState {
   overallDelta: number;
   actingDelta: number;
@@ -240,18 +249,12 @@ export interface CrisisEventItem {
     cost: number;
     hypeDelta: number;
     qualityDelta: number;
-    reputationDelta?: number;
-    marketValueDelta?: number;
-    delayDays?: number;
   };
   optionB: {
     label: string;
     cost: number;
     hypeDelta: number;
     qualityDelta: number;
-    reputationDelta?: number;
-    marketValueDelta?: number;
-    delayDays?: number;
   };
   resolved?: boolean;
   chosenOption?: 'A' | 'B' | 'VIP_BAILOUT';
@@ -298,6 +301,11 @@ export interface ReleasedProjectRecord {
   boxOfficeRevenue: number;
   streamingRevenue: number;
   totalGrossRevenue: number;
+  targetGrossRevenue?: number;
+  targetBoxOfficeRevenue?: number;
+  targetStreamingRevenue?: number;
+  viewershipMillions?: number;
+  targetViewershipMillions?: number;
   netProfit: number;
   criticScore: number;
   audienceScore: number;
@@ -331,6 +339,7 @@ export interface ActiveDraftProject {
   title: string;
   scriptSynopsis: string;
   directorId: string | null;
+  directorIds: string[];
   writerIds: string[];
   dopId: string | null;
   composerId: string | null;
@@ -359,6 +368,12 @@ export interface ActiveDraftProject {
   scheduledReleaseDay: number | null;
   filmingDaysElapsed: number;
   productionNews: DailyAiNewsItem[];
+  aiScriptAnalysis?: {
+    score: number;
+    verdict: string;
+    castingAdvice: string;
+    modelUsed: string;
+  } | null;
 }
 
 export type GroqModelId =
@@ -402,17 +417,150 @@ export function formatGameDate(gameDay: number, year: number): string {
   ];
   const dayInYear = Math.max(0, (gameDay - 1) % DAYS_PER_GAME_YEAR); // 0..119
   const monthIdx = Math.min(11, Math.floor(dayInYear / 10));
-  const dayOfMonth = (dayInYear % 10) * 3 + 1;
-  return `${dayOfMonth} ${months[monthIdx]} ${year}`;
+  return `اليوم ${gameDay} · ${months[monthIdx]} ${year}`;
 }
 
 export function getDaysRemainingUntilAnnualAwards(gameDay: number): number {
-  const dayInYear = (gameDay - 1) % DAYS_PER_GAME_YEAR;
+  const dayInYear = Math.max(0, (gameDay - 1) % DAYS_PER_GAME_YEAR);
   return Math.max(1, DAYS_PER_GAME_YEAR - dayInYear);
 }
 
+/**
+ * Progressively steps a released film/series forward by 1 day/episode:
+ * - Grows box-office & streaming revenues toward targetGrossRevenue modulated by AI & critic/audience momentum
+ * - Grows rival studio releases' revenues and dynamically recalculates the season leaderboard rank (#1, #2, ...)
+ */
+function stepProjectRevenueProgress(
+  proj: ReleasedProjectRecord,
+  playerMomentum = 1.0,
+  rivalMomentum = 1.0,
+  newsItem?: DailyAiNewsItem
+): { updatedProject: ReleasedProjectRecord; revenueDelta: number } {
+  const maxSteps = proj.format === 'series' ? proj.episodes || 15 : 10;
+  const currentStep = proj.daysTracked || 1;
+  const updatedNews = newsItem
+    ? [newsItem, ...(proj.dailyNews || [])]
+    : proj.dailyNews || [];
+
+  if (currentStep >= maxSteps) {
+    return {
+      updatedProject: {
+        ...proj,
+        dailyNews: updatedNews,
+      },
+      revenueDelta: 0,
+    };
+  }
+
+  const nextStep = currentStep + 1;
+  const remainingSteps = Math.max(1, maxSteps - currentStep);
+  const targetGross =
+    proj.targetGrossRevenue || Math.round(proj.totalGrossRevenue * 2.4);
+
+  const wordOfMouthBoost =
+    proj.criticScore >= 8.0 && proj.audienceScore >= 8.0
+      ? 1.08
+      : proj.criticScore >= 7.2
+      ? 1.03
+      : proj.criticScore < 5.8
+      ? 0.9
+      : 1.0;
+
+  const effectivePlayerMom = Math.max(
+    0.72,
+    Math.min(1.48, playerMomentum * wordOfMouthBoost)
+  );
+
+  const baseRemaining = Math.max(2_200_000, targetGross - proj.totalGrossRevenue);
+  const revenueDelta = Math.max(
+    1_100_000,
+    Math.round((baseRemaining / remainingSteps) * effectivePlayerMom)
+  );
+
+  const nextGross = proj.totalGrossRevenue + revenueDelta;
+  const boShare =
+    proj.totalGrossRevenue > 0
+      ? proj.boxOfficeRevenue / proj.totalGrossRevenue
+      : proj.format === 'series'
+      ? 0.35
+      : 0.72;
+  const boDelta = Math.round(revenueDelta * boShare);
+  const streamDelta = revenueDelta - boDelta;
+
+  let nextViews = proj.viewershipMillions;
+  if (proj.format === 'series') {
+    const curViews = proj.viewershipMillions || 1.4;
+    const targetViews =
+      proj.targetViewershipMillions || Math.max(curViews * 2.5, 7.5);
+    const viewsRem = Math.max(0.5, targetViews - curViews);
+    const viewsDelta = Math.max(
+      0.25,
+      (viewsRem / remainingSteps) * effectivePlayerMom
+    );
+    nextViews = Number((curViews + viewsDelta).toFixed(1));
+  }
+
+  const updatedRivals = proj.rivalReleases.map((r) => {
+    if (r.status === 'delayed') return r;
+    const rTarget =
+      r.targetBoxOfficeRevenue || Math.round(r.boxOfficeRevenue * 2.5);
+    const rQualityBoost =
+      r.criticScore >= 7.8 ? 1.06 : r.criticScore < 5.8 ? 0.91 : 1.0;
+    const rEffectiveMom = Math.max(
+      0.75,
+      Math.min(1.42, rivalMomentum * rQualityBoost)
+    );
+    const rRem = Math.max(1_800_000, rTarget - r.boxOfficeRevenue);
+    const rDelta = Math.max(
+      850_000,
+      Math.round((rRem / remainingSteps) * rEffectiveMom)
+    );
+    return {
+      ...r,
+      boxOfficeRevenue: r.boxOfficeRevenue + rDelta,
+      targetBoxOfficeRevenue: rTarget,
+    };
+  });
+
+  const allRevs = [
+    nextGross,
+    ...updatedRivals
+      .filter((r) => r.status !== 'delayed')
+      .map((r) => r.boxOfficeRevenue),
+  ].sort((a, b) => b - a);
+  const nextRank = Math.max(1, allRevs.indexOf(nextGross) + 1);
+
+  return {
+    updatedProject: {
+      ...proj,
+      daysTracked: nextStep,
+      boxOfficeRevenue: proj.boxOfficeRevenue + boDelta,
+      streamingRevenue: proj.streamingRevenue + streamDelta,
+      totalGrossRevenue: nextGross,
+      netProfit: nextGross - proj.totalBudget,
+      viewershipMillions: nextViews,
+      boxOfficeRank: nextRank,
+      rivalReleases: updatedRivals,
+      dailyNews: updatedNews,
+    },
+    revenueDelta,
+  };
+}
+
 export function getSignedIdsForSlot(draft: ActiveDraftProject, slot: OfferRoleSlot): string[] {
-  if (slot === 'director') return draft.directorId ? [draft.directorId] : [];
+  if (slot === 'director') {
+    const acceptedInOffers = Object.values(draft.talentOffers || {})
+      .filter((o) => o.roleSlot === 'director' && o.status === 'accepted')
+      .map((o) => o.talentId);
+    const combined = Array.from(
+      new Set([
+        ...(draft.directorIds || []),
+        ...(draft.directorId ? [draft.directorId] : []),
+        ...acceptedInOffers,
+      ])
+    );
+    return combined.slice(0, 2);
+  }
   if (slot === 'cinematographer') return draft.dopId ? [draft.dopId] : [];
   if (slot === 'composer') return draft.composerId ? [draft.composerId] : [];
   if (slot === 'editor_vfx') return draft.vfxId ? [draft.vfxId] : [];
@@ -499,13 +647,26 @@ function applyAcceptedOfferToDraft(
   }
 
   if (slot === 'director') {
-    next.directorId = id;
+    const existingDirs = Array.from(
+      new Set([
+        ...(next.directorIds || []),
+        ...(next.directorId ? [next.directorId] : []),
+      ])
+    );
+    if (!existingDirs.includes(id) && existingDirs.length < 2) {
+      const updatedDirs = [...existingDirs, id];
+      next.directorIds = updatedDirs;
+      next.directorId = updatedDirs[0] || null;
+    } else {
+      next.directorIds = existingDirs;
+      next.directorId = existingDirs[0] || null;
+    }
   } else if (slot === 'cinematographer') {
-    next.dopId = id;
+    if (!next.dopId) next.dopId = id;
   } else if (slot === 'composer') {
-    next.composerId = id;
+    if (!next.composerId) next.composerId = id;
   } else if (slot === 'editor_vfx') {
-    next.vfxId = id;
+    if (!next.vfxId) next.vfxId = id;
   } else {
     const alreadyInCast =
       next.leadActorIds.includes(id) ||
@@ -514,16 +675,29 @@ function applyAcceptedOfferToDraft(
       next.cameoActorIds.includes(id);
 
     if (!alreadyInCast) {
-      // The signed performer is assigned to the exact role negotiated by the player.
-      // Never silently turn a cameo/supporting offer into a lead contract.
-      if (slot === 'lead' && next.leadActorIds.length < 2) {
-        next.leadActorIds = [...next.leadActorIds, id];
-      } else if (slot === 'antagonist' && !next.antagonistId) {
-        next.antagonistId = id;
-      } else if (slot === 'supporting' && next.supportingActorIds.length < 4) {
-        next.supportingActorIds = [...next.supportingActorIds, id];
-      } else if (slot === 'cameo' && next.cameoActorIds.length < 2) {
+      const billing = offer.roleBillingSize;
+      if (billing === 'antagonist' || slot === 'antagonist') {
+        if (!next.antagonistId) {
+          next.antagonistId = id;
+        } else {
+          next.leadActorIds = [...next.leadActorIds, id];
+        }
+      } else if (billing === 'cameo' || slot === 'cameo') {
         next.cameoActorIds = [...next.cameoActorIds, id];
+      } else if (billing === 'supporting' || slot === 'supporting') {
+        next.supportingActorIds = [...next.supportingActorIds, id];
+      } else if (billing === 'lead_star' || billing === 'co_lead') {
+        if (next.leadActorIds.length < 3) {
+          next.leadActorIds = [...next.leadActorIds, id];
+        } else {
+          next.supportingActorIds = [...next.supportingActorIds, id];
+        }
+      } else if (next.leadActorIds.length < 2) {
+        next.leadActorIds = [...next.leadActorIds, id];
+      } else if (!next.antagonistId) {
+        next.antagonistId = id;
+      } else {
+        next.supportingActorIds = [...next.supportingActorIds, id];
       }
     }
   }
@@ -922,6 +1096,7 @@ export interface HyptrixGameState {
   competitorNetWorthDelta: Record<string, { netWorthDelta: number; releasesDelta: number; awardsDelta: number }>;
   breakingNewsQueue: WorldBreakingNewsModalItem[];
   festivalModalQueue: AutomaticFestivalCeremonyItem[];
+  activeToast: FloatingToastItem | null;
   customDbPatch: Partial<MasterDatabase> | null;
   customDbUrl: string;
   supabaseUserEmail: string | null;
@@ -929,6 +1104,12 @@ export interface HyptrixGameState {
   preferredGroqModel: GroqModelId;
 
   // Actions
+  showToast: (
+    message: string,
+    type?: FloatingToastItem['type'],
+    subtext?: string
+  ) => void;
+  dismissToast: () => void;
   initializeStudio: (params: {
     studioName: string;
     ceoName: string;
@@ -941,7 +1122,9 @@ export interface HyptrixGameState {
   advanceGameDay: (days?: number) => void;
   unlockMarketRegionWithCash: (region: MarketRegion) => boolean;
   toggleDraftDistributionMarket: (region: MarketRegion) => void;
+  triggerAnnualAwardsCeremonyNow: () => void;
   submitTalentOffer: (offer: TalentOfferRecord) => void;
+  toggleCrewSelectionForSlot: (slot: OfferRoleSlot, talentId: string) => void;
   confirmMultiAcceptedChoice: (slot: OfferRoleSlot, chosenTalentIds: string[]) => void;
   removeTalentFromDraft: (talentId: string) => void;
   updateDraft: (partial: Partial<ActiveDraftProject>) => void;
@@ -952,7 +1135,11 @@ export interface HyptrixGameState {
   applyEmergencyGulfBailout: (crisisId: string) => void;
   resolveCrisisOption: (crisisId: string, choice: 'A' | 'B') => void;
   completeProjectRelease: (record: ReleasedProjectRecord) => void;
-  advanceReleaseTrackingDay: (newsItem?: DailyAiNewsItem) => void;
+  advanceReleaseTrackingDay: (
+    newsItem?: DailyAiNewsItem,
+    playerMomentum?: number,
+    rivalMomentum?: number
+  ) => void;
   triggerElectronicTrollsCampaign: (projectId: string) => void;
   triggerFestivalJuryPR: () => void;
   recordFestivalAwards: (festivalName: string, awards: string[], winningActorIds: string[]) => void;
@@ -962,6 +1149,7 @@ export interface HyptrixGameState {
   dismissFestivalCeremonyModal: () => void;
   addAiDiscoveredActor: (actor: ActorItem, newsHeadline?: string, newsDetail?: string) => void;
   addAiEmergingStudio: (studio: CompetitorStudio, newsHeadline?: string, newsDetail?: string) => void;
+  addAiRivalReleases: (rivals: RivalRelease[], newsHeadline?: string, newsDetail?: string) => void;
   pushAiContextualNewsEvent: (event: {
     headline: string;
     detail: string;
@@ -988,12 +1176,14 @@ const DEFAULT_DRAFT: ActiveDraftProject = {
   seriesSeason: 'ramadan',
   filmSeason: 'eid_adha',
   primaryGenre: 'action',
-  secondaryGenre: null,
+  secondaryGenre: 'popular_drama',
   ageRating: '+12',
-  title: '',
-  scriptSynopsis: '',
+  title: 'الفرعون الأخير',
+  scriptSynopsis:
+    'ضابط عمليات خاصة سابق يكتشف شبكة دولية لتهريب الآثار تحت شوارع القاهرة القديمة، فيخوض معركة شرسة ضد إمبراطور الجريمة لإنقاذ كنز فرعوني مفقود قبل فوات الأوان.',
   directorId: null,
-  writerIds: ['wri_1'],
+  directorIds: [],
+  writerIds: [],
   dopId: null,
   composerId: null,
   vfxId: null,
@@ -1074,11 +1264,24 @@ export const useGameStore = create<HyptrixGameState>()(
       competitorNetWorthDelta: {},
       breakingNewsQueue: [],
       festivalModalQueue: [],
+      activeToast: null,
       customDbPatch: null,
       customDbUrl: '',
       supabaseUserEmail: null,
       groqApiKeyClient: '',
       preferredGroqModel: 'openai/gpt-oss-120b',
+
+      showToast: (message, type = 'warning', subtext) =>
+        set({
+          activeToast: {
+            id: `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            message,
+            type,
+            subtext,
+          },
+        }),
+
+      dismissToast: () => set({ activeToast: null }),
 
       initializeStudio: ({ studioName, ceoName, logo, founderPerk, region }) =>
         set({
@@ -1191,6 +1394,112 @@ export const useGameStore = create<HyptrixGameState>()(
           };
         }),
 
+      triggerAnnualAwardsCeremonyNow: () =>
+        set((state) => {
+          const db = getResolvedDatabase(state.customDbPatch);
+          const yearToJudge = state.currentYear;
+          const playerProjectsThisYear = state.releasedProjects.filter(
+            (p) => p.year === yearToJudge
+          );
+
+          // Ensure rival releases exist for this year
+          let rivalsPool = state.yearlyRivalReleases.filter(
+            (r) => !r.year || r.year === yearToJudge
+          );
+          if (rivalsPool.length < 3) {
+            const extraFilmRivals = generateRivalReleases(
+              [...db.competitor_studios, ...state.emergingCompetitors],
+              db.actors,
+              [],
+              1.05,
+              yearToJudge,
+              'film'
+            );
+            const extraSeriesRivals = generateRivalReleases(
+              [...db.competitor_studios, ...state.emergingCompetitors],
+              db.actors,
+              [],
+              1.0,
+              yearToJudge + 5,
+              'series'
+            );
+            rivalsPool = [...rivalsPool, ...extraFilmRivals, ...extraSeriesRivals];
+          }
+
+          const gala = buildAnnualAwardsGalaForYear({
+            playerProjectsInYear: playerProjectsThisYear,
+            rivalReleasesInYear: rivalsPool,
+            studioName: state.studioName,
+            year: yearToJudge,
+            db,
+          });
+
+          const updatedProjects = state.releasedProjects.map((proj) => {
+            const wonForProj = gala.awardsByProjectId[proj.id] || [];
+            if (wonForProj.length === 0) return { ...proj, festivalsTriggered: true };
+            return {
+              ...proj,
+              awardsWon: Array.from(new Set([...proj.awardsWon, ...wonForProj])),
+              festivalsTriggered: true,
+            };
+          });
+
+          const updatedActorAwards = { ...state.actorAwardCounts };
+          for (const aId of gala.winningActorIds) {
+            updatedActorAwards[aId] = (updatedActorAwards[aId] || 0) + 1;
+          }
+
+          const nextCompDelta = { ...state.competitorNetWorthDelta };
+          for (const [stName, awCount] of Object.entries(gala.rivalAwardsCountByStudio)) {
+            const prev = nextCompDelta[stName] || {
+              netWorthDelta: 0,
+              releasesDelta: 0,
+              awardsDelta: 0,
+            };
+            nextCompDelta[stName] = {
+              ...prev,
+              awardsDelta: prev.awardsDelta + awCount,
+              netWorthDelta: prev.netWorthDelta + awCount * 14_000_000,
+            };
+          }
+
+          const totalPlayerWon = Object.values(gala.awardsByProjectId).flat().length;
+          const nextRep = Math.min(100, state.reputation + totalPlayerWon * 3);
+          const nextMarketVal = calculateStudioMarketValue({
+            cash: state.cash,
+            reputation: nextRep,
+            releasedProjects: updatedProjects,
+            marketValueModifier: state.marketValueModifier || 0,
+          });
+
+          // Advance to the start of the new year if not already there
+          const currentYearIndex = Math.floor((state.gameDay - 1) / DAYS_PER_GAME_YEAR);
+          const nextYearStartDay = (currentYearIndex + 1) * DAYS_PER_GAME_YEAR + 1;
+          const shouldAdvanceYear = state.lastAwardsGalaYear < yearToJudge;
+
+          return {
+            gameDay: shouldAdvanceYear ? Math.max(state.gameDay, nextYearStartDay) : state.gameDay,
+            currentYear: shouldAdvanceYear ? yearToJudge + 1 : state.currentYear,
+            lastAwardsGalaYear: yearToJudge,
+            releasedProjects: updatedProjects,
+            lastReleasedProject: updatedProjects[0] || state.lastReleasedProject,
+            actorAwardCounts: updatedActorAwards,
+            competitorNetWorthDelta: nextCompDelta,
+            reputation: nextRep,
+            marketValue: nextMarketVal,
+            festivalModalQueue: gala.ceremonies,
+            yearlyRivalReleases: [],
+            worldHistory: [
+              {
+                year: yearToJudge,
+                eventText: `إقامة الحفل السنوي لتوزيع جوائز السينما والدراما لعام ${yearToJudge} وحصد الاستوديو ${totalPlayerWon} جائزة.`,
+                category: 'award',
+              },
+              ...state.worldHistory,
+            ],
+          };
+        }),
+
       advanceGameDay: (days = 1) =>
         set((state) => {
           const newGameDay = state.gameDay + days;
@@ -1217,6 +1526,7 @@ export const useGameStore = create<HyptrixGameState>()(
           let nextFestivalQueue = [...state.festivalModalQueue];
           const nextActorAwardCounts = { ...state.actorAwardCounts };
           let nextLastGalaYear = state.lastAwardsGalaYear || 2025;
+          let nextActiveToast = state.activeToast;
 
           const db = getResolvedDatabase(state.customDbPatch);
           const liveActors = getLiveActorsWithEvolution({
@@ -1227,7 +1537,7 @@ export const useGameStore = create<HyptrixGameState>()(
             gameDay: newGameDay,
           });
 
-          // 1. Evaluate pending talent offers that have reached their responseDueDay
+          // 1. Evaluate pending talent offers that have reached their responseDueDay (2–3 full game days)
           for (const key of Object.keys(updatedOffers)) {
             const offer = updatedOffers[key];
             if (offer.status === 'pending' && newGameDay >= offer.responseDueDay) {
@@ -1235,42 +1545,75 @@ export const useGameStore = create<HyptrixGameState>()(
                 updatedOffers[key] = { ...offer, status: 'rejected' };
                 nextMarketValMod -= 2_500_000;
                 updatedDraft.hypeScore = Math.max(15, updatedDraft.hypeScore - 3);
-                const headline = `بيان فني: ${offer.talentName} يعتذر رسمياً عن بطولة عمل شركة «${state.studioName}»`;
+                const headline = `اعتذر «${offer.talentName}» عن عرض دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}»`;
                 newNewsItems.push({
-                  id: `news_offer_rej_${offer.talentId}_${newGameDay}`,
+                  id: `news_rej_${offer.talentId}_${newGameDay}`,
                   day: newGameDay,
                   year: newYear,
                   category: 'contract_reply',
-                  badgeLabel: 'خبر صحفي · مفاوضات النجوم',
+                  badgeLabel: 'رد رسمي من وكيل الأعمال · اعتذار عن التعاقد',
                   headline,
-                  detail: `${offer.aiReason} — وأشارت مصادر صحفية إلى أن اعتذار ${offer.talentName} عن دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}» دفع المنتج ${state.ceoName} للبحث عن بديل سريع.`,
+                  detail: offer.aiReason,
                   highlightName: offer.talentName,
-                  gameImpactLabel: 'تأثير الخبر: -3% ترقب الجمهور · -2.5M ج.م القيمة السوقية',
+                  extraStatBadge: `العرض: ${formatMoney(offer.offeredSalary)} ج.م`,
+                  gameImpactLabel:
+                    'يمكنك التفاوض بشروط جديدة أو اختيار بديل آخر من القائمة',
+                });
+                nextHistory.unshift({
+                  year: newYear,
+                  eventText: `${headline} — ${offer.aiReason}`,
+                  category: 'milestone',
                 });
                 nextMemory.unshift(
                   `رفض النجم ${offer.talentName} عرض شركة "${state.studioName}" لدور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في عمل "${updatedDraft.title || 'مشروع جديد'}".`
                 );
               } else {
+                // Check if the crew slot is already at max capacity (e.g., 2 directors already signed, or 1 DOP/Composer/VFX already signed)
+                const currentSlotIds = getSignedIdsForSlot(updatedDraft, offer.roleSlot);
+                const isCrewSlot =
+                  offer.roleSlot === 'director' ||
+                  offer.roleSlot === 'cinematographer' ||
+                  offer.roleSlot === 'composer' ||
+                  offer.roleSlot === 'editor_vfx';
+                const maxForSlot = SLOT_MAX_CAPACITY[offer.roleSlot] || 1;
+                const exceedsCrewCapacity =
+                  isCrewSlot &&
+                  !currentSlotIds.includes(offer.talentId) &&
+                  currentSlotIds.length >= maxForSlot;
+
                 const signedOffer: TalentOfferRecord = {
                   ...offer,
-                  status: 'accepted',
+                  status: exceedsCrewCapacity
+                    ? 'accepted_awaiting_choice'
+                    : 'accepted',
                 };
                 updatedOffers[key] = signedOffer;
-                updatedDraft = applyAcceptedOfferToDraft(updatedDraft, signedOffer);
+
+                if (!exceedsCrewCapacity) {
+                  updatedDraft = applyAcceptedOfferToDraft(updatedDraft, signedOffer);
+                }
+
                 nextMarketValMod += 4_500_000;
                 updatedDraft.hypeScore = Math.min(100, updatedDraft.hypeScore + 5);
-                const headline = `انفراد صحفي: ${offer.talentName} يوقّع عقد «${updatedDraft.title || 'العمل الجديد'}» مع المنتج ${state.ceoName}!`;
+                const headline = `وافق «${offer.talentName}» رسمياً على عقد «${updatedDraft.title || 'العمل الجديد'}» (${SLOT_ARABIC_NAMES[offer.roleSlot]})! ✓`;
                 newNewsItems.push({
-                  id: `news_offer_acc_${offer.talentId}_${newGameDay}`,
+                  id: `news_acc_${offer.talentId}_${newGameDay}`,
                   day: newGameDay,
                   year: newYear,
                   category: 'contract_reply',
-                  badgeLabel: 'عاجل · تعاقدات الموسم ✓',
+                  badgeLabel: 'رد رسمي من وكيل الأعمال · قبول التعاقد ✓',
                   headline,
-                  detail: `${offer.aiReason} — وقد ارتفعت القيمة السوقية لشركة «${state.studioName}» عقب الإعلان الرسمي عن انضمام ${offer.talentName} في دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}» مقابل ${formatMoney(offer.offeredSalary)} ج.م.`,
+                  detail: offer.aiReason,
                   highlightName: offer.talentName,
-                  extraStatBadge: `قيمة العقد: ${formatMoney(offer.offeredSalary)} ج.م`,
-                  gameImpactLabel: 'تأثير الخبر: +5% ترقب الجمهور · +4.5M ج.م القيمة السوقية',
+                  extraStatBadge: `الأجر: ${formatMoney(offer.offeredSalary)} ج.م`,
+                  gameImpactLabel: exceedsCrewCapacity
+                    ? `وافق أكثر من العدد الأقصى لفئة (${SLOT_ARABIC_NAMES[offer.roleSlot]}) — اختر من تعتمده في الفريق النهائي`
+                    : `تم اعتماده رسمياً في فريق العمل (${SLOT_ARABIC_NAMES[offer.roleSlot]})`,
+                });
+                nextHistory.unshift({
+                  year: newYear,
+                  eventText: `${headline} مقابل ${formatMoney(offer.offeredSalary)} ج.م.`,
+                  category: 'milestone',
                 });
                 nextMemory.unshift(
                   `وقّع النجم ${offer.talentName} مع شركة "${state.studioName}" بقيادة ${state.ceoName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" بأجر ${formatMoney(offer.offeredSalary)} ج.م.`
@@ -1293,11 +1636,30 @@ export const useGameStore = create<HyptrixGameState>()(
             );
           }
 
-          // 3. Organic Rival Studio Releases during the year (every 28 game days):
-          // Rivals release strong films/series independently, growing their revenues and competing in the Annual Awards!
-          if (newGameDay > 5 && newGameDay % 28 === 0) {
+          // 2b. Progressive Daily Box Office / Viewership Growth for Active Released Project!
+          let nextCash = state.cash;
+          if (nextLastReleased) {
+            for (let d = 0; d < days; d++) {
+              const stepped = stepProjectRevenueProgress(
+                nextLastReleased,
+                1.0,
+                1.0
+              );
+              if (stepped.revenueDelta > 0) {
+                nextLastReleased = stepped.updatedProject;
+                nextCash += stepped.revenueDelta;
+              }
+            }
+            const activeReleasedSnap = nextLastReleased;
+            nextReleasedProjects = nextReleasedProjects.map((p) =>
+              p.id === activeReleasedSnap.id ? activeReleasedSnap : p
+            );
+          }
+
+          // 3. Organic Rival Studio Releases during the year (every 30 game days):
+          if (newGameDay > 5 && newGameDay % 30 === 0) {
             const allCompetitors = [...db.competitor_studios, ...nextEmergingStudios];
-            const isSeriesWindow = (newGameDay / 28) % 2 === 0;
+            const isSeriesWindow = (newGameDay / 30) % 2 === 0;
             const organicRivals = generateRivalReleases(
               allCompetitors,
               liveActors,
@@ -1330,10 +1692,11 @@ export const useGameStore = create<HyptrixGameState>()(
             }
           }
 
-          // 4. Rare Veteran Actor Retirement or Passing Away (only every 55 days when no popup is active)
+          // 4. Rare Veteran Actor Retirement or Passing Away (only every 80 days when on Hub and no popup is active)
           if (
-            newGameDay > 15 &&
-            newGameDay % 55 === 0 &&
+            newGameDay > 20 &&
+            newGameDay % 80 === 0 &&
+            state.activeScreen === 'STUDIO_HUB' &&
             state.breakingNewsQueue.length === 0 &&
             newNewsItems.length === 0
           ) {
@@ -1389,7 +1752,7 @@ export const useGameStore = create<HyptrixGameState>()(
           }
 
           // 5. ANNUAL SURPRISE AWARDS CEREMONY!
-          // Triggers automatically once per year when the calendar year completes!
+          // Triggers automatically at the exact end of each calendar year (every 120 game days)!
           if (yearsAdded > 0 && nextLastGalaYear < completedYear) {
             nextLastGalaYear = completedYear;
             const playerProjectsInCompletedYear = nextReleasedProjects.filter(
@@ -1464,7 +1827,7 @@ export const useGameStore = create<HyptrixGameState>()(
             const totalPlayerWon = Object.values(gala.awardsByProjectId).flat().length;
             nextRep = Math.min(100, nextRep + totalPlayerWon * 3);
             nextFestivalQueue = gala.ceremonies;
-            nextYearlyRivals = []; // Reset yearly pool for the new year
+            nextYearlyRivals = [];
 
             nextHistory.unshift({
               year: completedYear,
@@ -1479,13 +1842,14 @@ export const useGameStore = create<HyptrixGameState>()(
           }
 
           const nextMarketValue = calculateStudioMarketValue({
-            cash: state.cash,
+            cash: nextCash,
             reputation: nextRep,
             releasedProjects: nextReleasedProjects,
             marketValueModifier: nextMarketValMod,
           });
 
           return {
+            cash: nextCash,
             gameDay: newGameDay,
             currentYear: newYear,
             lastAwardsGalaYear: nextLastGalaYear,
@@ -1505,22 +1869,25 @@ export const useGameStore = create<HyptrixGameState>()(
             festivalModalQueue: nextFestivalQueue,
             worldHistory: nextHistory,
             aiMemoryLog: nextMemory.slice(0, 25),
+            activeToast: nextActiveToast,
           };
         }),
 
       submitTalentOffer: (offer) =>
         set((state) => {
-          const previousOffer = state.draft.talentOffers[offer.talentId];
-          const dinnerAlreadyPaidForPendingOffer =
-            previousOffer?.status === 'pending' &&
-            previousOffer.vipDinner &&
-            (previousOffer.vipDinnerCost || 0) > 0;
-          const dinnerCost = offer.vipDinner && dinnerAlreadyPaidForPendingOffer
-            ? 0
-            : Math.max(0, offer.vipDinnerCost || 0);
-          if (state.cash < dinnerCost) return state;
+          const dinnerFee = offer.vipDinner ? (offer.vipDinnerCost ?? VIP_DINNER_COST) : 0;
+          const nextCash = Math.max(0, state.cash - dinnerFee);
+          const nextMarketVal = calculateStudioMarketValue({
+            cash: nextCash,
+            reputation: state.reputation,
+            releasedProjects: state.releasedProjects,
+            marketValueModifier: state.marketValueModifier || 0,
+          });
+          const memoryEntry = `أرسلت شركة "${state.studioName}" عرض تعاقد إلى ${offer.talentName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في «${state.draft.title || 'عمل جديد'}» بأجر ${formatMoney(offer.offeredSalary)} ج.م ونسبة أرباح ${offer.backendPoints}% (الرد في اليوم ${offer.responseDueDay}).`;
           return {
-            cash: state.cash - dinnerCost,
+            cash: nextCash,
+            marketValue: nextMarketVal,
+            aiMemoryLog: [memoryEntry, ...(state.aiMemoryLog || [])].slice(0, 35),
             draft: {
               ...state.draft,
               talentOffers: {
@@ -1531,10 +1898,97 @@ export const useGameStore = create<HyptrixGameState>()(
           };
         }),
 
+      toggleCrewSelectionForSlot: (slot, talentId) =>
+        set((state) => {
+          const updatedDraft = { ...state.draft };
+          const updatedOffers = { ...updatedDraft.talentOffers };
+
+          if (slot === 'director') {
+            const currentDirs = Array.from(
+              new Set([
+                ...(updatedDraft.directorIds || []),
+                ...(updatedDraft.directorId ? [updatedDraft.directorId] : []),
+              ])
+            );
+            let nextDirs: string[];
+            if (currentDirs.includes(talentId)) {
+              nextDirs = currentDirs.filter((id) => id !== talentId);
+            } else {
+              if (currentDirs.length >= 2) {
+                return {
+                  activeToast: {
+                    id: `toast_dir_limit_${Date.now()}`,
+                    message:
+                      'الحد الأقصى لفريق الإخراج هو مخرجان اثنان فقط (من 1 إلى 2)! ألغِ اعتماد أحد المخرجين أولاً لاختيار مخرج آخر.',
+                    type: 'warning',
+                  },
+                };
+              }
+              nextDirs = [...currentDirs, talentId];
+            }
+            updatedDraft.directorIds = nextDirs;
+            updatedDraft.directorId = nextDirs[0] || null;
+
+            for (const key of Object.keys(updatedOffers)) {
+              const off = updatedOffers[key];
+              if (
+                off.roleSlot === 'director' &&
+                (off.status === 'accepted' || off.status === 'accepted_awaiting_choice')
+              ) {
+                updatedOffers[key] = {
+                  ...off,
+                  status: nextDirs.includes(off.talentId)
+                    ? 'accepted'
+                    : 'accepted_awaiting_choice',
+                };
+              }
+            }
+          } else if (
+            slot === 'cinematographer' ||
+            slot === 'composer' ||
+            slot === 'editor_vfx'
+          ) {
+            if (slot === 'cinematographer') updatedDraft.dopId = talentId;
+            if (slot === 'composer') updatedDraft.composerId = talentId;
+            if (slot === 'editor_vfx') updatedDraft.vfxId = talentId;
+
+            for (const key of Object.keys(updatedOffers)) {
+              const off = updatedOffers[key];
+              if (
+                off.roleSlot === slot &&
+                (off.status === 'accepted' || off.status === 'accepted_awaiting_choice')
+              ) {
+                updatedOffers[key] = {
+                  ...off,
+                  status:
+                    off.talentId === talentId
+                      ? 'accepted'
+                      : 'accepted_awaiting_choice',
+                };
+              }
+            }
+          }
+
+          updatedDraft.talentOffers = updatedOffers;
+          return { draft: updatedDraft };
+        }),
+
       confirmMultiAcceptedChoice: (slot, chosenTalentIds) =>
         set((state) => {
           let updatedDraft = { ...state.draft };
           const updatedOffers = { ...updatedDraft.talentOffers };
+
+          if (slot === 'director') {
+            const finalDirs = chosenTalentIds.slice(0, 2);
+            updatedDraft.directorIds = finalDirs;
+            updatedDraft.directorId = finalDirs[0] || null;
+          } else if (slot === 'cinematographer') {
+            updatedDraft.dopId = chosenTalentIds[0] || null;
+          } else if (slot === 'composer') {
+            updatedDraft.composerId = chosenTalentIds[0] || null;
+          } else if (slot === 'editor_vfx') {
+            updatedDraft.vfxId = chosenTalentIds[0] || null;
+          }
 
           for (const key of Object.keys(updatedOffers)) {
             const offer = updatedOffers[key];
@@ -1548,6 +2002,7 @@ export const useGameStore = create<HyptrixGameState>()(
               updatedOffers[key] = signedOffer;
               updatedDraft = applyAcceptedOfferToDraft(updatedDraft, signedOffer);
             } else if (
+              offer.status === 'accepted' ||
               offer.status === 'accepted_awaiting_choice' ||
               offer.status === 'pending'
             ) {
@@ -1568,10 +2023,17 @@ export const useGameStore = create<HyptrixGameState>()(
           delete nextOffers[talentId];
           const nextRoles = { ...(state.draft.castCustomRoles || {}) };
           delete nextRoles[talentId];
+          const nextDirectorIds = Array.from(
+            new Set([
+              ...(state.draft.directorIds || []),
+              ...(state.draft.directorId ? [state.draft.directorId] : []),
+            ])
+          ).filter((id) => id !== talentId);
           return {
             draft: {
               ...state.draft,
-              directorId: state.draft.directorId === talentId ? null : state.draft.directorId,
+              directorIds: nextDirectorIds,
+              directorId: nextDirectorIds[0] || null,
               dopId: state.draft.dopId === talentId ? null : state.draft.dopId,
               composerId: state.draft.composerId === talentId ? null : state.draft.composerId,
               vfxId: state.draft.vfxId === talentId ? null : state.draft.vfxId,
@@ -1681,62 +2143,36 @@ export const useGameStore = create<HyptrixGameState>()(
           const crisis = state.draft.crises.find((c) => c.id === crisisId);
           if (!crisis || crisis.resolved) return state;
           const opt = choice === 'A' ? crisis.optionA : crisis.optionB;
-          const cost = Math.max(0, Number(opt.cost) || 0);
-          const hypeDelta = Math.max(-25, Math.min(25, Number(opt.hypeDelta) || 0));
-          const qualityDelta = Math.max(-15, Math.min(15, Number(opt.qualityDelta) || 0));
-          const reputationDelta = Math.max(-5, Math.min(5, Number(opt.reputationDelta) || 0));
-          const marketDelta = Math.max(-5_000_000, Math.min(5_000_000, Number(opt.marketValueDelta) || 0));
-          const delayDays = Math.max(0, Math.min(5, Number(opt.delayDays) || 0));
-          if (state.cash < cost) return state;
-
-          const nextCash = state.cash - cost;
-          const nextReputation = Math.max(
-            15,
-            Math.min(100, state.reputation + reputationDelta)
-          );
-          const nextMarketModifier =
-            (state.marketValueModifier || 0) + marketDelta;
-          const nextDraft: ActiveDraftProject = {
-            ...state.draft,
-            hypeScore: Math.max(10, Math.min(100, state.draft.hypeScore + hypeDelta)),
-            qualityModifier: state.draft.qualityModifier + qualityDelta,
-            filmingDurationDays: Math.max(1, state.draft.filmingDurationDays + delayDays),
-            scheduledReleaseDay: state.draft.scheduledReleaseDay === null
-              ? null
-              : state.draft.scheduledReleaseDay + delayDays,
-            crises: state.draft.crises.map((c) =>
-              c.id === crisisId ? { ...c, resolved: true, chosenOption: choice } : c
-            ),
-            productionNews: [
-              ...(state.draft.productionNews || []),
-              {
-                id: `decision_${crisisId}_${choice}_${state.gameDay}`,
-                day: state.gameDay,
-                headline: `قرار إنتاجي: ${crisis.title}`,
-                detail: `اختيارك: ${opt.label}. أثر القرار سيظهر في جودة العمل وترقب الجمهور والجدول والسمعة والميزانية.`,
-                impactType: hypeDelta >= 0 ? 'positive' : 'drama',
-                hypeDelta,
-              },
-            ],
-          };
-          const nextMarketValue = calculateStudioMarketValue({
+          const nextCash = state.cash - opt.cost;
+          const repDelta =
+            opt.qualityDelta >= 3 ? 1 : opt.qualityDelta <= -4 ? -2 : 0;
+          const nextRep = Math.max(15, Math.min(100, state.reputation + repDelta));
+          const schedulePenalty = opt.qualityDelta <= -5 ? 1 : 0;
+          const nextMarketVal = calculateStudioMarketValue({
             cash: nextCash,
-            reputation: nextReputation,
+            reputation: nextRep,
             releasedProjects: state.releasedProjects,
-            marketValueModifier: nextMarketModifier,
+            marketValueModifier: state.marketValueModifier || 0,
           });
           return {
             cash: nextCash,
-            reputation: nextReputation,
-            marketValueModifier: nextMarketModifier,
-            marketValue: nextMarketValue,
-            draft: nextDraft,
+            reputation: nextRep,
+            marketValue: nextMarketVal,
+            draft: {
+              ...state.draft,
+              hypeScore: Math.max(10, Math.min(100, state.draft.hypeScore + opt.hypeDelta)),
+              qualityModifier: state.draft.qualityModifier + opt.qualityDelta,
+              filmingDurationDays: state.draft.filmingDurationDays + schedulePenalty,
+              crises: state.draft.crises.map((c) =>
+                c.id === crisisId ? { ...c, resolved: true, chosenOption: choice } : c
+              ),
+            },
           };
         }),
 
       completeProjectRelease: (record) =>
         set((state) => {
-          const newCash = state.cash + record.netProfit;
+          const newCash = state.cash - record.totalBudget + record.totalGrossRevenue;
           const nextProjects = [record, ...state.releasedProjects];
 
           const repDelta =
@@ -1772,8 +2208,10 @@ export const useGameStore = create<HyptrixGameState>()(
             ...state.draft.supportingActorIds,
           ];
 
-          const isMajorHit = record.criticScore >= 7.4 && record.netProfit >= 15_000_000;
-          const isFlop = record.criticScore < 5.8 || record.netProfit < -5_000_000;
+          const projectedNetProfit =
+            (record.targetGrossRevenue || record.totalGrossRevenue) - record.totalBudget;
+          const isMajorHit = record.criticScore >= 7.4 && projectedNetProfit >= 15_000_000;
+          const isFlop = record.criticScore < 5.8 || projectedNetProfit < -5_000_000;
 
           for (const actorId of castIds) {
             const baseActor = allActors.find((a) => a.id === actorId);
@@ -1907,27 +2345,34 @@ export const useGameStore = create<HyptrixGameState>()(
           };
         }),
 
-      advanceReleaseTrackingDay: (newsItem) =>
+      advanceReleaseTrackingDay: (newsItem, playerMomentum = 1.0, rivalMomentum = 1.0) =>
         set((state) => {
           const current = state.lastReleasedProject;
           if (!current) return state;
-          const maxSteps = current.format === 'series' ? current.episodes || 15 : 10;
-          const nextDaysTracked = Math.min(maxSteps, (current.daysTracked || 1) + 1);
-          const updatedNews = newsItem
-            ? [newsItem, ...(current.dailyNews || [])]
-            : current.dailyNews || [];
 
-          const updatedLast: ReleasedProjectRecord = {
-            ...current,
-            daysTracked: nextDaysTracked,
-            dailyNews: updatedNews,
-          };
+          const { updatedProject: updatedLast, revenueDelta } =
+            stepProjectRevenueProgress(
+              current,
+              playerMomentum,
+              rivalMomentum,
+              newsItem
+            );
 
+          const nextCash = state.cash + revenueDelta;
           const updatedProjects = state.releasedProjects.map((p) =>
             p.id === updatedLast.id ? updatedLast : p
           );
 
+          const nextMarketVal = calculateStudioMarketValue({
+            cash: nextCash,
+            reputation: state.reputation,
+            releasedProjects: updatedProjects,
+            marketValueModifier: state.marketValueModifier || 0,
+          });
+
           return {
+            cash: nextCash,
+            marketValue: nextMarketVal,
             lastReleasedProject: updatedLast,
             releasedProjects: updatedProjects,
           };
@@ -2213,6 +2658,71 @@ export const useGameStore = create<HyptrixGameState>()(
             },
             breakingNewsQueue: [...state.breakingNewsQueue, newsItem],
             aiMemoryLog: [event.headline, ...(state.aiMemoryLog || [])].slice(0, 25),
+          };
+        }),
+
+      addAiRivalReleases: (rivals, newsHeadline, newsDetail) =>
+        set((state) => {
+          if (!Array.isArray(rivals) || rivals.length === 0) return state;
+          const nextCompDelta = { ...state.competitorNetWorthDelta };
+          const nextYearlyRivals = [...(state.yearlyRivalReleases || [])];
+
+          for (const riv of rivals) {
+            nextYearlyRivals.unshift({
+              ...riv,
+              year: riv.year || state.currentYear,
+            });
+            const stName = riv.studioName;
+            const prev = nextCompDelta[stName] || {
+              netWorthDelta: 0,
+              releasesDelta: 0,
+              awardsDelta: 0,
+            };
+            const estimatedProfit = Math.round((riv.boxOfficeRevenue || 120_000_000) * 0.45);
+            nextCompDelta[stName] = {
+              netWorthDelta: prev.netWorthDelta + estimatedProfit,
+              releasesDelta: prev.releasesDelta + 1,
+              awardsDelta: prev.awardsDelta,
+            };
+          }
+
+          const topRival = rivals[0];
+          const headline =
+            newsHeadline ||
+            `اشتعال المنافسة: «${topRival.studioName}» تطلق «${topRival.title}» ببطولة ${topRival.leadStarName}!`;
+          const detail =
+            newsDetail ||
+            `طرحت «${topRival.studioName}» عملها الضخم «${topRival.title}» بتقييم نقدي (${topRival.criticScore}/10) وإيرادات متوقعة ${formatMoney(topRival.boxOfficeRevenue)} ج.م.`;
+
+          const newsItem: WorldBreakingNewsModalItem = {
+            id: `news_ai_riv_${Date.now()}`,
+            day: state.gameDay,
+            year: state.currentYear,
+            category: 'rival_project',
+            badgeLabel: 'منافسة شباك التذاكر والمنصات 🔥',
+            headline,
+            detail,
+            highlightName: topRival.studioName,
+            extraStatBadge: `تقييم ${topRival.criticScore}/10 · ${formatMoney(topRival.boxOfficeRevenue)} ج.م`,
+            gameImpactLabel: `عمل منافس في السباق: «${topRival.title}» ببطولة ${topRival.leadStarName}`,
+          };
+
+          return {
+            yearlyRivalReleases: nextYearlyRivals.slice(0, 18),
+            competitorNetWorthDelta: nextCompDelta,
+            breakingNewsQueue:
+              state.breakingNewsQueue.length === 0
+                ? [newsItem]
+                : state.breakingNewsQueue,
+            worldHistory: [
+              {
+                year: state.currentYear,
+                eventText: `${headline} — ${detail}`,
+                category: 'release',
+              },
+              ...state.worldHistory,
+            ],
+            aiMemoryLog: [headline, ...(state.aiMemoryLog || [])].slice(0, 25),
           };
         }),
 

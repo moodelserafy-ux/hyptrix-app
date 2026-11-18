@@ -1,20 +1,13 @@
 import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = (process.env.APP_URL || 'https://hyptrix.app').replace(/\/$/, '');
-  const lastModified = new Date();
+  const baseUrl = process.env.APP_URL || 'https://hyptrix.com';
   return [
     {
       url: baseUrl,
-      lastModified,
-      changeFrequency: 'weekly',
-      priority: 1,
-    },
-    {
-      url: `${baseUrl}/about`,
-      lastModified,
-      changeFrequency: 'monthly',
-      priority: 0.8,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 1.0,
     },
   ];
 }

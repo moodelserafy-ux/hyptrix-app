@@ -1,27 +1,20 @@
-# Hyptrix — Cinema & TV Tycoon
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-لعبة محاكاة وإدارة استوديو إنتاج سينمائي وتلفزيوني باللغة العربية. يدير اللاعب شركة إنتاج خيالية من مرحلة تأسيس الاستوديو وتطوير الفكرة والتفاوض مع المواهب إلى الإنتاج والتوزيع والإيرادات والمنافسة والجوائز.
+# Run and deploy your AI Studio app
 
-## التشغيل محلياً
+This contains everything you need to run your app locally.
 
-**المتطلبات:** Node.js 20 أو أحدث.
+View your app in AI Studio: https://ai.studio/apps/972472d9-1d91-4b19-b498-bc2fdea92593
 
-1. ثبّت الحزم: `npm install`
-2. انسخ `.env.example` إلى `.env.local` وأضف المفاتيح الاختيارية التي تستخدمها.
-3. شغّل بيئة التطوير: `npm run dev`
-4. افحص نسخة الإنتاج قبل النشر: `npm run build`
+## Run Locally
 
-## تكاملات اختيارية
+**Prerequisites:**  Node.js
 
-- `GROQ_API_KEY`: لتفعيل توليد بعض الأحداث وتقييم عروض المواهب والأخبار الديناميكية. تتوفر بدائل محلية داخل اللعبة عند غياب المفتاح.
-- `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_ANON_KEY`: للمزامنة السحابية ولوحة المتصدرين.
-- `APP_URL`: عنوان النشر المستخدم في البيانات الوصفية والروابط وملف Sitemap. اضبطه على النطاق النهائي عند النشر.
 
-## ملفات الفهرسة والمساعدات
-
-- `app/robots.ts`: قواعد روبوتات البحث والزحف.
-- `app/sitemap.ts`: خريطة الموقع.
-- `public/llms.txt`: وصف مرجعي لمحتوى اللعبة ومميزاتها وحدود المعلومات الخيالية.
-- `app/layout.tsx`: بيانات Metadata وSchema.org.
-
-راجع `CHANGELOG-AR.md` لتفاصيل هذا التحديث وحالة التحقق.
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

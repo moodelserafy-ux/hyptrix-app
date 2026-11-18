@@ -1,383 +1,432 @@
 'use client';
 
-import React, { useState } from 'react';
-import { StepModalFrame } from './StepModalFrame';
-import { FloatingToast } from './FloatingToast';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   useGameStore,
   OfferRoleSlot,
-  TalentOfferRecord,
   SLOT_ARABIC_NAMES,
-  formatGameDate,
   getLiveActorsWithEvolution,
+  TalentOfferRecord,
 } from '@/lib/store';
 import {
+  GENRES,
   getResolvedDatabase,
   ActorItem,
   CrewItem,
-  GENRES,
 } from '@/lib/db-resolver';
 import {
+  ROLE_BILLING_META,
+  RoleBillingSize,
+  VIP_DINNER_COST,
+  calculateGenreSynergy,
   evaluateCastChemistry,
-  calculateNegotiatedSalary,
-  calculateTalentExpectedSalary,
+  evaluateTalentOfferDeep,
   formatMoney,
 } from '@/lib/game-engine';
-import { EaFcTalentCard } from './EaFcTalentCard';
+import { TalentCharacterPortraitSvg } from '@/components/CinematicGraphicsScene';
 import {
-  AlertOctagon,
-  ArrowLeft,
-  ArrowRight,
-  Clock,
-  FileText,
-  Flame,
-  Handshake,
+  Users,
+  Clapperboard,
+  Check,
   Search,
   Sparkles,
-  Users,
+  Loader2,
   X,
-  ChevronDown,
-  Clapperboard,
-  PenLine,
-  Camera,
+  Utensils,
+  MessageSquare,
+  Award,
+  Flame,
+  Zap,
+  Wand2,
   Music,
-  WandSparkles,
-  Check,
+  Camera,
+  Film,
+  Clock,
+  AlertCircle,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
-type SequentialTeamStep =
-  | 'actors'
-  | 'director'
-  | 'cinematographer'
-  | 'composer'
-  | 'editor_vfx';
+type WizardStepId = 1 | 2 | 3 | 4 | 5 | 6;
 
-type ActorTierFilter = 'ALL' | 'S' | 'A' | 'B' | 'C' | 'RISING' | 'EVOLVED';
-
-interface ActiveNegotiationTarget {
-  talent: ActorItem | CrewItem;
-  kind: 'actor' | 'crew';
-  roleSlot: OfferRoleSlot;
-}
-
-const ROLE_CAPACITY: Partial<Record<OfferRoleSlot, number>> = {
-  lead: 2,
-  antagonist: 1,
-  supporting: 4,
-  cameo: 2,
-};
-
-function roleSalaryFactor(slot: OfferRoleSlot, kind: 'actor' | 'crew') {
-  if (kind === 'crew') return 1;
-  if (slot === 'lead') return 1.14;
-  if (slot === 'antagonist') return 0.96;
-  if (slot === 'supporting') return 0.64;
-  if (slot === 'cameo') return 1; // cameo reduction is applied by calculateTalentExpectedSalary
-  return 1;
-}
-
-function roleScopeAcceptanceAdjustment(slot: OfferRoleSlot, baseSalary: number, kind: 'actor' | 'crew') {
-  if (kind !== 'actor') return 0;
-  if (slot === 'lead') return 0.04;
-  if (slot === 'supporting') return baseSalary >= 60_000_000 ? -0.14 : baseSalary >= 35_000_000 ? -0.07 : 0;
-  if (slot === 'cameo') return baseSalary >= 60_000_000 ? -0.20 : baseSalary >= 35_000_000 ? -0.12 : baseSalary >= 18_000_000 ? -0.05 : 0;
-  return 0;
-}
-
-function calculateRoleFit(
-  talent: ActorItem | CrewItem,
-  kind: 'actor' | 'crew',
-  slot: OfferRoleSlot,
-  genreMasteryScore: number
-) {
-  if (kind === 'actor') {
-    const actor = talent as ActorItem;
-    const { overall, acting, charisma, box_office_pull } = actor.stats;
-    const weights = slot === 'lead'
-      ? [0.16, 0.30, 0.14, 0.22, 0.18]
-      : slot === 'antagonist'
-      ? [0.16, 0.38, 0.20, 0.08, 0.18]
-      : slot === 'supporting'
-      ? [0.20, 0.38, 0.16, 0.10, 0.16]
-      : [0.22, 0.28, 0.16, 0.10, 0.24];
-    return Math.max(0, Math.min(100, Math.round(
-      overall * weights[0] + acting * weights[1] + charisma * weights[2] +
-      box_office_pull * weights[3] + genreMasteryScore * weights[4]
-    )));
+const STEP_META: Record<
+  WizardStepId,
+  {
+    currentActionLabel: string;
+    crewRole?: 'director' | 'cinematographer' | 'composer' | 'editor_vfx';
+    maxAllowed?: number;
   }
-  const crew = talent as CrewItem;
-  const roleStat = slot === 'director'
-    ? (crew.stats.vision * 0.55 + (crew.stats.control || 70) * 0.45)
-    : slot === 'cinematographer'
-    ? (crew.stats.vision * 0.65 + crew.stats.efficiency * 0.35)
-    : slot === 'composer'
-    ? (crew.stats.pacing * 0.65 + crew.stats.overall * 0.35)
-    : (crew.stats.pacing * 0.55 + crew.stats.efficiency * 0.45);
-  const genreFit = genreMasteryScore;
-  return Math.max(0, Math.min(100, Math.round(
-    crew.stats.overall * 0.35 + roleStat * 0.45 + genreFit * 0.20
-  )));
-}
-
-const SEQUENTIAL_STEPS: {
-  id: SequentialTeamStep;
-  stepNum: number;
-  shortLabel: string;
-  title: string;
-  nextButtonLabel: string;
-  required: boolean;
-}[] = [
-  {
-    id: 'actors',
-    stepNum: 1,
-    shortLabel: '1. الممثلون',
-    title: 'الخطوة 1 من 5: اختيار الممثلين وأدوار البطولة',
-    nextButtonLabel: 'التالي: اختيار مخرج العمل',
-    required: true,
+> = {
+  1: {
+    currentActionLabel: 'اختيار مخرج العمل (متاح من 1 إلى 2 مخرج كحد أقصى)',
+    crewRole: 'director',
+    maxAllowed: 2,
   },
-  {
-    id: 'director',
-    stepNum: 2,
-    shortLabel: '2. المخرج',
-    title: 'الخطوة 2 من 5: اختيار مخرج العمل',
-    nextButtonLabel: 'التالي: اختيار مدير التصوير (DOP)',
-    required: true,
+  2: {
+    currentActionLabel: 'اختيار مدير التصوير السينمائي (DOP)',
+    crewRole: 'cinematographer',
+    maxAllowed: 1,
   },
-  {
-    id: 'cinematographer',
-    stepNum: 3,
-    shortLabel: '3. التصوير',
-    title: 'الخطوة 3 من 5: اختيار مدير التصوير والإضاءة',
-    nextButtonLabel: 'التالي: اختيار الموسيقار',
-    required: false,
+  3: {
+    currentActionLabel: 'اختيار مؤلف الموسيقى التصويرية',
+    crewRole: 'composer',
+    maxAllowed: 1,
   },
-  {
-    id: 'composer',
-    stepNum: 4,
-    shortLabel: '4. الموسيقى',
-    title: 'الخطوة 4 من 5: اختيار مؤلف الموسيقى التصويرية',
-    nextButtonLabel: 'التالي: اختيار المونتير والخدع البصرية',
-    required: false,
+  4: {
+    currentActionLabel: 'اختيار مهندس المونتاج والمؤثرات (VFX)',
+    crewRole: 'editor_vfx',
+    maxAllowed: 1,
   },
-  {
-    id: 'editor_vfx',
-    stepNum: 5,
-    shortLabel: '5. المونتاج',
-    title: 'الخطوة 5 من 5: اختيار المونتير والخدع البصرية (VFX)',
-    nextButtonLabel: 'اعتماد الطاقم بالكامل والانتقال للميزانيات والتصوير!',
-    required: false,
+  5: {
+    currentActionLabel: 'التعاقد مع الممثلين وأبطال العمل',
   },
-];
+  6: {
+    currentActionLabel: 'مراجعة العقود واعتماد ميزانية الإنتاج',
+  },
+};
 
 export function Stage3CrewCastCards() {
   const {
     draft,
+    updateDraft,
+    setActiveScreen,
     cash,
-    founderPerk,
     reputation,
-    gameDay,
     currentYear,
-    actorAwardCounts,
-    actorDynamicState,
-    aiGeneratedActors,
+    gameDay,
+    studioName,
     customDbPatch,
+    aiGeneratedActors,
+    actorDynamicState,
+    actorAwardCounts,
+    aiMemoryLog,
+    submitTalentOffer,
+    toggleCrewSelectionForSlot,
+    confirmMultiAcceptedChoice,
+    removeTalentFromDraft,
+    showToast,
     groqApiKeyClient,
     preferredGroqModel,
-    submitTalentOffer,
-    removeTalentFromDraft,
-    setActiveScreen,
   } = useGameStore();
 
-  const db = getResolvedDatabase(customDbPatch);
+  const db = useMemo(() => getResolvedDatabase(customDbPatch), [customDbPatch]);
 
-  // Live actors with age progression, stat evolution/drop, AI rising discoveries, and retirement/death filter
-  const allLiveActors = getLiveActorsWithEvolution({
-    baseActors: db.actors,
-    aiGeneratedActors,
-    actorDynamicState,
-    currentYear,
-    gameDay,
-  }).filter((a) => a.status !== 'retired' && a.status !== 'deceased');
+  const liveActors = useMemo(
+    () =>
+      getLiveActorsWithEvolution({
+        baseActors: db.actors,
+        aiGeneratedActors,
+        actorDynamicState,
+        currentYear,
+        gameDay,
+      }),
+    [db.actors, aiGeneratedActors, actorDynamicState, currentYear, gameDay]
+  );
 
-  const [currentTeamStep, setCurrentTeamStep] =
-    useState<SequentialTeamStep>('actors');
-  const [actorSearchQuery, setActorSearchQuery] = useState<string>('');
-  const [crewSearchQuery, setCrewSearchQuery] = useState<string>('');
-  const [actorTierFilter, setActorTierFilter] =
-    useState<ActorTierFilter>('ALL');
-  const [visibleActorCount, setVisibleActorCount] = useState<number>(16);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [wizardStep, setWizardStep] = useState<WizardStepId>(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTier, setSelectedTier] = useState<
+    'ALL' | 'S' | 'A' | 'B' | 'C' | 'RISING' | 'OFFERS'
+  >('ALL');
+  const [genderFilter, setGenderFilter] = useState<'ALL' | 'male' | 'female'>('ALL');
 
-  // Pitch, Free-Text Role & Contract Negotiation Modal State
-  const [negotiationTarget, setNegotiationTarget] =
-    useState<ActiveNegotiationTarget | null>(null);
-  const [customRoleInput, setCustomRoleInput] = useState<string>('');
+  // Negotiation Modal State
+  const [negotiatingTarget, setNegotiatingTarget] = useState<
+    | { kind: 'crew'; item: CrewItem }
+    | { kind: 'actor'; item: ActorItem }
+    | null
+  >(null);
+
   const [offeredSalary, setOfferedSalary] = useState<number>(0);
   const [backendPoints, setBackendPoints] = useState<number>(0);
   const [vipDinner, setVipDinner] = useState<boolean>(false);
-  const [sendingOffer, setSendingOffer] = useState<boolean>(false);
+  const [roleBillingSize, setRoleBillingSize] = useState<RoleBillingSize>('lead_star');
+  const [customRoleName, setCustomRoleName] = useState<string>('');
+  const [isEvaluatingOffer, setIsEvaluatingOffer] = useState(false);
+  const [isGeneratingRole, setIsGeneratingRole] = useState(false);
 
-  const getNegotiatedCost = (id: string, baseSalary: number) => {
-    const offer = draft.talentOffers[id];
-    if (offer && offer.status === 'accepted') {
-      return offer.offeredSalary;
+  // Lock background scroll when modal is open
+  useEffect(() => {
+    if (negotiatingTarget) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
-    const neg = draft.negotiatedDiscounts[id] || {
-      backendPoints: 0,
-      vipDinner: false,
+    return () => {
+      document.body.style.overflow = '';
     };
-    return calculateNegotiatedSalary(
-      baseSalary,
-      neg.backendPoints,
-      founderPerk,
-      neg.vipDinner
+  }, [negotiatingTarget]);
+
+  const primaryGenreObj = useMemo(
+    () => GENRES.find((g) => g.id === draft.primaryGenre),
+    [draft.primaryGenre]
+  );
+
+  const currentStepMeta = STEP_META[wizardStep];
+
+  const crewForCurrentStep = useMemo(() => {
+    const role = currentStepMeta.crewRole;
+    if (!role) return [];
+    return db.crew.filter((c) => {
+      if (c.role !== role) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.specialty || '').toLowerCase().includes(q)
+      );
+    });
+  }, [db.crew, currentStepMeta.crewRole, searchQuery]);
+
+  const activeActorsPool = useMemo(
+    () =>
+      liveActors.filter(
+        (a) => a.status !== 'deceased' && a.status !== 'retired'
+      ),
+    [liveActors]
+  );
+
+  const filteredActors = useMemo(() => {
+    return activeActorsPool.filter((a) => {
+      const offer = draft.talentOffers[a.id];
+      if (selectedTier === 'RISING' && !a.isRisingDiscovery && !a.isAiGenerated) {
+        return false;
+      }
+      if (selectedTier === 'OFFERS' && !offer) {
+        return false;
+      }
+      if (
+        (selectedTier === 'S' ||
+          selectedTier === 'A' ||
+          selectedTier === 'B' ||
+          selectedTier === 'C') &&
+        a.tier !== selectedTier
+      ) {
+        return false;
+      }
+      if (genderFilter !== 'ALL') {
+        const isFemale = a.gender === 'female' || a.gender === 'F';
+        if (genderFilter === 'female' && !isFemale) return false;
+        if (genderFilter === 'male' && isFemale) return false;
+      }
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        a.name.toLowerCase().includes(q) ||
+        (a.archetype || '').toLowerCase().includes(q)
+      );
+    });
+  }, [activeActorsPool, selectedTier, genderFilter, searchQuery, draft.talentOffers]);
+
+  const directors = useMemo(
+    () => db.crew.filter((c) => c.role === 'director'),
+    [db.crew]
+  );
+
+  const approvedDirectorIds = useMemo(() => {
+    const acceptedInOffers = Object.values(draft.talentOffers || {})
+      .filter((o) => o.roleSlot === 'director' && o.status === 'accepted')
+      .map((o) => o.talentId);
+    return Array.from(
+      new Set([
+        ...(draft.directorIds || []),
+        ...(draft.directorId ? [draft.directorId] : []),
+        ...acceptedInOffers,
+      ])
+    ).slice(0, 2);
+  }, [draft.directorIds, draft.directorId, draft.talentOffers]);
+
+  const selectedDirectors = useMemo(
+    () => directors.filter((d) => approvedDirectorIds.includes(d.id)),
+    [directors, approvedDirectorIds]
+  );
+
+  const selectedDirector = selectedDirectors[0] || null;
+
+  const allSignedActorIds = useMemo(
+    () => [
+      ...draft.leadActorIds,
+      ...(draft.antagonistId ? [draft.antagonistId] : []),
+      ...draft.supportingActorIds,
+      ...draft.cameoActorIds,
+    ],
+    [
+      draft.leadActorIds,
+      draft.antagonistId,
+      draft.supportingActorIds,
+      draft.cameoActorIds,
+    ]
+  );
+
+  const signedCastActors = useMemo(
+    () => liveActors.filter((a) => allSignedActorIds.includes(a.id)),
+    [liveActors, allSignedActorIds]
+  );
+
+  const allOffersList = useMemo(
+    () => Object.values(draft.talentOffers || {}),
+    [draft.talentOffers]
+  );
+
+  const pendingOffersList = useMemo(
+    () => allOffersList.filter((o) => o.status === 'pending'),
+    [allOffersList]
+  );
+
+  // Live Step 6 Chemistry & Synergy Reports
+  const castChemistryReport = useMemo(
+    () =>
+      evaluateCastChemistry(
+        signedCastActors,
+        selectedDirector?.stats.control || 85
+      ),
+    [signedCastActors, selectedDirector]
+  );
+
+  const genreSynergyReport = useMemo(() => {
+    const words = draft.scriptSynopsis.trim()
+      ? draft.scriptSynopsis.trim().split(/\s+/).length
+      : 20;
+    const playerScriptCraft =
+      words >= 28 ? 92 : words >= 18 ? 85 : words >= 10 ? 78 : 68;
+    return calculateGenreSynergy(
+      draft.primaryGenre,
+      draft.secondaryGenre,
+      selectedDirector?.stats.vision || 82,
+      playerScriptCraft
     );
-  };
+  }, [
+    draft.primaryGenre,
+    draft.secondaryGenre,
+    draft.scriptSynopsis,
+    selectedDirector,
+  ]);
 
-  const selectedDirector =
-    db.crew.find((c) => c.id === draft.directorId) || null;
-  const selectedDop = db.crew.find((c) => c.id === draft.dopId) || null;
-  const selectedComposer =
-    db.crew.find((c) => c.id === draft.composerId) || null;
-  const selectedVfx = db.crew.find((c) => c.id === draft.vfxId) || null;
-
-  const signedActorIds = [
-    ...draft.leadActorIds,
-    ...(draft.antagonistId ? [draft.antagonistId] : []),
-    ...draft.supportingActorIds,
-    ...draft.cameoActorIds,
-  ];
-
-  const allSelectedActors = allLiveActors.filter((a) =>
-    signedActorIds.includes(a.id)
-  );
-
-  const getRoleCount = (slot: OfferRoleSlot) => {
-    const signedCount = slot === 'lead' ? draft.leadActorIds.length
-      : slot === 'antagonist' ? Number(Boolean(draft.antagonistId))
-      : slot === 'supporting' ? draft.supportingActorIds.length
-      : slot === 'cameo' ? draft.cameoActorIds.length : 0;
-    const pendingCount = Object.values(draft.talentOffers).filter((offer) =>
-      offer.roleSlot === slot && offer.status === 'pending' &&
-      !signedActorIds.includes(offer.talentId)
-    ).length;
-    return signedCount + pendingCount;
-  };
-
-  const chemistry = evaluateCastChemistry(
-    allSelectedActors,
-    selectedDirector?.stats.control || 80
-  );
-
-  const totalTalentPayroll = [
-    ...(selectedDirector ? [selectedDirector] : []),
-    ...(selectedDop ? [selectedDop] : []),
-    ...(selectedComposer ? [selectedComposer] : []),
-    ...(selectedVfx ? [selectedVfx] : []),
-    ...allSelectedActors,
-  ].reduce((sum, item) => sum + getNegotiatedCost(item.id, item.base_salary), 0);
-
-  const pendingOffersList = Object.values(draft.talentOffers).filter(
-    (o) => o.status === 'pending'
-  );
-
-  const unlockedRisingTalents = allLiveActors.filter(
-    (a) => a.isRisingDiscovery && (a.unlockDay ?? 1) <= gameDay
-  );
-
-  const openNegotiationModal = (
-    talent: ActorItem | CrewItem,
-    kind: 'actor' | 'crew',
-    roleSlot: OfferRoleSlot
+  const openNegotiation = (
+    target: { kind: 'crew'; item: CrewItem } | { kind: 'actor'; item: ActorItem }
   ) => {
-    const existingOffer = draft.talentOffers[talent.id];
-    const defaultBase = talent.base_salary;
-    const availableActorSlot = kind === 'actor'
-      ? (['lead', 'antagonist', 'supporting', 'cameo'] as OfferRoleSlot[]).find((slot) =>
-          getRoleCount(slot) < (ROLE_CAPACITY[slot] || 0) || existingOffer?.roleSlot === slot
-        ) || roleSlot
-      : roleSlot;
-    const initialRoleSlot = availableActorSlot;
-
-    setNegotiationTarget({ talent, kind, roleSlot: initialRoleSlot });
-    setCustomRoleInput(
+    const existingOffer = draft.talentOffers[target.item.id];
+    setNegotiatingTarget(target);
+    setOfferedSalary(existingOffer?.offeredSalary || target.item.base_salary);
+    setBackendPoints(existingOffer?.backendPoints || 0);
+    setVipDinner(false);
+    const defaultBilling: RoleBillingSize =
+      existingOffer?.roleBillingSize ||
+      (draft.leadActorIds.length === 0
+        ? 'lead_star'
+        : draft.leadActorIds.length < 2
+        ? 'co_lead'
+        : !draft.antagonistId
+        ? 'antagonist'
+        : 'supporting');
+    setRoleBillingSize(defaultBilling);
+    setCustomRoleName(
       existingOffer?.customRoleName ||
-        (draft.castCustomRoles || {})[talent.id] ||
-        ''
+        (target.kind === 'actor'
+          ? draft.castCustomRoles[target.item.id] ||
+            `شخصية محورية في أحداث «${draft.title}»`
+          : `قيادة ${SLOT_ARABIC_NAMES[target.item.role as OfferRoleSlot] || 'الطاقم الفني'} في «${draft.title}»`)
     );
-    setOfferedSalary(
-      existingOffer && existingOffer.status === 'rejected'
-        ? Math.round(defaultBase * roleSalaryFactor(initialRoleSlot, kind) * 1.12)
-        : Math.round(defaultBase * roleSalaryFactor(initialRoleSlot, kind) * 0.94 * (initialRoleSlot === 'cameo' ? 0.22 : 1))
-    );
-    setBackendPoints(existingOffer?.backendPoints ?? 0);
-    setVipDinner(existingOffer?.vipDinner ?? false);
-    setErrorMsg(null);
   };
 
-  const handleSendPitchAndOffer = async () => {
-    if (!negotiationTarget) return;
-    const { talent, kind, roleSlot } = negotiationTarget;
-    const isActor = kind === 'actor';
+  // Character Role Generator inside Negotiation Modal
+  const handleGenerateRoleWithAI = async () => {
+    if (!negotiatingTarget || negotiatingTarget.kind !== 'actor') return;
+    setIsGeneratingRole(true);
+    try {
+      const actor = negotiatingTarget.item;
+      const res = await fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'generate_character_role',
+          groqKeyOverride: groqApiKeyClient,
+          preferredModel: preferredGroqModel,
+          payload: {
+            talentName: actor.name,
+            archetype: actor.archetype || 'نجم تمثيل',
+            roleBillingSize,
+            projectTitle: draft.title,
+            synopsis: draft.scriptSynopsis,
+            primaryGenre: primaryGenreObj?.name || 'دراما',
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data?.roleDescription) {
+        setCustomRoleName(data.roleDescription);
+      }
+    } catch {
+      showToast('تعذر توليد وصف الشخصية حالياً، حاول مجدداً.', 'warning');
+    } finally {
+      setIsGeneratingRole(false);
+    }
+  };
 
-    if (isActor && !customRoleInput.trim()) {
-      setErrorMsg(
-        'يرجى كتابة الدور المطلوب للممثل في العمل أولاً (مثال: البطل الرئيسي ضابط المخابرات، أو زعيم العصابة، إلخ).'
+  // Multi-factor AI Talent Offer Submission (Wait 2–3 Game Days for Decision!)
+  const handleSendOffer = async () => {
+    if (!negotiatingTarget) return;
+
+    if (vipDinner && cash < VIP_DINNER_COST) {
+      showToast(
+        `السيولة الحالية لا تكفي لإقامة عشاء عمل خاص (${formatMoney(VIP_DINNER_COST)} ج.م)!`,
+        'warning'
       );
       return;
     }
 
-    setSendingOffer(true);
-    setErrorMsg(null);
+    setIsEvaluatingOffer(true);
 
-    const actorItem = isActor ? (talent as ActorItem) : null;
-    const crewItem = !isActor ? (talent as CrewItem) : null;
-
-    const genreMasteryScore = actorItem
-      ? actorItem.genre_mastery[draft.primaryGenre] || 74
-      : crewItem?.best_genres.includes(draft.primaryGenre)
+    const isActor = negotiatingTarget.kind === 'actor';
+    const item = negotiatingTarget.item;
+    const starTier: 'S' | 'A' | 'B' | 'C' = isActor
+      ? (item as ActorItem).tier
+      : item.stats.overall >= 90
+      ? 'S'
+      : item.stats.overall >= 83
+      ? 'A'
+      : 'B';
+    const ego = isActor ? (item as ActorItem).stats.ego : 72;
+    const genreMasteryScore = isActor
+      ? (item as ActorItem).genre_mastery[draft.primaryGenre] || 74
+      : (item as CrewItem).best_genres.includes(draft.primaryGenre)
       ? 92
-      : 75;
+      : 74;
 
-    const egoScore = actorItem ? actorItem.stats.ego : 76;
+    const slot: OfferRoleSlot = isActor
+      ? roleBillingSize === 'antagonist'
+        ? 'antagonist'
+        : roleBillingSize === 'cameo'
+        ? 'cameo'
+        : roleBillingSize === 'supporting'
+        ? 'supporting'
+        : 'lead'
+      : ((item as CrewItem).role as OfferRoleSlot);
 
-    const salaryRoleFactor = roleSalaryFactor(roleSlot, kind);
-    const { expectedMinimumSalary: rawExpectedMinimumSalary } = calculateTalentExpectedSalary({
-      baseSalary: talent.base_salary,
-      ego: egoScore,
+    // 1. Run deep multi-factor baseline evaluation
+    const deepEval = evaluateTalentOfferDeep({
+      talentName: item.name,
+      isActor,
+      starTier,
+      overall: item.stats.overall,
+      ego,
+      baseSalary: item.base_salary,
+      offeredSalary,
+      backendPoints,
+      vipDinner,
+      roleBillingSize,
+      customRoleDescription: customRoleName,
+      projectTitle: draft.title,
+      scriptSynopsis: draft.scriptSynopsis,
+      genreName: primaryGenreObj?.name || 'دراما',
       genreMasteryScore,
       studioReputation: reputation,
-      isCameo: isActor && roleSlot === 'cameo',
+      directorOverall: selectedDirector?.stats.overall || null,
+      directorName: selectedDirector?.name || null,
     });
-    const expectedMinimumSalary = Math.round(rawExpectedMinimumSalary * salaryRoleFactor);
-    const roleFitScore = calculateRoleFit(talent, kind, roleSlot, genreMasteryScore);
-    const vipDinnerCost = vipDinner
-      ? Math.max(150_000, Math.min(1_500_000, Math.round(talent.base_salary * 0.015)))
-      : 0;
-    if (vipDinner && cash < vipDinnerCost) {
-      setErrorMsg(`رصيد الخزينة غير كافٍ لجلسة العشاء المدفوعة. التكلفة ${formatMoney(vipDinnerCost)} ج.م.`);
-      setSendingOffer(false);
-      return;
-    }
-    const roleCapacity = ROLE_CAPACITY[roleSlot];
-    if (isActor && roleCapacity !== undefined && getRoleCount(roleSlot) >= roleCapacity &&
-      !(draft.talentOffers[talent.id]?.status === 'accepted')) {
-      setErrorMsg(`اكتمل عدد المتعاقدين في فئة ${SLOT_ARABIC_NAMES[roleSlot]}. اختار فئة دور أخرى.`);
-      setSendingOffer(false);
-      return;
-    }
 
-    const genreName =
-      GENRES.find((g) => g.id === draft.primaryGenre)?.name ||
-      draft.primaryGenre;
-
-    const roleDescription = isActor
-      ? customRoleInput.trim()
-      : SLOT_ARABIC_NAMES[roleSlot];
-
-    // Actors take 2 to 3 game days to study the script & reply!
-    const waitDays = egoScore >= 88 ? 3 : 2;
+    let willAccept = deepEval.willAccept;
+    let reason = deepEval.detailedReason;
+    let waitDays = starTier === 'S' || ego >= 85 ? 3 : 2;
 
     try {
       const res = await fetch('/api/generate-event', {
@@ -388,788 +437,1346 @@ export function Stage3CrewCastCards() {
           groqKeyOverride: groqApiKeyClient,
           preferredModel: preferredGroqModel,
           payload: {
-            talentName: talent.name,
-            talentKind: kind,
-            roleLabel: roleDescription,
-            ego: egoScore,
-            baseSalary: talent.base_salary,
-            expectedMinSalary: expectedMinimumSalary,
+            talentName: item.name,
+            roleTitle: isActor
+              ? ROLE_BILLING_META[roleBillingSize]?.label
+              : SLOT_ARABIC_NAMES[(item as CrewItem).role as OfferRoleSlot],
+            isActor,
+            starTier,
+            overall: item.stats.overall,
+            ego,
+            baseSalary: item.base_salary,
             offeredSalary,
+            expectedMinimumSalary: deepEval.expectedMinimumSalary,
             backendPoints,
             vipDinner,
-            vipDinnerCost,
-            roleSlot,
-            roleFitScore,
-            projectTitle: draft.title || 'الفرعون الأخير',
-            title: draft.title || 'الفرعون الأخير',
-            synopsis: draft.scriptSynopsis,
-            primaryGenre: genreName,
-            genreName,
+            roleBillingSize,
+            roleBillingLabel: ROLE_BILLING_META[roleBillingSize]?.label,
+            roleFitScore: deepEval.roleFitScore,
+            roleFitVerdict: deepEval.roleFitVerdict,
+            artisticFitScore: deepEval.artisticFitScore,
+            customRoleDescription: customRoleName,
+            projectTitle: draft.title,
+            scriptSynopsis: draft.scriptSynopsis,
+            genreName: primaryGenreObj?.name || 'دراما',
             genreMasteryScore,
+            studioName,
             studioReputation: reputation,
+            directorName: selectedDirector?.name || null,
+            directorOverall: selectedDirector?.stats.overall || null,
+            aiMemoryLog,
           },
         }),
       });
       const data = await res.json();
-
-      const newOffer: TalentOfferRecord = {
-        talentId: talent.id,
-        talentName: talent.name,
-        roleSlot,
-        customRoleName: isActor ? roleDescription : undefined,
-        offeredSalary,
-        backendPoints,
-        vipDinner,
-        vipDinnerCost,
-        roleFitScore,
-        submittedDay: gameDay,
-        responseDueDay: gameDay + waitDays,
-        status: 'pending',
-        willAccept: Boolean(data.accepted),
-        aiReason:
-          data.reason ||
-          (data.accepted
-            ? `أعجبتني تفاصيل دور «${roleDescription}» في سيناريو «${draft.title || 'الفرعون الأخير'}»، موافق على التوقيع!`
-            : `العرض المالي المقدم لدور «${roleDescription}» أقل من أجري السوقي الحالي ولا يناسب حجم التفرغ المطلوب.`),
-        aiSource: 'وكيل أعمال الفنان',
-      };
-
-      submitTalentOffer(newOffer);
-      setNegotiationTarget(null);
+      if (typeof data?.accepted === 'boolean') {
+        willAccept = data.accepted;
+      } else if (typeof data?.willAccept === 'boolean') {
+        willAccept = data.willAccept;
+      }
+      if (typeof data?.reason === 'string' && data.reason.trim()) {
+        reason = data.reason.trim();
+      }
+      if (data?.waitDays === 2 || data?.waitDays === 3) {
+        waitDays = data.waitDays;
+      }
     } catch {
-      const roleFitAdjustment = (roleFitScore - 72) / 100;
-      const roleScopeAdjustment = roleScopeAcceptanceAdjustment(roleSlot, talent.base_salary, kind);
-      const relationshipBonus = vipDinner ? 0.035 : 0;
-      const fallbackScore = offeredSalary * (1 + backendPoints * 0.018) / Math.max(1, expectedMinimumSalary) + roleFitAdjustment + roleScopeAdjustment + relationshipBonus;
-      const fallbackThreshold = egoScore >= 90 ? 1.07 : egoScore >= 82 ? 1.00 : 0.94;
-      const fallbackAccept = fallbackScore >= fallbackThreshold && (roleFitScore >= 42 || offeredSalary >= expectedMinimumSalary * 1.6) && (roleScopeAdjustment > -0.19 || offeredSalary >= expectedMinimumSalary * 1.7);
-      submitTalentOffer({
-        talentId: talent.id,
-        talentName: talent.name,
-        roleSlot,
-        customRoleName: isActor ? roleDescription : undefined,
-        offeredSalary,
-        backendPoints,
-        vipDinner,
-        vipDinnerCost,
-        roleFitScore,
-        submittedDay: gameDay,
-        responseDueDay: gameDay + waitDays,
-        status: 'pending',
-        willAccept: fallbackAccept,
-        aiReason: fallbackAccept
-          ? `دور «${roleDescription}» في «${draft.title || 'الفرعون الأخير'}» مكتوب بذكاء والعرض المالي مناسب، جاهز للتوقيع!`
-          : `الأجر المعروض لدور «${roleDescription}» أقل من المتوقع في السوق (${formatMoney(expectedMinimumSalary)} ج.م).`,
-      });
-      setNegotiationTarget(null);
+      // Fallback to deepEval values
     } finally {
-      setSendingOffer(false);
+      setIsEvaluatingOffer(false);
     }
+
+    const responseDueDay = gameDay + waitDays;
+
+    submitTalentOffer({
+      talentId: item.id,
+      talentName: item.name,
+      roleSlot: slot,
+      roleBillingSize: isActor ? roleBillingSize : undefined,
+      customRoleName: customRoleName.trim() || undefined,
+      offeredSalary,
+      backendPoints,
+      vipDinner,
+      vipDinnerCost: vipDinner ? VIP_DINNER_COST : 0,
+      submittedDay: gameDay,
+      responseDueDay,
+      status: 'pending',
+      willAccept,
+      aiReason: reason,
+    });
+
+    setNegotiatingTarget(null);
   };
 
-  const currentStepIndex = SEQUENTIAL_STEPS.findIndex(
-    (s) => s.id === currentTeamStep
-  );
-  const activeStepMeta = SEQUENTIAL_STEPS[currentStepIndex] || SEQUENTIAL_STEPS[0];
+  const calculateTotalEstimatedBudget = () => {
+    let talentSpend = 0;
+    const signedIds = Array.from(
+      new Set([
+        ...approvedDirectorIds,
+        draft.dopId,
+        draft.composerId,
+        draft.vfxId,
+        ...draft.leadActorIds,
+        draft.antagonistId,
+        ...draft.supportingActorIds,
+        ...draft.cameoActorIds,
+      ].filter(Boolean) as string[])
+    );
 
-  const handleNextSequentialStep = () => {
-    setErrorMsg(null);
-    if (currentTeamStep === 'actors') {
-      if (signedActorIds.length === 0) {
-        setErrorMsg('لازم تتعاقد مع ممثل واحد على الأقل وتنتظر موافقته قبل الانتقال للخطوة التالية.');
-        return;
+    for (const id of signedIds) {
+      const offer = draft.talentOffers[id];
+      if (offer) {
+        talentSpend += offer.offeredSalary;
+      } else {
+        const crewMember = db.crew.find((c) => c.id === id);
+        const actorMember = liveActors.find((a) => a.id === id);
+        talentSpend += crewMember?.base_salary || actorMember?.base_salary || 0;
       }
-      setCrewSearchQuery('');
-      setCurrentTeamStep('director');
-      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    if (currentTeamStep === 'director') {
-      if (!draft.directorId) {
-        setErrorMsg('اختيار المخرج والتأكد من موافقته خطوة أساسية قبل استكمال تكوين الطاقم.');
-        return;
-      }
-      setCrewSearchQuery('');
-      setCurrentTeamStep('cinematographer');
-      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    if (currentTeamStep === 'cinematographer') {
-      setCrewSearchQuery('');
-      setCurrentTeamStep('composer');
-      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    if (currentTeamStep === 'composer') {
-      setCrewSearchQuery('');
-      setCurrentTeamStep('editor_vfx');
-      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
     }
 
-    // Final Step ('editor_vfx'): Validate required roles before proceeding to Stage 4
-    if (signedActorIds.length === 0) {
-      setErrorMsg(
-        'يرجى التعاقد مع ممثل واحد على الأقل وانتظار موافقته قبل بدء التصوير!'
-      );
-      setCurrentTeamStep('actors');
+    // Also include pending offers that haven't resolved yet so the player sees projected commitment
+    for (const offer of pendingOffersList) {
+      if (!signedIds.includes(offer.talentId)) {
+        talentSpend += offer.offeredSalary;
+      }
+    }
+
+    const deptSpend =
+      draft.budgetAllocation.setsAndLocations +
+      draft.budgetAllocation.costumesAndMakeup +
+      draft.budgetAllocation.vfxAndStunts +
+      draft.budgetAllocation.extrasAndCrowds;
+
+    return talentSpend + deptSpend;
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [wizardStep]);
+
+  const handleNextStep = () => {
+    if (wizardStep < 6) {
+      setWizardStep((prev) => (prev + 1) as WizardStepId);
+      setSearchQuery('');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    if (!draft.directorId) {
-      setErrorMsg(
-        'يرجى التعاقد مع مخرج العمل أولاً وانتظار موافقته قبل بدء التصوير!'
-      );
-      setCurrentTeamStep('director');
+
+    // Final Step 6 validation before starting filming
+    if (approvedDirectorIds.length === 0) {
+      const pendingDir = pendingOffersList.find((o) => o.roleSlot === 'director');
+      if (pendingDir) {
+        showToast(
+          `عرض المخرج «${pendingDir.talentName}» لا يزال قيد الدراسة (الرد بعد ${Math.max(1, pendingDir.responseDueDay - gameDay)} يوم)! انتظر الرد قبل بدء التصوير.`,
+          'warning'
+        );
+      } else {
+        showToast(
+          'يرجى التعاقد مع مخرج واحد على الأقل للعمل الفني وانتظار موافقته قبل بدء التصوير!',
+          'warning'
+        );
+      }
       return;
     }
+
+    if (draft.leadActorIds.length === 0) {
+      const pendingLead = pendingOffersList.find((o) => o.roleSlot === 'lead');
+      if (pendingLead) {
+        showToast(
+          `عرض البطولة للنجم «${pendingLead.talentName}» لا يزال قيد الدراسة (الرد بعد ${Math.max(1, pendingLead.responseDueDay - gameDay)} يوم)! انتظر الرد قبل بدء التصوير.`,
+          'warning'
+        );
+      } else {
+        showToast(
+          'يرجى التعاقد مع بطل رئيسي واحد على الأقل وانتظار موافقته قبل بدء التصوير!',
+          'warning'
+        );
+      }
+      return;
+    }
+
+    const totalEstimated = calculateTotalEstimatedBudget();
+    if (totalEstimated > cash) {
+      showToast(
+        `إجمالي تكلفة العقود والإنتاج (${formatMoney(totalEstimated)} ج.م) يتجاوز سيولة الخزينة الحالية (${formatMoney(cash)} ج.م)!`,
+        'warning'
+      );
+      return;
+    }
+
+    updateDraft({
+      filmingStartDay: gameDay,
+      filmingDaysElapsed: 0,
+    });
     setActiveScreen('PRODUCTION_CRISES');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handlePrevSequentialStep = () => {
-    setErrorMsg(null);
-    if (currentStepIndex > 0) {
-      setCurrentTeamStep(SEQUENTIAL_STEPS[currentStepIndex - 1].id);
-      setCrewSearchQuery('');
-      document.querySelector<HTMLElement>('[data-step-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' });
+  const handlePrevStep = () => {
+    if (wizardStep > 1) {
+      setWizardStep((prev) => (prev - 1) as WizardStepId);
+      setSearchQuery('');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       setActiveScreen('PROJECT_SETUP');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
-  // Filter & sort actors for the unified Actor Market
-  const query = actorSearchQuery.trim().toLowerCase();
-  const filteredActors = allLiveActors.filter((actor) => {
-    if ((actor.unlockDay ?? 1) > gameDay) return false;
+  // Helper to render offer status block on any Crew or Actor card
+  const renderOfferStatusBanner = (offer?: TalentOfferRecord, isSigned = true) => {
+    if (!offer) return null;
+    const daysLeft = Math.max(1, offer.responseDueDay - gameDay);
+    const totalWait = Math.max(1, offer.responseDueDay - offer.submittedDay);
+    const elapsed = Math.min(totalWait, Math.max(0, gameDay - offer.submittedDay));
+    const progressPct = Math.min(95, Math.max(20, Math.round((elapsed / totalWait) * 100)));
 
-    if (actorTierFilter === 'RISING') {
-      if (!actor.isRisingDiscovery) return false;
-    } else if (actorTierFilter === 'EVOLVED') {
-      if (!actor.overallDelta || actor.overallDelta === 0) return false;
-    } else if (actorTierFilter !== 'ALL') {
-      if (actor.tier !== actorTierFilter) return false;
+    if (offer.status === 'pending') {
+      return (
+        <div className="mt-2.5 rounded-2xl border border-amber-300/90 bg-amber-50/90 p-3 backdrop-blur-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-black text-amber-950">
+              <Clock className="h-3.5 w-3.5 text-amber-600 animate-spin" />
+              <span>قيد دراسة الوكيل الفني (اليوم {offer.submittedDay} ← اليوم {offer.responseDueDay})</span>
+            </span>
+            <span className="rounded-lg bg-amber-500 px-2 py-0.5 font-mono text-[10px] font-black text-slate-950 tabular-nums">
+              متبقي {daysLeft} {daysLeft === 1 ? 'يوم' : 'أيام'} (رد في اليوم {offer.responseDueDay})
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] font-bold text-amber-900">
+            العرض المقدم: {formatMoney(offer.offeredSalary)} ج.م
+            {offer.backendPoints > 0 ? ` + ${offer.backendPoints}% من الأرباح` : ''}
+            {offer.customRoleName ? ` · الدور: «${offer.customRoleName}»` : ''}
+          </p>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-amber-200/80">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-amber-500 to-violet-600 transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
+      );
     }
 
-    if (query) {
-      const matchName = actor.name.toLowerCase().includes(query);
-      const matchArch = (actor.archetype || '').toLowerCase().includes(query);
-      if (!matchName && !matchArch) return false;
+    if (offer.status === 'accepted' && isSigned) {
+      return (
+        <div className="mt-2.5 rounded-2xl border border-emerald-300/90 bg-emerald-50/90 p-3 backdrop-blur-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-black text-emerald-950">
+              <Check className="h-4 w-4 text-emerald-600" />
+              <span>تم قبول العرض ومعتمد في الفريق ✓</span>
+            </span>
+            <span className="font-mono text-[11px] font-black text-emerald-800 tabular-nums">
+              {formatMoney(offer.offeredSalary)} ج.م
+            </span>
+          </div>
+          {offer.aiReason && (
+            <p className="mt-1 text-[11px] font-bold leading-relaxed text-emerald-900">
+              &ldquo;{offer.aiReason}&rdquo;
+            </p>
+          )}
+        </div>
+      );
     }
-    return true;
-  });
 
-  const sortedActors = [...filteredActors].sort((a, b) => {
-    const aSigned = signedActorIds.includes(a.id) ? 1 : 0;
-    const bSigned = signedActorIds.includes(b.id) ? 1 : 0;
-    if (aSigned !== bSigned) return bSigned - aSigned;
+    if (
+      offer.status === 'accepted_awaiting_choice' ||
+      (offer.status === 'accepted' && !isSigned)
+    ) {
+      return (
+        <div className="mt-2.5 rounded-2xl border border-violet-300/90 bg-violet-50/90 p-3 backdrop-blur-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-black text-violet-950">
+              <Check className="h-4 w-4 text-violet-600" />
+              <span>وافق على العرض — بانتظار اختيارك النهائي ضمن العدد المسموح</span>
+            </span>
+            <span className="font-mono text-[11px] font-black text-violet-800 tabular-nums">
+              {formatMoney(offer.offeredSalary)} ج.م
+            </span>
+          </div>
+          {offer.aiReason && (
+            <p className="mt-1 text-[11px] font-bold leading-relaxed text-violet-900">
+              &ldquo;{offer.aiReason}&rdquo;
+            </p>
+          )}
+        </div>
+      );
+    }
 
-    const aPending = draft.talentOffers[a.id]?.status === 'pending' ? 1 : 0;
-    const bPending = draft.talentOffers[b.id]?.status === 'pending' ? 1 : 0;
-    if (aPending !== bPending) return bPending - aPending;
+    if (offer.status === 'rejected') {
+      return (
+        <div className="mt-2.5 rounded-2xl border border-rose-300/90 bg-rose-50/90 p-3 backdrop-blur-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-black text-rose-950">
+              <AlertCircle className="h-4 w-4 text-rose-600" />
+              <span>اعتذر عن قبول العرض السابق</span>
+            </span>
+          </div>
+          {offer.aiReason && (
+            <p className="mt-1 text-[11px] font-bold leading-relaxed text-rose-900">
+              &ldquo;{offer.aiReason}&rdquo;
+            </p>
+          )}
+        </div>
+      );
+    }
 
-    return b.stats.overall - a.stats.overall;
-  });
-
-  const displayedActors = sortedActors.slice(0, visibleActorCount);
-  const canProceedToProduction =
-    Boolean(draft.directorId) && signedActorIds.length >= 1;
-
-  const getStepCompletionBadge = (stepId: SequentialTeamStep) => {
-    if (stepId === 'actors') return signedActorIds.length > 0;
-    if (stepId === 'director') return Boolean(draft.directorId);
-    if (stepId === 'cinematographer') return Boolean(draft.dopId);
-    if (stepId === 'composer') return Boolean(draft.composerId);
-    if (stepId === 'editor_vfx') return Boolean(draft.vfxId);
-    return false;
+    return null;
   };
+
+  // Determine signed & accepted state for the current crew step (Steps 1..4)
+  const currentCrewRole = currentStepMeta.crewRole;
+  const maxAllowedForCurrentCrewRole = currentStepMeta.maxAllowed || 1;
+
+  const currentSignedIdsForCrewStep = useMemo(() => {
+    if (currentCrewRole === 'director') return approvedDirectorIds;
+    if (currentCrewRole === 'cinematographer') return draft.dopId ? [draft.dopId] : [];
+    if (currentCrewRole === 'composer') return draft.composerId ? [draft.composerId] : [];
+    if (currentCrewRole === 'editor_vfx') return draft.vfxId ? [draft.vfxId] : [];
+    return [];
+  }, [currentCrewRole, approvedDirectorIds, draft.dopId, draft.composerId, draft.vfxId]);
+
+  const acceptedOffersForCurrentCrewStep = useMemo(() => {
+    if (!currentCrewRole) return [];
+    return allOffersList.filter(
+      (o) =>
+        o.roleSlot === currentCrewRole &&
+        (o.status === 'accepted' || o.status === 'accepted_awaiting_choice')
+    );
+  }, [allOffersList, currentCrewRole]);
+
+  const hasExcessAcceptedCrewOffers =
+    Boolean(currentCrewRole) &&
+    (acceptedOffersForCurrentCrewStep.length > maxAllowedForCurrentCrewRole ||
+      acceptedOffersForCurrentCrewStep.some(
+        (o) => o.status === 'accepted_awaiting_choice'
+      ));
+
+  const isCurrentCrewSlotFullAndLocked =
+    Boolean(currentCrewRole) &&
+    currentSignedIdsForCrewStep.length >= maxAllowedForCurrentCrewRole &&
+    !hasExcessAcceptedCrewOffers;
 
   return (
-    <StepModalFrame label="تكوين طاقم العمل">
-      <div className="mx-auto max-w-4xl space-y-4 py-1">
-      {/* Sequential 5-Step Wizard Header (1. الممثلون -> 2. المخرج -> 3. التصوير -> 4. الموسيقى -> 5. المونتاج) */}
-      <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/80 bg-white p-4 shadow-[0_12px_30px_-10px_rgba(99,102,241,0.14)]">
+    <div className="space-y-3.5 pb-28">
+      {/* Clean Single-Line Current Activity Header (No Step Numbers or Future Step List) */}
+      <div className="glass-panel rounded-3xl px-4 py-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <div className="text-[11px] font-black text-violet-700">
-              المرحلة 2 من 4 · تشكيل الطاقم بالترتيب ({activeStepMeta.stepNum}/5)
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm">
+              {wizardStep === 1 && <Clapperboard className="h-5 w-5" />}
+              {wizardStep === 2 && <Camera className="h-5 w-5" />}
+              {wizardStep === 3 && <Music className="h-5 w-5" />}
+              {wizardStep === 4 && <Film className="h-5 w-5" />}
+              {wizardStep === 5 && <Users className="h-5 w-5" />}
+              {wizardStep === 6 && <Sparkles className="h-5 w-5" />}
             </div>
-            <h2 className="font-display mt-0.5 text-base font-black text-slate-900 sm:text-lg">
-              {activeStepMeta.title}
-            </h2>
-          </div>
-
-          <div className="rounded-2xl border border-indigo-100 bg-[#F4F7FF] px-3 py-1.5 text-left tabular-nums">
-            <div className="text-[10px] font-bold text-slate-500">إجمالي العقود الموقعة</div>
-            <div className="font-display text-sm font-black text-emerald-700">
-              {formatMoney(totalTalentPayroll)} ج.م
+            <div>
+              <h2 className="font-display text-sm font-black text-slate-900 sm:text-base">
+                {currentStepMeta.currentActionLabel}
+              </h2>
+              {wizardStep === 1 && approvedDirectorIds.length > 0 && (
+                <p className="text-[11px] font-bold text-emerald-700">
+                  المخرجون المعتمدون ({approvedDirectorIds.length}/2):{' '}
+                  {selectedDirectors.map((d) => d.name).join(' و')}
+                </p>
+              )}
             </div>
           </div>
-        </div>
 
-        <div className="mt-3.5 flex items-center gap-3">
-          <span className="shrink-0 rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black tabular-nums text-violet-800">
-            {activeStepMeta.stepNum} / 5
-          </span>
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-gradient-to-l from-cyan-400 via-violet-500 to-fuchsia-500 transition-all duration-500" style={{ width: `${(activeStepMeta.stepNum / 5) * 100}%` }} />
-          </div>
+          {pendingOffersList.length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-xl bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-900">
+              <Clock className="h-3 w-3 text-amber-600 animate-spin" />
+              <span>{pendingOffersList.length} عروض قيد الدراسة</span>
+            </span>
+          )}
         </div>
-
-        {/* Compact Signed Team Summary Strip */}
-        {(selectedDirector ||
-          selectedDop ||
-          selectedComposer ||
-          selectedVfx ||
-          allSelectedActors.length > 0 ||
-          pendingOffersList.length > 0) && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-indigo-100 pt-3 text-[11px]">
-            {allSelectedActors.map((act) => (
-              <span
-                key={act.id}
-                className="inline-flex items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1 font-black text-violet-800"
-              >
-                ⭐ {act.name}
-                {(draft.castCustomRoles || {})[act.id]
-                  ? ` (${(draft.castCustomRoles || {})[act.id]})`
-                  : ''}
-              </span>
-            ))}
-            {selectedDirector && (
-              <span className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-black text-emerald-800">
-                🎬 المخرج: {selectedDirector.name}
-              </span>
-            )}
-            {selectedDop && (
-              <span className="inline-flex items-center gap-1 rounded-xl border border-cyan-200 bg-cyan-50 px-2.5 py-1 font-black text-cyan-800">
-                🎥 تصوير: {selectedDop.name}
-              </span>
-            )}
-            {selectedComposer && (
-              <span className="inline-flex items-center gap-1 rounded-xl border border-fuchsia-200 bg-fuchsia-50 px-2.5 py-1 font-black text-fuchsia-800">
-                🎵 موسيقى: {selectedComposer.name}
-              </span>
-            )}
-            {selectedVfx && (
-              <span className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 font-black text-amber-800">
-                ✨ مونتاج: {selectedVfx.name}
-              </span>
-            )}
-            {pendingOffersList.map((pend) => (
-              <span
-                key={pend.talentId}
-                className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 font-bold text-amber-900"
-              >
-                <Clock className="h-3 w-3 animate-spin text-amber-600" />
-                {pend.talentName} (يرد يوم {pend.responseDueDay})
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
-      <FloatingToast message={errorMsg || chemistry.warningMessage} onDismiss={() => setErrorMsg(null)} tone={errorMsg ? 'warning' : 'info'} />
+      {/* Multi-Accepted Choice Banner when 3+ Directors (or 2+ DOP/Composer/VFX) Accepted */}
+      {wizardStep <= 4 && currentCrewRole && hasExcessAcceptedCrewOffers && (
+        <div className="rounded-3xl border-2 border-violet-400 bg-violet-50/95 p-4 shadow-md space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="font-display text-xs font-black text-violet-950 sm:text-sm">
+                {currentCrewRole === 'director'
+                  ? `وافق ${acceptedOffersForCurrentCrewStep.length} مخرجين على عرضك! اختر مخرجاً واحداً أو مخرجين اثنين كحد أقصى (1–2):`
+                  : `وافق ${acceptedOffersForCurrentCrewStep.length} مرشحين على العرض! اختر مرشحاً واحداً لاعتماده رسمياً:`}
+              </h3>
+              <p className="mt-0.5 text-[11px] font-bold text-violet-800">
+                اضغط لتحديد من تريد اعتماده في الفريق النهائي ثم اضغط «تأكيد الاختيار النهائي» لإغلاق باقي العروض.
+              </p>
+            </div>
+          </div>
 
-      {/* Main Content Area: Sequential Step Content */}
-      <AnimatePresence mode="wait">
-        {currentTeamStep === 'actors' ? (
-          <motion.div
-            key="seq-step-actors"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.14)] sm:p-5"
-          >
-            {/* Search & Filter Bar */}
-            <div className="step-search-bar mb-4 space-y-2.5 rounded-2xl border border-indigo-100 bg-[#F8FAFF]/95 p-3 backdrop-blur-md">
-              <div className="relative">
-                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={actorSearchQuery}
-                  onChange={(e) => {
-                    setActorSearchQuery(e.target.value);
-                    setVisibleActorCount(16);
-                  }}
-                  placeholder="ابحث عن اسم ممثل أو ممثلة في السوق..."
-                  className="w-full rounded-xl border border-indigo-100 bg-white py-2 pr-9 pl-3 text-xs font-bold text-slate-900 focus:border-violet-500 focus:outline-none"
-                />
-              </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {acceptedOffersForCurrentCrewStep.map((off) => {
+              const isChosen = currentSignedIdsForCrewStep.includes(off.talentId);
+              return (
+                <button
+                  key={off.talentId}
+                  type="button"
+                  onClick={() =>
+                    toggleCrewSelectionForSlot(currentCrewRole, off.talentId)
+                  }
+                  className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-xs font-black transition ${
+                    isChosen
+                      ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
+                      : 'border-violet-200 bg-white text-slate-800 hover:border-violet-400'
+                  }`}
+                >
+                  {isChosen && <Check className="h-3.5 w-3.5" />}
+                  <span>{off.talentName}</span>
+                </button>
+              );
+            })}
+          </div>
 
+          <div className="flex justify-end">
+            <button
+              type="button"
+              disabled={currentSignedIdsForCrewStep.length === 0}
+              onClick={() =>
+                confirmMultiAcceptedChoice(
+                  currentCrewRole,
+                  currentSignedIdsForCrewStep
+                )
+              }
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-xs font-black text-white shadow-sm disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" />
+              <span>
+                تأكيد الاختيار النهائي ({currentSignedIdsForCrewStep.length}/
+                {maxAllowedForCurrentCrewRole}) وإغلاق التعاقدات
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING STICKY SEARCH & FILTER BAR FOR STEPS 1..5 */}
+      {wizardStep <= 5 && (
+        <div className="glass-nav sticky top-14 z-30 rounded-2xl p-3">
+          <div className="flex flex-col gap-2.5">
+            {wizardStep === 5 && (
               <div className="flex flex-wrap items-center gap-1.5">
-                {(
-                  [
-                    { id: 'ALL', label: 'الكل' },
-                    { id: 'S', label: 'فئة S الأساطير' },
-                    { id: 'A', label: 'فئة A النجوم' },
-                    { id: 'B', label: 'فئة B المحترفون' },
-                    { id: 'C', label: 'فئة C البرونزية' },
-                    {
-                      id: 'RISING',
-                      label: `✨ مواهب صاعدة (${unlockedRisingTalents.length})`,
-                    },
-                    { id: 'EVOLVED', label: '🔥 تطوروا مؤخراً' },
-                  ] as { id: ActorTierFilter; label: string }[]
-                ).map((tf) => (
+                {[
+                  { id: 'ALL', label: `الكل (${activeActorsPool.length})` },
+                  { id: 'S', label: 'فئة S' },
+                  { id: 'A', label: 'فئة A' },
+                  { id: 'B', label: 'فئة B' },
+                  { id: 'C', label: 'فئة C' },
+                  { id: 'RISING', label: 'مواهب صاعدة ✨' },
+                  { id: 'OFFERS', label: `العروض (${allOffersList.length})` },
+                ].map((tab) => (
                   <button
-                    key={tf.id}
+                    key={tab.id}
                     type="button"
-                    onClick={() => {
-                      setActorTierFilter(tf.id);
-                      setVisibleActorCount(16);
-                    }}
-                    className={`rounded-xl px-2.5 py-1 text-[10px] font-black transition ${
-                      actorTierFilter === tf.id
-                        ? 'bg-violet-600 text-white shadow-2xs'
-                        : 'border border-indigo-100 bg-white text-slate-600 hover:border-violet-300'
+                    onClick={() => setSelectedTier(tab.id as any)}
+                    className={`rounded-xl px-2.5 py-1.5 text-[11px] font-black transition whitespace-nowrap ${
+                      selectedTier === tab.id
+                        ? 'bg-violet-600 text-white shadow-sm'
+                        : 'border border-indigo-100 bg-white/80 text-slate-700 hover:bg-indigo-50'
                     }`}
                   >
-                    {tf.label}
+                    {tab.label}
                   </button>
                 ))}
-                <span className="mr-auto text-[10px] font-black text-slate-500 tabular-nums">
-                  متاح: {sortedActors.length} ممثل
-                </span>
-              </div>
-            </div>
 
-            {/* Unified Actor Cards Grid */}
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              {displayedActors.map((actor) => {
-                const isSelected = signedActorIds.includes(actor.id);
-                const customRole =
-                  (draft.castCustomRoles || {})[actor.id] ||
-                  draft.talentOffers[actor.id]?.customRoleName;
+                <div className="mr-auto flex items-center gap-1">
+                  {[
+                    { id: 'ALL', label: 'الكل' },
+                    { id: 'male', label: 'ممثلون' },
+                    { id: 'female', label: 'ممثلات' },
+                  ].map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => setGenderFilter(g.id as any)}
+                      className={`rounded-lg px-2 py-1 text-[10px] font-black transition ${
+                        genderFilter === g.id
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'bg-indigo-50/80 text-slate-600 hover:bg-indigo-100'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={
+                  wizardStep === 1
+                    ? 'ابحث عن مخرج بالاسم أو المدرسة الإخراجية...'
+                    : wizardStep === 2
+                    ? 'ابحث عن مدير تصوير (DOP)...'
+                    : wizardStep === 3
+                    ? 'ابحث عن مؤلف موسيقى تصويرية...'
+                    : wizardStep === 4
+                    ? 'ابحث عن مهندس مونتاج ومؤثرات بصرية...'
+                    : `ابحث في قائمة الـ ${activeActorsPool.length} ممثل وممثلة بالاسم أو اللون الفني...`
+                }
+                className="w-full rounded-xl border border-indigo-200/80 bg-white/85 py-2.5 pr-9 pl-3 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:border-violet-500 focus:bg-white focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence mode="wait">
+        {/* STEPS 1..4: DEDICATED CREW CATEGORY SELECTION (Director -> DOP -> Composer -> VFX) */}
+        {wizardStep >= 1 && wizardStep <= 4 && (
+          <motion.div
+            key={`crew_step_${wizardStep}`}
+            initial={{ opacity: 0, scale: 0.985, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.985, y: -10 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            className="grid grid-cols-1 gap-3"
+          >
+            {crewForCurrentStep.map((crewMember) => {
+              const isSigned =
+                (crewMember.role === 'director' &&
+                  approvedDirectorIds.includes(crewMember.id)) ||
+                (crewMember.role === 'cinematographer' && draft.dopId === crewMember.id) ||
+                (crewMember.role === 'composer' && draft.composerId === crewMember.id) ||
+                (crewMember.role === 'editor_vfx' && draft.vfxId === crewMember.id);
+
+              const offer = draft.talentOffers[crewMember.id];
+              const isPending = offer?.status === 'pending';
+              const isAwaitingChoice =
+                offer?.status === 'accepted_awaiting_choice' ||
+                (offer?.status === 'accepted' && !isSigned);
+              const masteryGenre = crewMember.best_genres.includes(draft.primaryGenre);
+              const roleBadge =
+                crewMember.role === 'director'
+                  ? 'مخرج العمل الفني'
+                  : crewMember.role === 'cinematographer'
+                  ? 'مدير تصوير (DOP)'
+                  : crewMember.role === 'composer'
+                  ? 'موسيقار تصويري'
+                  : 'مونتاج ومؤثرات VFX';
+
+              return (
+                <div
+                  key={crewMember.id}
+                  className={`glass-card rounded-3xl p-4 transition-all ${
+                    isSigned
+                      ? 'border-2 border-emerald-500 bg-emerald-50/75 shadow-md'
+                      : isAwaitingChoice
+                      ? 'border-2 border-violet-400 bg-violet-50/60 shadow-md'
+                      : isPending
+                      ? 'border-2 border-amber-400 bg-amber-50/60 shadow-md'
+                      : 'hover:border-violet-300'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-indigo-200/80 shadow-xs">
+                        <TalentCharacterPortraitSvg
+                          name={crewMember.name}
+                          role={crewMember.role}
+                          tier={crewMember.stats.overall >= 90 ? 'S' : 'A'}
+                          age={45}
+                        />
+                      </div>
+                      <div>
+                        <h3 className="font-display text-sm font-black text-slate-900">
+                          {crewMember.name}
+                        </h3>
+                        <p className="mt-0.5 text-xs font-bold text-slate-600">
+                          {crewMember.specialty}
+                        </p>
+                        <div className="mt-1 text-[11px] font-bold text-slate-500">
+                          {masteryGenre ? (
+                            <span className="text-emerald-700 font-black">
+                              متخصص بارع في {primaryGenreObj?.name} ★
+                            </span>
+                          ) : (
+                            <span>خبرة عامة في {primaryGenreObj?.name}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 rounded-2xl border border-indigo-200/70 bg-indigo-50/80 px-3 py-1.5 text-center">
+                      <div className="text-[10px] font-bold text-slate-500">التقييم</div>
+                      <div className="font-mono text-sm font-black text-violet-800 tabular-nums">
+                        {crewMember.stats.overall}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-2">
+                      <span className="block text-[10px] font-bold text-slate-500">
+                        الأجر المتوقع
+                      </span>
+                      <span className="font-mono text-xs font-black text-emerald-700 tabular-nums">
+                        {formatMoney(crewMember.base_salary)} ج.م
+                      </span>
+                    </div>
+                    <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-2">
+                      <span className="block text-[10px] font-bold text-slate-500">
+                        الرؤية البصرية
+                      </span>
+                      <span className="font-mono text-xs font-black text-slate-900 tabular-nums">
+                        {crewMember.stats.vision}/100
+                      </span>
+                    </div>
+                    <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-2">
+                      <span className="block text-[10px] font-bold text-slate-500">
+                        ضبط الإيقاع
+                      </span>
+                      <span className="font-mono text-xs font-black text-indigo-700 tabular-nums">
+                        {crewMember.stats.pacing}/100
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Offer Status Banner */}
+                  {renderOfferStatusBanner(offer, isSigned)}
+
+                  <div className="mt-3 flex items-center gap-2 border-t border-indigo-100/80 pt-2.5">
+                    {isSigned ? (
+                      <button
+                        type="button"
+                        onClick={() => removeTalentFromDraft(crewMember.id)}
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 py-2.5 text-xs font-black text-white shadow-sm"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>
+                          {crewMember.role === 'director'
+                            ? `معتمد في فريق الإخراج (${approvedDirectorIds.indexOf(crewMember.id) + 1}/${approvedDirectorIds.length}) · إلغاء التعاقد`
+                            : 'معتمد في الفريق · إلغاء التعاقد'}
+                        </span>
+                      </button>
+                    ) : isAwaitingChoice ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleCrewSelectionForSlot(
+                            crewMember.role as OfferRoleSlot,
+                            crewMember.id
+                          )
+                        }
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-violet-600 py-2.5 text-xs font-black text-white shadow-sm hover:bg-violet-500"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>اعتماد في الفريق النهائي</span>
+                      </button>
+                    ) : isPending ? (
+                      <button
+                        type="button"
+                        onClick={() => removeTalentFromDraft(crewMember.id)}
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-amber-300 bg-amber-100/90 py-2.5 text-xs font-black text-amber-950"
+                      >
+                        <Clock className="h-4 w-4 text-amber-700" />
+                        <span>بانتظار الرد الرسمي (سحب العرض)</span>
+                      </button>
+                    ) : isCurrentCrewSlotFullAndLocked ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="flex min-h-[44px] flex-1 cursor-not-allowed items-center justify-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-100 py-2.5 text-xs font-black text-slate-400"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>
+                          {crewMember.role === 'director'
+                            ? 'اكتمل فريق الإخراج (تم اعتماد مخرجَين 2/2)'
+                            : `تم اعتماد ${roleBadge} للعمل (1/1)`}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openNegotiation({ kind: 'crew', item: crewMember })}
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2.5 text-xs font-black text-white shadow-md hover:brightness-105"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>
+                          {offer?.status === 'rejected'
+                            ? 'تعديل الشروط وإرسال عرض جديد'
+                            : 'تفاوض وإرسال عرض تعاقد'}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </motion.div>
+        )}
+
+        {/* STEP 5: ACTORS & RISING TALENTS (180+ ACTORS + PENDING/EVALUATED OFFERS) */}
+        {wizardStep === 5 && (
+          <motion.div
+            key="step5_actors"
+            initial={{ opacity: 0, scale: 0.985, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.985, y: -10 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            className="space-y-3"
+          >
+            {/* Signed & Pending Cast Summary Bar */}
+            {(signedCastActors.length > 0 || pendingOffersList.length > 0) && (
+              <div className="glass-panel rounded-3xl p-3.5 space-y-2">
+                {signedCastActors.length > 0 && (
+                  <div>
+                    <div className="mb-1.5 text-xs font-black text-emerald-900">
+                      الأبطال الموقعون رسمياً ({signedCastActors.length}):
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {signedCastActors.map((act) => (
+                        <div
+                          key={act.id}
+                          className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50/90 px-2.5 py-1 text-xs font-black text-emerald-950"
+                        >
+                          <Check className="h-3 w-3 text-emerald-600" />
+                          <span>{act.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeTalentFromDraft(act.id)}
+                            className="text-rose-500 hover:text-rose-700"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pendingOffersList.length > 0 && (
+                  <div>
+                    <div className="mb-1.5 text-xs font-black text-amber-900">
+                      عروض قيد الدراسة لدى النجوم ووكلاء الأعمال ({pendingOffersList.length}):
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {pendingOffersList.map((off) => (
+                        <div
+                          key={off.talentId}
+                          className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50/90 px-2.5 py-1 text-xs font-black text-amber-950"
+                        >
+                          <Clock className="h-3 w-3 text-amber-600 animate-spin" />
+                          <span>
+                            {off.talentName} (يرد بعد {Math.max(1, off.responseDueDay - gameDay)}{' '}
+                            يوم)
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3">
+              {filteredActors.map((actor) => {
+                const isSigned = allSignedActorIds.includes(actor.id);
                 const offer = draft.talentOffers[actor.id];
-                const salary = getNegotiatedCost(actor.id, actor.base_salary);
+                const isPending = offer?.status === 'pending';
+                const masteryScore = actor.genre_mastery[draft.primaryGenre] || 74;
+                const awardsCount = actorAwardCounts[actor.id] || 0;
 
                 return (
-                  <EaFcTalentCard
+                  <div
                     key={actor.id}
-                    talent={actor}
-                    kind="actor"
-                    selectedRoleLabel={customRole}
-                    isSelected={isSelected}
-                    isSlotLocked={false}
-                    offer={offer}
-                    gameDay={gameDay}
-                    awardCount={actorAwardCounts[actor.id] || 0}
-                    negotiatedSalary={salary}
-                    onNegotiateAndPitch={() =>
-                      openNegotiationModal(actor, 'actor', 'lead')
-                    }
-                    onCancelContract={() => removeTalentFromDraft(actor.id)}
-                  />
+                    className={`glass-card rounded-3xl p-4 transition-all ${
+                      isSigned
+                        ? 'border-2 border-emerald-500 bg-emerald-50/75 shadow-md'
+                        : isPending
+                        ? 'border-2 border-amber-400 bg-amber-50/60 shadow-md'
+                        : 'hover:border-violet-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-indigo-200/80 shadow-xs">
+                          <TalentCharacterPortraitSvg
+                            name={actor.name}
+                            gender={actor.gender}
+                            role="actor"
+                            tier={actor.tier}
+                            age={actor.age}
+                            isRising={actor.isRisingDiscovery || actor.isAiGenerated}
+                          />
+                        </div>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-lg bg-amber-500 px-2 py-0.5 text-[10px] font-black text-slate-950">
+                              فئة {actor.tier}
+                            </span>
+                            <h3 className="font-display text-sm font-black text-slate-900">
+                              {actor.name}
+                            </h3>
+                            {(actor.isRisingDiscovery || actor.isAiGenerated) && (
+                              <span className="text-[11px] font-black text-purple-800">
+                                · موهبة صاعدة ✨
+                              </span>
+                            )}
+                            {awardsCount > 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-amber-700">
+                                · <Award className="h-3.5 w-3.5" /> {awardsCount} جوائز
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-xs font-bold text-slate-600">
+                            {actor.archetype} · {actor.age} سنة
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-600">
+                            <span
+                              className={
+                                masteryScore >= 85
+                                  ? 'font-black text-emerald-700'
+                                  : 'text-indigo-800'
+                              }
+                            >
+                              إتقان {primaryGenreObj?.name}: {masteryScore}%
+                            </span>
+                            {actor.busyWithStudio && (
+                              <span className="text-rose-700 font-black">
+                                · يصور حالياً مع {actor.busyWithStudio}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 rounded-2xl border border-indigo-200/70 bg-indigo-50/80 px-3 py-1.5 text-center">
+                        <div className="font-mono text-sm font-black text-violet-900 tabular-nums">
+                          {actor.stats.overall}
+                        </div>
+                        {actor.overallDelta ? (
+                          <span
+                            className={`flex items-center justify-center text-[10px] font-black ${
+                              actor.overallDelta > 0 ? 'text-emerald-600' : 'text-rose-600'
+                            }`}
+                          >
+                            {actor.overallDelta > 0
+                              ? `+${actor.overallDelta}`
+                              : actor.overallDelta}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {actor.lastEvolutionNote && (
+                      <div className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-2.5 py-1 text-[11px] font-bold text-amber-950">
+                        {actor.lastEvolutionNote}
+                      </div>
+                    )}
+
+                    <div className="mt-3 grid grid-cols-4 gap-1.5 text-center">
+                      <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
+                        <span className="block text-[9px] font-bold text-slate-500">الأجر</span>
+                        <span className="font-mono text-xs font-black text-emerald-700 tabular-nums">
+                          {formatMoney(actor.base_salary)}
+                        </span>
+                      </div>
+                      <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
+                        <span className="block text-[9px] font-bold text-slate-500">التمثيل</span>
+                        <span className="font-mono text-xs font-black text-slate-900 tabular-nums">
+                          {actor.stats.acting}
+                        </span>
+                      </div>
+                      <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
+                        <span className="block text-[9px] font-bold text-slate-500">النجومية</span>
+                        <span className="font-mono text-xs font-black text-amber-700 tabular-nums">
+                          {actor.stats.box_office_pull}
+                        </span>
+                      </div>
+                      <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-1.5">
+                        <span className="block text-[9px] font-bold text-slate-500">الكاريزما</span>
+                        <span className="font-mono text-xs font-black text-indigo-700 tabular-nums">
+                          {actor.stats.charisma}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Offer Status Banner (Pending 2-3 days / Accepted / Rejected with AI reason) */}
+                    {renderOfferStatusBanner(offer)}
+
+                    <div className="mt-3 flex items-center gap-2 border-t border-indigo-100/80 pt-2.5">
+                      {isSigned ? (
+                        <button
+                          type="button"
+                          onClick={() => removeTalentFromDraft(actor.id)}
+                          className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 py-2.5 text-xs font-black text-white shadow-sm"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>تم التوقيع (إلغاء التعاقد)</span>
+                        </button>
+                      ) : isPending ? (
+                        <button
+                          type="button"
+                          onClick={() => removeTalentFromDraft(actor.id)}
+                          className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-amber-300 bg-amber-100/90 py-2.5 text-xs font-black text-amber-950"
+                        >
+                          <Clock className="h-4 w-4 text-amber-700" />
+                          <span>بانتظار الرد الرسمي (سحب العرض)</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openNegotiation({ kind: 'actor', item: actor })}
+                          className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2.5 text-xs font-black text-white shadow-md hover:brightness-105"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          <span>
+                            {offer?.status === 'rejected'
+                              ? 'تعديل الشروط وإرسال عرض جديد'
+                              : 'عرض دور وتفاوض'}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
-
-            {/* Load More Button */}
-            {sortedActors.length > visibleActorCount && (
-              <button
-                type="button"
-                onClick={() => setVisibleActorCount((prev) => prev + 20)}
-                className="mt-4 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-indigo-200 bg-[#F4F7FF] px-4 py-2.5 text-xs font-black text-violet-700 transition hover:bg-violet-100"
-              >
-                <ChevronDown className="h-4 w-4" />
-                <span>
-                  عرض المزيد من الممثلين (متبقي{' '}
-                  {sortedActors.length - visibleActorCount} ممثل)
-                </span>
-              </button>
-            )}
           </motion.div>
-        ) : (
+        )}
+
+        {/* STEP 6: CHEMISTRY, CONTRACT SUMMARY & PRODUCTION BUDGET */}
+        {wizardStep === 6 && (
           <motion.div
-            key={`seq-step-${currentTeamStep}`}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.14)] sm:p-5"
+            key="step6_budget"
+            initial={{ opacity: 0, scale: 0.985, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.985, y: -10 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            className="space-y-4"
           >
-            {/* Role Category Explanation Banner */}
-            <div className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-[#F8FAFF] p-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
-                  {currentTeamStep === 'director' ? (
-                    <Clapperboard className="h-5 w-5" />
-                  ) : currentTeamStep === 'cinematographer' ? (
-                    <Camera className="h-5 w-5" />
-                  ) : currentTeamStep === 'composer' ? (
-                    <Music className="h-5 w-5" />
-                  ) : (
-                    <WandSparkles className="h-5 w-5" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-display text-sm font-black text-slate-900">
-                    {activeStepMeta.title}
-                  </h3>
-                  <p className="text-[11px] font-bold text-slate-500">
-                    {currentTeamStep === 'director'
-                      ? 'المخرج هو قائد الرؤية الفنية ويتحكم في انسجام النجوم وجودة العمل النهائية (أساسي).'
-                      : currentTeamStep === 'cinematographer'
-                      ? 'مدير التصوير يرفع جودة الكادرات البصرية والإضاءة السينمائية.'
-                      : currentTeamStep === 'composer'
-                      ? 'الموسيقار يصنع الهوية السمعية والتأثير العاطفي للمشاهد.'
-                      : 'المونتير ومشرف الـ VFX يضبط إيقاع المشاهد والخدع البصرية.'}
-                  </p>
-                </div>
+            {/* Overview of All Crew & Cast Offers */}
+            <div className="glass-panel rounded-3xl p-4 space-y-2.5">
+              <h3 className="font-display text-sm font-black text-slate-900">
+                حالة عقود الفريق الفني وأبطال العمل
+              </h3>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[
+                  {
+                    slotLabel: 'فريق الإخراج (1–2)',
+                    signedName:
+                      selectedDirectors.length > 0
+                        ? selectedDirectors.map((d) => d.name).join(' و')
+                        : undefined,
+                    pendingOffer: pendingOffersList.find((o) => o.roleSlot === 'director'),
+                    stepToGo: 1 as WizardStepId,
+                  },
+                  {
+                    slotLabel: 'مدير التصوير (DOP)',
+                    signedName: db.crew.find((c) => c.id === draft.dopId)?.name,
+                    pendingOffer: pendingOffersList.find(
+                      (o) => o.roleSlot === 'cinematographer'
+                    ),
+                    stepToGo: 2 as WizardStepId,
+                  },
+                  {
+                    slotLabel: 'الموسيقى التصويرية',
+                    signedName: db.crew.find((c) => c.id === draft.composerId)?.name,
+                    pendingOffer: pendingOffersList.find((o) => o.roleSlot === 'composer'),
+                    stepToGo: 3 as WizardStepId,
+                  },
+                  {
+                    slotLabel: 'المونتاج والمؤثرات (VFX)',
+                    signedName: db.crew.find((c) => c.id === draft.vfxId)?.name,
+                    pendingOffer: pendingOffersList.find((o) => o.roleSlot === 'editor_vfx'),
+                    stepToGo: 4 as WizardStepId,
+                  },
+                ].map((slotInfo) => (
+                  <button
+                    key={slotInfo.slotLabel}
+                    type="button"
+                    onClick={() => setWizardStep(slotInfo.stepToGo)}
+                    className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-white/80 p-3 text-right transition hover:border-indigo-300"
+                  >
+                    <div>
+                      <div className="text-[10px] font-bold text-slate-500">
+                        {slotInfo.slotLabel}
+                      </div>
+                      <div className="text-xs font-black text-slate-900">
+                        {slotInfo.signedName
+                          ? `✓ ${slotInfo.signedName}`
+                          : slotInfo.pendingOffer
+                          ? `⏳ ${slotInfo.pendingOffer.talentName} (يرد بعد ${Math.max(
+                              1,
+                              slotInfo.pendingOffer.responseDueDay - gameDay
+                            )} يوم)`
+                          : 'لم يتم الاختيار بعد (اضغط للاختيار)'}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
-
-              {getStepCompletionBadge(currentTeamStep) && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-emerald-100 px-2.5 py-1 text-[11px] font-black text-emerald-800">
-                  <Check className="h-3.5 w-3.5 stroke-[3]" />
-                  <span>تم الاختيار</span>
-                </span>
-              )}
             </div>
 
-            <div className="step-search-bar mb-4 rounded-2xl border border-indigo-100 bg-[#F8FAFF]/95 p-3 backdrop-blur-md">
-              <label htmlFor="crew-market-search" className="mb-2 block text-[11px] font-black text-slate-700">ابحث داخل سوق المتخصصين</label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  id="crew-market-search"
-                  type="search"
-                  value={crewSearchQuery}
-                  onChange={(e) => setCrewSearchQuery(e.target.value)}
-                  placeholder="اسم المخرج أو مدير التصوير أو المتخصص..."
-                  className="w-full rounded-xl border border-indigo-100 bg-white py-2.5 pr-9 pl-3 text-xs font-bold text-slate-900 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                />
+            {/* Cast Chemistry & Genre Synergy Reports */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="glass-panel rounded-3xl p-4">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-black text-violet-900">
+                    <Flame className="h-4 w-4 text-amber-500" />
+                    تقرير كيمياء الأبطال والبلاتوه
+                  </span>
+                  <span
+                    className={`text-xs font-black ${
+                      castChemistryReport.hasSevereClash
+                        ? 'text-rose-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {castChemistryReport.hasSevereClash
+                      ? 'صراع نجومية محتمل'
+                      : `تناغم +${castChemistryReport.synergyBonus}`}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-bold text-slate-600">
+                  {castChemistryReport.warningMessage ||
+                    'تناغم ممتاز بين أبطال العمل والمخرج يمنح المشاهد الدرامية مصداقية عالية.'}
+                </p>
+              </div>
+
+              <div className="glass-panel rounded-3xl p-4">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-black text-violet-900">
+                    <Zap className="h-4 w-4 text-indigo-600" />
+                    توليفة التصنيف الدرامي
+                  </span>
+                  <span className="font-mono text-xs font-black text-indigo-900 tabular-nums">
+                    x{genreSynergyReport.multiplier.toFixed(2)}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs font-bold text-slate-600">
+                  {genreSynergyReport.label}
+                </p>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              {db.crew
-                .filter((c) => c.role === currentTeamStep && c.name.toLowerCase().includes(crewSearchQuery.trim().toLowerCase()))
-                .map((member) => {
-                  const isSelected =
-                    (currentTeamStep === 'director' &&
-                      draft.directorId === member.id) ||
-                    (currentTeamStep === 'cinematographer' &&
-                      draft.dopId === member.id) ||
-                    (currentTeamStep === 'composer' &&
-                      draft.composerId === member.id) ||
-                    (currentTeamStep === 'editor_vfx' &&
-                      draft.vfxId === member.id);
 
-                  const isRoleFull =
-                    (currentTeamStep === 'director' &&
-                      Boolean(draft.directorId)) ||
-                    (currentTeamStep === 'cinematographer' &&
-                      Boolean(draft.dopId)) ||
-                    (currentTeamStep === 'composer' &&
-                      Boolean(draft.composerId)) ||
-                    (currentTeamStep === 'editor_vfx' && Boolean(draft.vfxId));
+            {/* Department Budgets */}
+            <div className="glass-panel rounded-3xl p-4 space-y-4">
+              <h3 className="font-display text-sm font-black text-slate-900">
+                تخصيص ميزانية الأقسام الإنتاجية
+              </h3>
 
-                  const offer = draft.talentOffers[member.id];
-
-                  return (
-                    <EaFcTalentCard
-                      key={member.id}
-                      talent={member}
-                      kind="crew"
-                      selectedRoleLabel={SLOT_ARABIC_NAMES[currentTeamStep]}
-                      isSelected={isSelected}
-                      isSlotLocked={isRoleFull && !isSelected}
-                      offer={offer}
-                      gameDay={gameDay}
-                      onNegotiateAndPitch={() =>
-                        openNegotiationModal(member, 'crew', currentTeamStep)
+              {[
+                {
+                  field: 'setsAndLocations' as const,
+                  label: 'بناء الديكورات ومواقع التصوير',
+                  min: 2_000_000,
+                  max: 25_000_000,
+                },
+                {
+                  field: 'costumesAndMakeup' as const,
+                  label: 'الأزياء والماكياج والراكورات',
+                  min: 1_000_000,
+                  max: 15_000_000,
+                },
+                {
+                  field: 'vfxAndStunts' as const,
+                  label: 'المؤثرات البصرية ومشاهد الأكشن',
+                  min: 2_000_000,
+                  max: 30_000_000,
+                },
+                {
+                  field: 'extrasAndCrowds' as const,
+                  label: 'المجاميع والإنتاج الميداني',
+                  min: 1_000_000,
+                  max: 15_000_000,
+                },
+              ].map((dept) => {
+                const val = draft.budgetAllocation[dept.field];
+                return (
+                  <div
+                    key={dept.field}
+                    className="rounded-2xl border border-indigo-100/80 bg-white/80 p-3"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-800">{dept.label}</span>
+                      <span className="font-mono text-xs font-black text-violet-700 tabular-nums">
+                        {formatMoney(val)} ج.م
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={dept.min}
+                      max={dept.max}
+                      step={500_000}
+                      value={val}
+                      onChange={(e) =>
+                        updateDraft({
+                          budgetAllocation: {
+                            ...draft.budgetAllocation,
+                            [dept.field]: Number(e.target.value),
+                          },
+                        })
                       }
-                      onCancelContract={() => removeTalentFromDraft(member.id)}
-                      negotiatedSalary={getNegotiatedCost(
-                        member.id,
-                        member.base_salary
-                      )}
+                      className="w-full accent-violet-600 cursor-pointer"
                     />
-                  );
-                })}
+                  </div>
+                );
+              })}
+
+              <div className="flex items-center justify-between rounded-2xl border border-indigo-200/80 bg-indigo-50/85 p-3.5">
+                <div>
+                  <span className="block text-[11px] font-bold text-slate-600">
+                    إجمالي تكلفة العقود والإنتاج
+                  </span>
+                  <span className="font-mono text-lg font-black text-emerald-700 tabular-nums">
+                    {formatMoney(calculateTotalEstimatedBudget())} ج.م
+                  </span>
+                </div>
+                <div className="text-left">
+                  <span className="block text-[11px] font-bold text-slate-600">
+                    السيولة المتاحة بالخزينة
+                  </span>
+                  <span className="font-mono text-base font-black text-slate-900 tabular-nums">
+                    {formatMoney(cash)} ج.م
+                  </span>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Bottom Sequential Wizard Navigation Bar */}
-      <div className="step-navigation rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white p-4 shadow-md">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-600">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-violet-600" />
-            <span>
-              الممثلون ({signedActorIds.length}) · المخرج ({draft.directorId ? '✓' : '—'}) · تصوير ({draft.dopId ? '✓' : '—'}) · موسيقى ({draft.composerId ? '✓' : '—'}) · مونتاج ({draft.vfxId ? '✓' : '—'})
-            </span>
-          </div>
-          <span className="font-black text-emerald-700 tabular-nums">
-            مجموع الأجور: {formatMoney(totalTalentPayroll)} ج.م
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between gap-2.5">
-          <button
-            type="button"
-            onClick={handlePrevSequentialStep}
-            className="flex min-h-[50px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700 transition hover:border-violet-300"
-          >
-            <ArrowRight className="h-4 w-4" />
-            <span>
-              {currentStepIndex === 0 ? 'السيناريو' : 'الخطوة السابقة'}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNextSequentialStep}
-            className={`flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 px-5 py-3 text-sm font-black text-white shadow-lg transition active:border-b-0 active:translate-y-1 ${
-              currentTeamStep === 'editor_vfx' && canProceedToProduction
-                ? 'border-emerald-900/40 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 shadow-emerald-500/25'
-                : 'border-indigo-900/40 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 shadow-indigo-500/20'
-            }`}
-          >
-            <span>{activeStepMeta.nextButtonLabel}</span>
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Negotiation Modal: custom character pitch, role size and contract terms */}
+      {/* NEGOTIATION MODAL (Sends Offer for 2–3 Days AI Evaluation!) */}
       <AnimatePresence>
-        {negotiationTarget && (
+        {negotiatingTarget && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-xs"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-md"
           >
             <motion.div
-              initial={{ scale: 0.92, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.92, y: 20 }}
-              className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-300 bg-white p-5 shadow-2xl"
-              dir="rtl"
+              initial={{ scale: 0.94, y: 18, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.94, y: 18, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="glass-modal max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl p-5 space-y-4"
             >
-              {(() => {
-                const { talent, kind, roleSlot } = negotiationTarget;
-                const isActor = kind === 'actor';
-                const actorItem = isActor ? (talent as ActorItem) : null;
-                const crewItem = !isActor ? (talent as CrewItem) : null;
-                const genreMasteryScore = actorItem
-                  ? actorItem.genre_mastery[draft.primaryGenre] || 74
-                  : crewItem?.best_genres.includes(draft.primaryGenre)
-                  ? 92
-                  : 75;
-                const egoScore = actorItem ? actorItem.stats.ego : 76;
-                const waitDays = egoScore >= 88 ? 3 : 2;
+              <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-indigo-200">
+                    <TalentCharacterPortraitSvg
+                      name={negotiatingTarget.item.name}
+                      role={
+                        negotiatingTarget.kind === 'actor'
+                          ? 'actor'
+                          : negotiatingTarget.item.role
+                      }
+                      tier={
+                        negotiatingTarget.kind === 'actor'
+                          ? negotiatingTarget.item.tier
+                          : 'A'
+                      }
+                    />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-sm font-black text-slate-900">
+                      مفاوضات التعاقد: {negotiatingTarget.item.name}
+                    </h3>
+                    <p className="text-xs font-bold text-emerald-700">
+                      الأجر المعتاد في السوق: {formatMoney(negotiatingTarget.item.base_salary)} ج.م
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNegotiatingTarget(null)}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
 
-                const roleFitScore = calculateRoleFit(talent, kind, roleSlot, genreMasteryScore);
-                const rawSalaryDetails = calculateTalentExpectedSalary({
-                  baseSalary: talent.base_salary,
-                  ego: egoScore,
-                  genreMasteryScore,
-                  studioReputation: reputation,
-                  isCameo: isActor && roleSlot === 'cameo',
-                });
-                const expectedMinimumSalary = Math.round(
-                  rawSalaryDetails.expectedMinimumSalary * roleSalaryFactor(roleSlot, kind)
-                );
-                const acceptanceDifficultyLabel = rawSalaryDetails.acceptanceDifficultyLabel;
-                const vipDinnerCost = Math.max(150_000, Math.min(1_500_000, Math.round(talent.base_salary * 0.015)));
+              {/* Actor Role Billing Size Selection */}
+              {negotiatingTarget.kind === 'actor' && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-black text-slate-800">
+                    حجم الدور وترتيب الأفيش المعروض
+                  </label>
+                  <select
+                    value={roleBillingSize}
+                    onChange={(e) => setRoleBillingSize(e.target.value as RoleBillingSize)}
+                    className="w-full rounded-2xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 text-xs font-black text-slate-900 focus:border-violet-600 focus:outline-none"
+                  >
+                    {Object.values(ROLE_BILLING_META).map((meta) => (
+                      <option key={meta.id} value={meta.id}>
+                        {meta.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-                const minSal = Math.max(
-                  500_000,
-                  Math.round(expectedMinimumSalary * 0.55)
-                );
-                const maxSal = Math.round(expectedMinimumSalary * 1.45);
+              {/* Financial Offer Sliders */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600">الأجر المعروض</span>
+                    <span className="font-mono text-xs font-black text-emerald-700 tabular-nums">
+                      {formatMoney(offeredSalary)} ج.م
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={Math.max(500_000, Math.round(negotiatingTarget.item.base_salary * 0.45))}
+                    max={Math.round(negotiatingTarget.item.base_salary * 1.75)}
+                    step={250_000}
+                    value={offeredSalary}
+                    onChange={(e) => setOfferedSalary(Number(e.target.value))}
+                    className="w-full accent-violet-600 cursor-pointer"
+                  />
+                </div>
 
-                return (
-                  <>
-                    <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
-                          <Handshake className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h3 className="font-display text-base font-black text-slate-900">
-                            عرض السيناريو والتفاوض مع {talent.name}
-                          </h3>
-                          <p className="text-[11px] font-bold text-violet-700">
-                            {isActor
-                              ? `العمر: ${actorItem?.age} سنة · تقييم ${talent.stats.overall}`
-                              : SLOT_ARABIC_NAMES[roleSlot]}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setNegotiationTarget(null)}
-                        className="rounded-xl bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600">نسبة من أرباح الشباك</span>
+                    <span className="font-mono text-xs font-black text-violet-700 tabular-nums">
+                      {backendPoints}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={15}
+                    step={1}
+                    value={backendPoints}
+                    onChange={(e) => setBackendPoints(Number(e.target.value))}
+                    className="w-full accent-violet-600 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Paid VIP Dinner Option */}
+              <button
+                type="button"
+                onClick={() => setVipDinner(!vipDinner)}
+                className={`flex w-full items-center justify-between rounded-2xl border-2 p-3 text-right transition ${
+                  vipDinner
+                    ? 'border-amber-500 bg-amber-50 text-amber-950'
+                    : 'border-indigo-100 bg-slate-50 text-slate-700 hover:border-indigo-200'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Utensils className="h-4 w-4 text-amber-600" />
+                  <div>
+                    <div className="text-xs font-black">
+                      دعوة عشاء عمل خاص وقراءة سيناريو VIP
                     </div>
-
-                    {/* Script Pitch Preview Card */}
-                    <div className="mt-3.5 rounded-2xl border-2 border-indigo-100 bg-[#F6F8FF] p-3">
-                      <div className="flex items-center justify-between text-[11px] font-black text-indigo-800">
-                        <span className="flex items-center gap-1.5">
-                          <FileText className="h-3.5 w-3.5 text-violet-600" />
-                          <span>سيناريو: «{draft.title || 'الفرعون الأخير'}»</span>
-                        </span>
-                        <span className="text-[10px] font-black text-emerald-700">
-                          ملاءمة الدور: {roleFitScore}/100
-                        </span>
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed font-medium text-slate-600">
-                        {draft.scriptSynopsis}
-                      </p>
-                      <div className="mt-1 text-[10px] font-bold text-slate-500">
-                        مستوى التفاوض:{' '}
-                        <strong className="text-slate-800">
-                          {acceptanceDifficultyLabel}
-                        </strong>
-                      </div>
+                    <div className="text-[10px] font-bold text-slate-500">
+                      يرفع حماس الفنان ويزيد فرص قبول العرض عند دراسة السيناريو
                     </div>
+                  </div>
+                </div>
+                <span className="font-mono text-xs font-black text-amber-800 tabular-nums">
+                  {formatMoney(VIP_DINNER_COST)} ج.م
+                </span>
+              </button>
 
-                    {isActor && (
-                      <div className="mt-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3">
-                        <label htmlFor="actor-role-slot" className="mb-2 block text-xs font-black text-slate-800">حجم وموقع الدور داخل العمل</label>
-                        <select
-                          id="actor-role-slot"
-                          value={roleSlot}
-                          onChange={(event) => {
-                            const nextSlot = event.target.value as OfferRoleSlot;
-                            setNegotiationTarget((current) => current ? { ...current, roleSlot: nextSlot } : current);
-                            setOfferedSalary(Math.round(talent.base_salary * (nextSlot === 'cameo' ? 0.22 : roleSalaryFactor(nextSlot, 'actor') * 0.94)));
-                          }}
-                          className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-900"
-                        >
-                          {(['lead', 'antagonist', 'supporting', 'cameo'] as OfferRoleSlot[]).map((slot) => {
-                            const capacity = ROLE_CAPACITY[slot] || 0;
-                            const full = getRoleCount(slot) >= capacity && !(draft.talentOffers[talent.id]?.roleSlot === slot && draft.talentOffers[talent.id]?.status === 'accepted');
-                            return <option key={slot} value={slot} disabled={full}>{SLOT_ARABIC_NAMES[slot]} {full ? '(اكتمل العدد)' : `(${getRoleCount(slot)}/${capacity})`}</option>;
-                          })}
-                        </select>
-                        <p className="mt-2 text-[10px] font-bold text-slate-600">ملاءمة الموهبة للدور: <strong className="text-violet-700">{roleFitScore}/100</strong> · حجم الدور يغيّر الأجر المتوقع وفرصة القبول.</p>
-                      </div>
-                    )}
-
-                    {/* Free-Text Custom Role Input for Actors (Player writes the exact role!) */}
-                    {isActor && (
-                      <div className="mt-3.5 rounded-2xl border-2 border-violet-200 bg-violet-50/60 p-3.5">
-                        <label
-                          htmlFor="custom-actor-role-input"
-                          className="flex items-center gap-1.5 text-xs font-black text-violet-950"
-                        >
-                          <PenLine className="h-4 w-4 text-violet-600" />
-                          <span>اكتب الدور والشخصية المطلوبة للممثل في العمل:</span>
-                        </label>
-                        <input
-                          id="custom-actor-role-input"
-                          type="text"
-                          value={customRoleInput}
-                          onChange={(e) => setCustomRoleInput(e.target.value)}
-                          placeholder="مثال: الضابط يحيى قائد الفرقة / زعيم العصابة الخفي..."
-                          className="mt-2 w-full rounded-xl border-2 border-indigo-200 bg-white px-3.5 py-2.5 text-xs font-black text-slate-900 focus:border-violet-600 focus:outline-none"
-                        />
-                        <p className="mt-1 text-[10px] font-bold text-slate-500">
-                          سيقرأ الممثل تفاصيل الدور الذي كتبته مع ملخص السيناريو ليقرر قبوله أو اعتذاره.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Financial Offer Controls */}
-                    <div className="mt-3.5 space-y-3">
-                      <div className="rounded-2xl border-2 border-indigo-100 bg-white p-3.5">
-                        <div className="flex items-center justify-between text-xs font-black">
-                          <span className="text-slate-700">الأجر المالي المعروض:</span>
-                          <span className="text-base text-emerald-700 tabular-nums">
-                            {formatMoney(offeredSalary)} ج.م
-                          </span>
-                        </div>
-                        <div className="mt-0.5 flex items-center justify-between text-[10px] font-bold text-slate-400 tabular-nums">
-                          <span>أجره الأساسي: {formatMoney(talent.base_salary)} ج.م</span>
-                          <span className="text-indigo-700">
-                            طلبه المتوقع: ~{formatMoney(expectedMinimumSalary)} ج.م
-                          </span>
-                        </div>
-
-                        <input
-                          type="range"
-                          min={minSal}
-                          max={maxSal}
-                          step={500_000}
-                          value={offeredSalary}
-                          onChange={(e) => setOfferedSalary(Number(e.target.value))}
-                          className="mt-2.5 w-full accent-violet-600"
-                        />
-                      </div>
-
-                      <div className="rounded-2xl border-2 border-indigo-100 bg-white p-3.5">
-                        <div className="flex items-center justify-between text-xs font-black">
-                          <span className="text-slate-700">
-                            نسبة من أرباح العرض (تقنع النجوم الكبار):
-                          </span>
-                          <span className="text-violet-700 tabular-nums">
-                            {backendPoints}%
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min={0}
-                          max={15}
-                          step={1}
-                          value={backendPoints}
-                          onChange={(e) => setBackendPoints(Number(e.target.value))}
-                          className="mt-2 w-full accent-violet-600"
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        disabled={!vipDinner && cash < vipDinnerCost}
-                        onClick={() => setVipDinner(!vipDinner)}
-                        className={`flex min-h-[42px] w-full items-center justify-center gap-2 rounded-2xl border-2 px-3 py-2 text-xs font-black transition ${
-                          vipDinner
-                            ? 'border-emerald-400 bg-emerald-50 text-emerald-800'
-                            : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                        }`}
-                      >
-                        <Flame className="h-4 w-4" />
-                        <span>
-                          {vipDinner
-                            ? `تم اختيار العشاء المدفوع (${formatMoney(vipDinnerCost)} ج.م)`
-                            : `جلسة قراءة وعشاء عمل مدفوعة (${formatMoney(vipDinnerCost)} ج.م)`}
-                        </span>
-                      </button>
-                      <p className="px-1 text-[10px] font-bold text-slate-500">تُخصم تكلفة الجلسة من الخزينة عند إرسال العرض، ولا تُخصم من أجر الفنان.</p>
-                    </div>
-
-                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-2.5 text-center text-[11px] font-bold text-amber-900">
-                      ⏳ سيدرس النجم الدور والسيناريو ويرد عليك خلال{' '}
-                      <strong>
-                        {waitDays} أيام في اللعبة (
-                        {formatGameDate(gameDay + waitDays, currentYear)})
-                      </strong>
-                    </div>
-
+              {/* Character Role Description + Generator */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="text-xs font-black text-slate-800">
+                    تفاصيل الدور والشخصية في «{draft.title}»
+                  </label>
+                  {negotiatingTarget.kind === 'actor' && (
                     <button
                       type="button"
-                      disabled={sendingOffer}
-                      onClick={handleSendPitchAndOffer}
-                      className="mt-3.5 flex min-h-[50px] w-full items-center justify-center gap-2 rounded-2xl border-b-4 border-indigo-950/40 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-500/25 transition active:border-b-0 active:translate-y-1 disabled:opacity-50"
+                      onClick={handleGenerateRoleWithAI}
+                      disabled={isGeneratingRole}
+                      className="inline-flex items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-800 hover:bg-violet-100"
                     >
-                      <Sparkles className="h-4 w-4" />
-                      <span>
-                        {sendingOffer
-                          ? 'جاري إرسال الدور والسيناريو والعقد...'
-                          : 'إرسال الدور والعرض الرسمي الآن'}
-                      </span>
+                      {isGeneratingRole ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Wand2 className="h-3 w-3" />
+                      )}
+                      <span>ابتكار ملامح الشخصية درامياً ✨</span>
                     </button>
-                  </>
-                );
-              })()}
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={customRoleName}
+                  onChange={(e) => setCustomRoleName(e.target.value)}
+                  placeholder="اكتب ملامح الشخصية لإقناع الفنان..."
+                  className="w-full rounded-2xl border border-indigo-200 bg-indigo-50/50 px-3 py-2.5 text-xs font-bold text-slate-900 focus:border-violet-600 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-indigo-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setNegotiatingTarget(null)}
+                  className="min-h-[44px] rounded-2xl bg-slate-100 px-4 py-2 text-xs font-black text-slate-700"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendOffer}
+                  disabled={isEvaluatingOffer}
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2.5 text-xs font-black text-white shadow-md hover:brightness-105 disabled:opacity-50"
+                >
+                  {isEvaluatingOffer ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>جاري إرسال العرض لوكيل الأعمال...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4" />
+                      <span>إرسال العرض الرسمي (الرد خلال 2–3 أيام)</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* FLOATING STICKY BOTTOM NAVIGATION BOX */}
+      <div className="pointer-events-none fixed right-0 bottom-3 left-0 z-40 px-3">
+        <div className="glass-nav pointer-events-auto mx-auto flex max-w-xl items-center justify-between rounded-2xl px-4 py-3">
+          <button
+            type="button"
+            onClick={handlePrevStep}
+            className="min-h-[42px] rounded-xl border border-indigo-200/80 bg-indigo-50/90 px-5 py-2 text-xs font-black text-slate-700 transition hover:bg-indigo-100"
+          >
+            السابق
+          </button>
+
+          <div className="text-center">
+            <span className="font-mono text-xs font-black text-violet-800 tabular-nums">
+              التكلفة: {formatMoney(calculateTotalEstimatedBudget())} ج.م
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleNextStep}
+            className="min-h-[42px] rounded-xl border-b-2 border-amber-700 bg-gradient-to-r from-amber-500 to-amber-400 px-5 py-2 text-xs font-black text-slate-950 shadow-md transition hover:from-amber-400 hover:to-amber-300"
+          >
+            {wizardStep === 6 ? 'اعتماد الميزانية وبدء التصوير' : 'التالي'}
+          </button>
+        </div>
       </div>
-    </StepModalFrame>
+    </div>
   );
 }
+
+export default Stage3CrewCastCards;

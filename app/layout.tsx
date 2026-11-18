@@ -1,50 +1,71 @@
-import type { Metadata } from 'next';
-import { Alexandria, Readex_Pro } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import { Readex_Pro, IBM_Plex_Sans_Arabic, Space_Mono } from 'next/font/google';
 import './globals.css';
 
-const alexandria = Alexandria({
-  subsets: ['arabic', 'latin'],
-  weight: ['600', '700', '800', '900'],
-  variable: '--font-alexandria',
-});
-
-const readexPro = Readex_Pro({
+const cairo = Readex_Pro({
   subsets: ['arabic', 'latin'],
   weight: ['400', '500', '600', '700'],
-  variable: '--font-readex',
+  variable: '--font-cairo',
+  display: 'swap',
 });
 
-const appUrl = (process.env.APP_URL || 'https://hyptrix.app').replace(/\/$/, '');
-const appTitle = 'Hyptrix — Cinema & TV Tycoon';
-const appDescription =
-  'لعبة محاكاة وإدارة صناعة السينما والتلفزيون باللغة العربية. أسّس شركة إنتاج، طوّر أفلامك ومسلسلاتك، تفاوض مع الممثلين والمخرجين، أدر الميزانيات وقرارات التصوير، اختر التوزيع والمنصات والقنوات، وتابع الإيرادات والمنافسة والجوائز.';
+const changa = IBM_Plex_Sans_Arabic({
+  subsets: ['arabic', 'latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-changa',
+  display: 'swap',
+});
+
+const spaceMono = Space_Mono({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  variable: '--font-space-mono',
+  display: 'swap',
+});
+
+const APP_URL =
+  process.env.APP_URL ||
+  'https://ais-dev-b3fe6j3c33k4be5fa5fbda-188459294895.europe-west2.run.app';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: '#F2F5FF',
+};
 
 export const metadata: Metadata = {
-  metadataBase: new URL(`${appUrl}/`),
+  metadataBase: new URL(APP_URL),
   title: {
-    default: `${appTitle} | لعبة إدارة استوديو سينمائي وتلفزيوني`,
-    template: `%s | ${appTitle}`,
+    default:
+      'إمبراطور السينما والدراما | لعبة محاكاة إدارة استوديو الإنتاج السينمائي والتلفزيوني',
+    template: '%s | إمبراطور السينما والدراما',
   },
-  description: appDescription,
-  applicationName: appTitle,
+  description:
+    'اللعبة الاستراتيجية العربية الأعمق لمحاكاة تأسيس وإدارة شركات الإنتاج السينمائي والدرامي في مصر والشرق الأوسط والعالم. صمّم شعار شركتك، اكتب سيناريوهات الأفلام والمسلسلات، تفاوض مع الممثلين والمخرجين وفق حجم الدور والكاريزما، أدر ميزانيات التصوير والمواقف الطارئة، نافس في شباك التذاكر وموسم دراما رمضان والمنصات الرقمية، واحصد جوائز المهرجانات السنوية.',
+  applicationName: 'إمبراطور السينما والدراما',
   keywords: [
-    'Hyptrix',
     'لعبة إدارة استوديو سينمائي',
-    'لعبة محاكاة إنتاج الأفلام',
-    'لعبة إدارة إنتاج المسلسلات',
-    'محاكاة صناعة السينما والتلفزيون',
-    'لعبة مدير شركة إنتاج فني',
+    'لعبة إنتاج أفلام ومسلسلات',
+    'محاكاة السينما المصرية والعربية',
     'لعبة شباك التذاكر',
+    'لعبة منتج سينمائي',
+    'لعبة دراما رمضان',
+    'ألعاب استراتيجية عربية في المتصفح',
     'لعبة التفاوض مع الممثلين والمخرجين',
-    'لعبة إدارة ميزانية التصوير',
-    'movie studio management game',
-    'cinema tycoon game',
-    'TV production simulation',
+    'محاكاة صناعة الأفلام والمسلسلات',
+    'مهرجان القاهرة السينمائي والجوائز',
+    'Arabic Movie Studio Tycoon',
+    'Cinema Production Simulation Game',
+    'TV Series Tycoon Game',
+    'Box Office Strategy Game',
   ],
-  authors: [{ name: 'Hyptrix' }],
-  creator: 'Hyptrix',
-  publisher: 'Hyptrix',
-  manifest: '/manifest.webmanifest',
+  authors: [{ name: 'إمبراطور السينما والدراما' }],
+  creator: 'إمبراطور السينما والدراما',
+  publisher: 'إمبراطور السينما والدراما',
+  category: 'Simulation Game',
+  classification: 'Business & Entertainment Tycoon Simulation Game',
   alternates: {
     canonical: '/',
     languages: {
@@ -52,102 +73,195 @@ export const metadata: Metadata = {
       ar: '/',
     },
   },
-  robots: {
-    index: true,
-    follow: true,
-    noarchive: false,
-    googleBot: {
-      index: true,
-      follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-    },
-  },
   openGraph: {
-    title: `${appTitle} | إمبراطورية إنتاجك السينمائي والتلفزيوني`,
-    description: appDescription,
-    url: appUrl,
-    siteName: appTitle,
-    locale: 'ar_EG',
     type: 'website',
+    locale: 'ar_EG',
+    url: APP_URL,
+    siteName: 'إمبراطور السينما والدراما',
+    title:
+      'إمبراطور السينما والدراما | لعبة محاكاة شركات الإنتاج وشباك التذاكر',
+    description:
+      'أسّس شركة إنتاجك السينمائي والدرامي، اكتب قصص أعمالك، تفاوض مع نجوم الصف الأول والمواهب الصاعدة حسب حجم الدور والميزانية، أدر كواليس التصوير، وتصدّر إيرادات السينما والمنصات الرقمية والقنوات التلفزيونية.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${appTitle} | لعبة إدارة استوديو سينمائي وتلفزيوني`,
-    description: appDescription,
+    title:
+      'إمبراطور السينما والدراما | محاكاة صناعة الأفلام والمسلسلات العربية',
+    description:
+      'تجربة استراتيجية متكاملة لإدارة استوديو إنتاج سينمائي وتلفزيوني: تأليف السيناريو، التعاقد مع النجوم والمخرجين، إدارة الأزمات، التوزيع الإقليمي والعالمي، وحصد الجوائز السنوية.',
   },
-  category: 'games',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-snippet': -1,
+      'max-image-preview': 'large',
+      'max-video-preview': -1,
+    },
+  },
 };
 
-const jsonLdSchema = {
-  '@context': 'https://schema.org',
-  '@graph': [
-    {
-      '@type': 'VideoGame',
-      name: appTitle,
-      alternateName: [
-        'هايبتريكس: لعبة إدارة استوديو السينما والتلفزيون',
-        'Hyptrix Movie and TV Studio Tycoon',
-      ],
-      url: appUrl,
-      inLanguage: ['ar', 'ar-EG'],
-      applicationCategory: 'GameApplication',
-      genre: ['Simulation', 'Strategy', 'Business Management', 'Tycoon'],
-      gamePlatform: ['Web browser', 'Mobile browser', 'Desktop browser'],
-      playMode: 'SinglePlayer',
-      isAccessibleForFree: true,
-      description: appDescription,
-      featureList: [
-        'تأسيس شركة إنتاج واختيار اسمها وهويتها وشعارها',
-        'إنشاء مشروع فيلم سينمائي أو مسلسل تلفزيوني',
-        'اختيار التصنيفات الدرامية والتصنيف العمري وموسم العرض',
-        'كتابة فكرة المشروع وملخصه بحرية',
-        'التفاوض على العقود والأجور ونسب الأرباح مع الممثلين والمخرجين وأفراد الطاقم',
-        'اختيار أدوار البطولة والخصم والأدوار المساعدة والظهور الخاص',
-        'إدارة ميزانيات الإنتاج ومواقع التصوير والديكور والملابس والمؤثرات',
-        'اتخاذ قرارات أثناء التصوير تؤثر في التكلفة والجودة وترقب الجمهور والجدول',
-        'اختيار أسواق التوزيع والمنصات الرقمية والقنوات التلفزيونية',
-        'محاكاة إيرادات شباك التذاكر أو متابعة بث المسلسل حلقة بحلقة',
-        'متابعة المنافسين والأخبار وتطور المواهب والنتائج السنوية',
-        'المشاركة في المهرجانات والجوائز ضمن عالم اللعبة',
-      ],
-      offers: {
-        '@type': 'Offer',
-        price: '0',
-        priceCurrency: 'EGP',
-        availability: 'https://schema.org/InStock',
-        url: appUrl,
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': ['VideoGame', 'WebApplication'],
+        name: 'إمبراطور السينما والدراما',
+        alternateName: [
+          'لعبة محاكاة الإنتاج السينمائي والدرامي',
+          'Arabic Cinema & TV Studio Tycoon',
+        ],
+        url: APP_URL,
+        inLanguage: 'ar',
+        applicationCategory: 'GameApplication',
+        applicationSubCategory: 'Business & Cinema Studio Tycoon Simulation',
+        genre: [
+          'Simulation',
+          'Strategy',
+          'Business Tycoon',
+          'Entertainment Management',
+        ],
+        playMode: 'SinglePlayer',
+        operatingSystem: 'Any Web Browser (Mobile, Tablet, Desktop)',
+        isAccessibleForFree: true,
+        description:
+          'لعبة محاكاة استراتيجية واقتصادية متكاملة باللغة العربية تضع اللاعب في مقعد المنتج والمؤسس لشركة إنتاج سينمائي وتلفزيوني. تشمل اللعبة تأسيس هوية الشركة، كتابة سيناريوهات الأفلام والمسلسلات، اختيار التصنيفات الدرامية، التفاوض العميق مع الممثلين والمخرجين ومديري التصوير والمؤلفين الموسيقيين بناءً على حجم الدور ومكانة النجم وتوافقه الفني والأجر المالي ونسبة الأرباح، إدارة ميزانيات التصوير والديكور والخدع البصرية، التعامل مع المواقف الطارئة في موقع التصوير، بيع حقوق البث للمنصات الرقمية والقنوات الفضائية، فتح أسواق التوزيع في مصر والخليج وأوروبا وهوليوود، والمنافسة السنوية على جوائز المهرجانات.',
+        featureList: [
+          'تأسيس شركة إنتاج سينمائي ودرامي وتصميم شعارها واختيار القدرة الاستراتيجية للمؤسس',
+          'إنتاج الأفلام السينمائية في مواسم عيد الفطر وعيد الأضحى والصيف وإجازة نصف العام',
+          'إنتاج المسلسلات التلفزيونية وأعمال المنصات الرقمية (7 أو 10 أو 15 أو 30 حلقة) في موسم رمضان أو خارجه',
+          'كتابة عنوان العمل وملخص القصة والصراع الدرامي والنهاية بحرية إبداعية كاملة',
+          'دمج التصنيفات الفنية مثل الأكشن، الدراما الشعبية، الكوميديا، الجريمة والغموض، الرعب النفسي، التاريخي، الرومانسي، والخيال العلمي',
+          'نظام تفاوض عميق مع الممثلين والمخرجين يعتمد على حجم الدور ومكانته (بطولة مطلقة، بطولة مشتركة، شرير محوري، دور مساعد، ضيف شرف) وتناسبه مع نجومية الفنان وغروره وتاريخه الفني إلى جانب الأجر ونسبة الأرباح وجلسات العمل الخاصة',
+          'تطور ديناميكي لمستويات الممثلين وأجورهم وتقدم أعمارهم عاماً بعد عام واكتشاف المواهب الصاعدة وتقاعد الرواد',
+          'تخصيص ميزانيات الديكورات والأزياء والخدع البصرية والمجاميع والحملة التسويقية وعدد شاشات العرض',
+          'قرارات حاسمة أثناء التصوير تؤثر فعلياً على خزينة السيولة وجودة العمل وحماس الجمهور وجدول التصوير',
+          'التعاقد مع المنصات الرقمية والقنوات التلفزيونية الفضائية والتوسع الجغرافي في الأسواق الإقليمية والعالمية',
+          'سباق حي لشباك التذاكر ونسب المشاهدة حلقة بحلقة في مواجهة شركات الإنتاج المنافسة',
+          'حفل جوائز سنوي تلقائي يجمع كل أعمال العام لاختيار الفائزين في مهرجان القاهرة ومهرجان الجونة وحفل صناع الترفيه',
+        ],
+        offers: {
+          '@type': 'Offer',
+          price: '0',
+          priceCurrency: 'EGP',
+          availability: 'https://schema.org/InStock',
+        },
       },
-    },
-    {
-      '@type': 'WebSite',
-      name: appTitle,
-      url: appUrl,
-      inLanguage: 'ar-EG',
-      description: appDescription,
-    },
+      {
+        '@type': 'HowTo',
+        name: 'كيف تلعب وتبني إمبراطورية إنتاج سينمائي ودرامي ناجحة',
+        description:
+          'خطوات قيادة شركة الإنتاج من التأسيس الأول وحتى تصدر القيمة السوقية وحصد جوائز المهرجانات السنوية.',
+        step: [
+          {
+            '@type': 'HowToStep',
+            position: 1,
+            name: 'تأسيس الشركة وهوية المؤسس',
+            text: 'اختر اسم شركة الإنتاج واسم المدير التنفيذي، وصمّم الشعار الرسمي، وحدد ميزة المؤسس الاستراتيجية (مخرج عبقري لرفع الجودة النقدية، حوت تسويق لرفع إيرادات الافتتاح، أو مفاوض شرس لخفض أجور التعاقدات).',
+          },
+          {
+            '@type': 'HowToStep',
+            position: 2,
+            name: 'إعداد المشروع وكتابة السيناريو',
+            text: 'حدد نوع العمل (فيلم سينمائي أو مسلسل درامي مع تحديد عدد الحلقات)، واختر موسم العرض والتصنيف العمري، وامزج التصنيف الأساسي والفرعي بحرية، ثم اكتب اسم العمل وتفاصيل القصة والحبكة.',
+          },
+          {
+            '@type': 'HowToStep',
+            position: 3,
+            name: 'التفاوض مع النجوم وتشكيل الطاقم',
+            text: 'اختر الممثلين وحدد لكل ممثل حجم الدور (بطولة مطلقة، بطولة مشتركة، شرير رئيسي، دور مساعد، أو ضيف شرف) ووصف الشخصية، ووازن بين مكانة النجم وحجم الدور والأجر ونسبة الأرباح وجلسة العشاء الخاصة، ثم تعاقد مع المخرج ومدير التصوير والموسيقار ومشرف المونتاج.',
+          },
+          {
+            '@type': 'HowToStep',
+            position: 4,
+            name: 'إدارة الميزانيات والمنصات والتصوير',
+            text: 'وزّع ميزانية الإنتاج والتسويق، وافتح أسواق التوزيع الإقليمية والدولية، وتفاوض مع المنصات الرقمية والقنوات الفضائية، ثم ابدأ التصوير الفعلي واتخذ قراراتك الحاسمة في المواقف الطارئة داخل اللوكيشن.',
+          },
+          {
+            '@type': 'HowToStep',
+            position: 5,
+            name: 'طرح العمل والمنافسة على الجوائز السنوية',
+            text: 'تابع إيرادات شباك التذاكر يومياً للأفلام أو نسب المشاهدة حلقة بحلقة للمسلسلات، واقرأ تقييمات النقاد وتفاعل الجمهور، ثم خض منافسات الحفل السنوي للجوائز تلقائياً في نهاية كل عام.',
+          },
+        ],
+      },
+      {
+        '@type': 'FAQPage',
+        mainEntity: [
+          {
+            '@type': 'Question',
+            name: 'ما هي لعبة إمبراطور السينما والدراما؟',
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: 'هي لعبة محاكاة وإدارة أعمال استراتيجية باللغة العربية تتيح لك تأسيس وقيادة استوديو إنتاج سينمائي وتلفزيوني متكامل، بدءاً من كتابة السيناريو والتفاوض مع الممثلين والمخرجين، مروراً بإدارة ميزانيات التصوير والتوزيع والمنصات، وحتى المنافسة في شباك التذاكر وموسم دراما رمضان وحصد الجوائز السنوية.',
+            },
+          },
+          {
+            '@type': 'Question',
+            name: 'كيف يقرر الممثل أو المخرج قبول العرض أو رفضه في اللعبة؟',
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: 'لا يعتمد قبول النجم على المال وحده؛ بل يقوم محرك التفاوض في اللعبة بتحليل حجم الدور المعروض (بطولة مطلقة، بطولة مشتركة، شرير محوري، دور مساعد، أو ضيف شرف) ومقارنته بفئة النجم (S أو A أو B أو C) ومستوى غروره وتقييمه العام، بالإضافة إلى مدى ملاءمة التصنيف الدرامي لتاريخه الفني، وعمق كتابة الشخصية والسيناريو، وسمعة شركة الإنتاج واسم المخرج، إلى جانب الأجر المالي ونسبة الأرباح وجلسة العشاء الخاصة المدفوعة.',
+            },
+          },
+          {
+            '@type': 'Question',
+            name: 'هل يمكن إنتاج أفلام سينمائية ومسلسلات درامية معاً؟',
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: 'نعم، يمكنك في كل مشروع اختيار إنتاج فيلم سينمائي ينافس في مواسم الأعياد والصيف وإجازة نصف العام ثم يُباع للمنصات، أو إنتاج مسلسل درامي من 7 أو 10 أو 15 أو 30 حلقة يُعرض في موسم دراما رمضان أو عبر المنصات الرقمية والقنوات الفضائية مع متابعة أصداء كل حلقة.',
+            },
+          },
+          {
+            '@type': 'Question',
+            name: 'كيف تعمل القرارات والمواقف الطارئة أثناء تصوير الفيلم أو المسلسل؟',
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: 'أثناء دوران الكاميرات في مرحلة التصوير الفعلي، تظهر مواقف وأزمات إنتاجية ورقابية وفنية مرتبطة بقصة عملك وأبطالك. كل قرار تتخذه يؤثر بشكل فوري وحقيقي على السيولة النقدية في خزينة الشركة، ومؤشر الجودة الفنية والنقدية للعمل، ومستوى حماس الجمهور، وسمعة الاستوديو ومدة التصوير.',
+            },
+          },
+          {
+            '@type': 'Question',
+            name: 'متى يقام حفل الجوائز والمهرجانات السينمائية في اللعبة؟',
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: 'يقام الحفل السنوي لتوزيع جوائز السينما والدراما تلقائياً عند اكتمال السنة التقويمية داخل اللعبة، حيث تتنافس جميع الأفلام والمسلسلات التي أصدرتها شركتك والشركات المنافسة طوال العام على جوائز مهرجان القاهرة السينمائي الدولي ومهرجان الجونة السينمائي وحفل صناع الترفيه.',
+            },
+          },
+          {
+            '@type': 'Question',
+            name: 'ما هي أسواق التوزيع الإقليمية والعالمية المتاحة في اللعبة؟',
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: 'تبدأ شركتك في السوق المصري الأساسي، ومع نمو القيمة السوقية للاستوديو أو شراء التراخيص المبكرة يمكنك التوسع في السوق الخليجي، ثم السوق الأوروبي للمهرجانات والإنتاج المشترك، وصولاً إلى التوزيع العالمي الشامل في هوليوود لمضاعفة عوائد شباك التذاكر والبث.',
+            },
+          },
+        ],
+      },
+    ],
+  };
 
-  ],
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar-EG" dir="rtl" className={`${alexandria.variable} ${readexPro.variable}`}>
-      <head>
+    <html
+      lang="ar"
+      dir="rtl"
+      className={`${cairo.variable} ${changa.variable} ${spaceMono.variable}`}
+    >
+      <body className="min-h-dvh w-full overflow-x-hidden bg-[#F2F5FF] text-slate-900 antialiased selection:bg-violet-600 selection:text-white">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdSchema) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-      </head>
-      <body
-        suppressHydrationWarning
-        className="bg-[#F2F5FF] text-slate-900 antialiased selection:bg-violet-600 selection:text-white"
-        style={{
-          fontFamily: 'var(--font-readex), system-ui, -apple-system, sans-serif',
-        }}
-      >
-        {children}
+        <div className="relative min-h-dvh w-full overflow-x-hidden bg-[#F2F5FF] text-slate-900">
+          {children}
+        </div>
       </body>
     </html>
   );

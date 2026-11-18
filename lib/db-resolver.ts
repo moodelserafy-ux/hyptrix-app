@@ -428,24 +428,15 @@ function buildExpanded160ActorRoster(seedActors: ActorItem[]): ActorItem[] {
   };
 
   for (const m of EXTRA_MALE_PROFILES) {
-    if (result.length >= 100) break;
     if (usedNames.has(m.name)) continue;
     usedNames.add(m.name);
     result.push(createProfiledActor(m, 'male'));
   }
 
   for (const f of EXTRA_FEMALE_PROFILES) {
-    if (result.length >= 160) break;
     if (usedNames.has(f.name)) continue;
     usedNames.add(f.name);
     result.push(createProfiledActor(f, 'female'));
-  }
-
-  for (const m of EXTRA_MALE_PROFILES) {
-    if (result.length >= 160) break;
-    if (usedNames.has(m.name)) continue;
-    usedNames.add(m.name);
-    result.push(createProfiledActor(m, 'male'));
   }
 
   return result;

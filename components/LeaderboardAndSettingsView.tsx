@@ -1,398 +1,293 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { StepModalFrame } from './StepModalFrame';
-import { motion } from 'motion/react';
-import { useGameStore } from '@/lib/store';
-import {
-  fetchGlobalLeaderboard,
-  LeaderboardStudioEntry,
-  syncStudioWithSupabase,
-} from '@/lib/supabase';
+import React, { useMemo, useState } from 'react';
+import { useGameStore, getDaysRemainingUntilAnnualAwards } from '@/lib/store';
 import { formatMoney } from '@/lib/game-engine';
+import { getResolvedDatabase } from '@/lib/db-resolver';
+import { StudioLogoSvg } from './StudioLogoSvg';
 import {
   Trophy,
-  ShieldCheck,
-  UserCheck,
-  Crown,
-  Award,
-  Film,
-  TrendingUp,
-  Medal,
+  RotateCcw,
+  AlertTriangle,
   Sparkles,
-  Wallet,
 } from 'lucide-react';
 
-export function LeaderboardAndSettingsView({ embedded = false }: { embedded?: boolean }) {
+export function LeaderboardAndSettingsView() {
   const {
     studioName,
     ceoName,
-    currentRegion,
-    cash,
+    logo,
     marketValue,
+    reputation,
+    gameDay,
     releasedProjects,
     emergingCompetitors,
     competitorNetWorthDelta,
-    supabaseUserEmail,
-    setSupabaseUserEmail,
+    customDbPatch,
+    resetEntireGameAndStartFresh,
   } = useGameStore();
 
-  const [entries, setEntries] = useState<LeaderboardStudioEntry[]>([]);
-  const [emailInput, setEmailInput] = useState(supabaseUserEmail || '');
-  const [authStatus, setAuthStatus] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<'ranking' | 'system'>('ranking');
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [page, setPage] = useState(0);
 
-  const totalAwards = releasedProjects.reduce(
-    (s, p) => s + p.awardsWon.length,
-    0
+  const db = useMemo(
+    () => getResolvedDatabase(customDbPatch),
+    [customDbPatch]
   );
 
-  useEffect(() => {
-    fetchGlobalLeaderboard({
-      studioName,
-      ceoName,
-      region: currentRegion,
+  const daysUntilAnnualAwards = getDaysRemainingUntilAnnualAwards(gameDay);
+
+  const combinedLeaderboard = useMemo(() => {
+    const playerTotalAwards = releasedProjects.reduce(
+      (sum, p) => sum + p.awardsWon.length,
+      0
+    );
+
+    const playerEntry = {
+      id: 'player_studio',
+      name: studioName || 'العقرب ستوديوز',
+      ceo: ceoName || 'المدير التنفيذي',
       netWorth: marketValue,
+      reputation,
       releasesCount: releasedProjects.length,
-      awardsCount: totalAwards,
-    }).then((baseEntries) => {
-      // Merge competitor valuation deltas (hits, flops, awards) + any emerging studios
-      const updated = baseEntries.map((row) => {
-        if (row.isPlayer) return row;
-        const delta = competitorNetWorthDelta[row.studioName];
-        return {
-          ...row,
-          netWorth: Math.max(
-            45_000_000,
-            row.netWorth + (delta?.netWorthDelta || 0)
-          ),
-          releasesCount: row.releasesCount + (delta?.releasesDelta || 0),
-          awardsCount: row.awardsCount + (delta?.awardsDelta || 0),
+      awardsCount: playerTotalAwards,
+      isPlayer: true,
+    };
+
+    const allRivals = [...db.competitor_studios, ...emergingCompetitors].map(
+      (comp) => {
+        const delta = competitorNetWorthDelta[comp.name] || {
+          netWorthDelta: 0,
+          releasesDelta: 0,
+          awardsDelta: 0,
         };
-      });
+        const baseWorth =
+          comp.estimated_net_worth || comp.market_power * 4_500_000;
+        return {
+          id: comp.id,
+          name: comp.name,
+          ceo: comp.ceoName || comp.ceo || 'مجلس الإدارة',
+          netWorth: Math.max(30_000_000, baseWorth + delta.netWorthDelta),
+          reputation: comp.market_power,
+          releasesCount: 4 + delta.releasesDelta,
+          awardsCount: 2 + delta.awardsDelta,
+          isPlayer: false,
+        };
+      }
+    );
 
-      emergingCompetitors.forEach((em) => {
-        if (!updated.some((u) => u.studioName === em.name)) {
-          const delta = competitorNetWorthDelta[em.name];
-          updated.push({
-            rank: 99,
-            studioName: em.name,
-            ceoName: em.ceoName || 'رئيس مجلس الإدارة',
-            region: 'egypt',
-            netWorth: Math.max(
-              45_000_000,
-              em.market_power * 2_800_000 + (delta?.netWorthDelta || 0)
-            ),
-            releasesCount: 2 + (delta?.releasesDelta || 0),
-            awardsCount: 1 + (delta?.awardsDelta || 0),
-            specialtyLabel: `شركة إنتاج صاعدة (${em.preferred_genres.join(' / ')})`,
-          });
-        }
-      });
-
-      updated.sort((a, b) => {
-        if (b.netWorth !== a.netWorth) return b.netWorth - a.netWorth;
-        if (b.awardsCount !== a.awardsCount) return b.awardsCount - a.awardsCount;
-        return b.releasesCount - a.releasesCount;
-      });
-
-      setEntries(
-        updated.map((item, idx) => ({
-          ...item,
-          rank: idx + 1,
-        }))
-      );
-    });
+    return [playerEntry, ...allRivals].sort((a, b) => b.netWorth - a.netWorth);
   }, [
     studioName,
     ceoName,
-    currentRegion,
     marketValue,
-    releasedProjects.length,
-    totalAwards,
+    reputation,
+    releasedProjects,
+    db.competitor_studios,
     emergingCompetitors,
     competitorNetWorthDelta,
   ]);
 
-  const playerEntry = entries.find((e) => e.isPlayer);
-  const nextRivalAbove =
-    playerEntry && playerEntry.rank > 1
-      ? entries.find((e) => e.rank === playerEntry.rank - 1)
-      : null;
-
-  const topThree = entries.slice(0, 3);
-
-  const handleCloudSyncLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailInput.trim()) return;
-    setSupabaseUserEmail(emailInput.trim());
-    await syncStudioWithSupabase({
-      studioName,
-      ceoName,
-      region: currentRegion,
-      netWorth: marketValue,
-      releasesCount: releasedProjects.length,
-      awardsCount: totalAwards,
-      email: emailInput.trim(),
-    });
-    setAuthStatus('تم ربط حساب الاستوديو وحفظ قيمتك السوقية وترتيبك السحابي بنجاح.');
-  };
+  const pageSize = 5;
+  const totalPages = Math.max(1, Math.ceil(combinedLeaderboard.length / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const visibleRows = combinedLeaderboard.slice(
+    safePage * pageSize,
+    (safePage + 1) * pageSize
+  );
 
   return (
-    <StepModalFrame label="المتصدرون والإعدادات" embedded={embedded}>
-      <div className="mx-auto max-w-4xl space-y-4 py-1">
-      {/* Player Current Official Valuation & Rank Banner */}
-      {playerEntry && (
-        <div className="rounded-3xl border-2 border-violet-200 bg-gradient-to-br from-violet-600 via-indigo-600 to-cyan-600 p-5 text-white shadow-lg">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-bold text-violet-100">
-                البورصة الرسمية للقيمة السوقية لشركات الإنتاج
-              </div>
-              <div className="font-display mt-0.5 text-xl font-black">
-                {playerEntry.studioName}
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs font-medium text-indigo-100">
-                <span>
-                  القيمة السوقية:{' '}
-                  <strong className="font-black text-amber-300">
-                    {formatMoney(marketValue)} ج.م
-                  </strong>
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-2 py-0.5 text-[11px] font-bold text-emerald-200">
-                  <Wallet className="h-3 w-3" />
-                  <span>خزينة السيولة: {formatMoney(cash)} ج.م</span>
-                </span>
-              </div>
-            </div>
+    <div className="space-y-3" dir="rtl">
+      {/* Sub-Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-white p-2 shadow-2xs">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSubTab('ranking')}
+            className={`flex min-h-[36px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+              subTab === 'ranking'
+                ? 'bg-violet-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-indigo-50'
+            }`}
+          >
+            <Trophy className="h-3.5 w-3.5" />
+            <span>تصنيف القيمة السوقية للشركات</span>
+          </button>
 
-            <div className="flex flex-col items-center justify-center rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur-xs tabular-nums">
-              <span className="text-[10px] font-bold text-violet-100">
-                المركز الحالي
-              </span>
-              <span className="font-display text-2xl font-black text-amber-300">
-                #{playerEntry.rank}
-              </span>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setSubTab('system')}
+            className={`flex min-h-[36px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+              subTab === 'system'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-rose-50'
+            }`}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>إعادة تأسيس الاستوديو</span>
+          </button>
+        </div>
 
-          {nextRivalAbove && (
-            <div className="mt-3 flex items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-[11px] font-bold">
-              <span className="flex items-center gap-1.5">
-                <TrendingUp className="h-3.5 w-3.5 text-amber-300" />
-                <span>
-                  الهدف القادم: تخطي «{nextRivalAbove.studioName}» (#
-                  {nextRivalAbove.rank})
-                </span>
+        <span className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-800 tabular-nums">
+          <Sparkles className="h-3 w-3 text-amber-600" />
+          <span>حفل الجوائز السنوي التلقائي بعد {daysUntilAnnualAwards} يوم</span>
+        </span>
+      </div>
+
+      {/* RANKING TABLE */}
+      {subTab === 'ranking' && (
+        <div className="space-y-2">
+          {visibleRows.map((studio, idx) => {
+            const rankNum = safePage * pageSize + idx + 1;
+            return (
+              <div
+                key={studio.id}
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 px-3.5 py-2.5 transition-all ${
+                  studio.isPlayer
+                    ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/90 shadow-xs'
+                    : 'border-indigo-100 bg-white'
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl font-display text-xs font-black ${
+                      rankNum === 1
+                        ? 'bg-amber-400 text-slate-950'
+                        : rankNum === 2
+                        ? 'bg-slate-200 text-slate-900'
+                        : rankNum === 3
+                        ? 'bg-amber-700 text-white'
+                        : 'bg-indigo-50 text-indigo-700'
+                    }`}
+                  >
+                    #{rankNum}
+                  </div>
+
+                  {studio.isPlayer && (
+                    <StudioLogoSvg config={logo} size={28} className="shrink-0" />
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <h4 className="font-display text-xs font-black text-slate-900 sm:text-sm">
+                        {studio.name}
+                      </h4>
+                      {studio.isPlayer && (
+                        <span className="rounded-md bg-violet-600 px-1.5 py-0.5 text-[9px] font-black text-white">
+                          شركتك
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-bold leading-relaxed text-slate-500">
+                      القيادة: {studio.ceo} · الأعمال: {studio.releasesCount} · الجوائز: 🏆 {studio.awardsCount}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs tabular-nums">
+                  <div className="text-center">
+                    <span className="block text-[9px] font-bold text-slate-400">
+                      السمعة
+                    </span>
+                    <span className="font-display font-black text-violet-700">
+                      {studio.reputation}%
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 text-center">
+                    <span className="block text-[9px] font-bold text-emerald-800">
+                      القيمة السوقية
+                    </span>
+                    <span className="font-display text-xs font-black text-emerald-700">
+                      {formatMoney(studio.netWorth)} ج.م
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-indigo-100 pt-2.5">
+              <button
+                type="button"
+                disabled={safePage === 0}
+                onClick={() => {
+                  setPage((p) => Math.max(0, p - 1));
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex items-center justify-center rounded-xl border border-indigo-200 bg-white px-4 py-1.5 text-xs font-black text-slate-700 disabled:opacity-40"
+              >
+                <span>السابق</span>
+              </button>
+              <span className="text-xs font-black text-slate-600 tabular-nums">
+                صفحة {safePage + 1} من {totalPages}
               </span>
-              <span className="text-amber-200 tabular-nums">
-                فارق القيمة السوقية{' '}
-                {formatMoney(
-                  Math.max(0, nextRivalAbove.netWorth - playerEntry.netWorth)
-                )}{' '}
-                ج.م
-              </span>
+              <button
+                type="button"
+                disabled={safePage >= totalPages - 1}
+                onClick={() => {
+                  setPage((p) => Math.min(totalPages - 1, p + 1));
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex items-center justify-center rounded-xl bg-violet-600 px-4 py-1.5 text-xs font-black text-white disabled:opacity-40"
+              >
+                <span>التالي</span>
+              </button>
             </div>
           )}
         </div>
       )}
 
-      {/* Top 3 Championship Podium Cards */}
-      {topThree.length >= 3 && (
-        <div className="grid grid-cols-3 gap-2.5 tabular-nums">
-          {topThree.map((studio) => {
-            const isFirst = studio.rank === 1;
-            const isSecond = studio.rank === 2;
-            return (
-              <div
-                key={studio.studioName}
-                className={`relative flex flex-col justify-between rounded-2xl border-2 p-3 text-center transition ${
-                  isFirst
-                    ? 'border-amber-300 border-b-4 border-b-amber-400 bg-gradient-to-b from-amber-50 via-white to-amber-50/40 shadow-md'
-                    : isSecond
-                    ? 'border-slate-300 border-b-4 border-b-slate-400 bg-gradient-to-b from-slate-50 to-white'
-                    : 'border-orange-200 border-b-4 border-b-orange-300 bg-gradient-to-b from-orange-50/60 to-white'
-                }`}
-              >
-                <div>
-                  <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-white shadow-2xs">
-                    {isFirst ? (
-                      <Crown className="h-5 w-5 text-amber-500" />
-                    ) : (
-                      <Medal
-                        className={`h-4 w-4 ${
-                          isSecond ? 'text-slate-500' : 'text-orange-500'
-                        }`}
-                      />
-                    )}
-                  </div>
-                  <div
-                    className={`mt-1 text-[10px] font-black ${
-                      isFirst
-                        ? 'text-amber-700'
-                        : isSecond
-                        ? 'text-slate-600'
-                        : 'text-orange-700'
-                    }`}
-                  >
-                    المركز #{studio.rank}
-                  </div>
-                  <div className="font-display mt-0.5 line-clamp-1 text-xs font-black text-slate-900">
-                    {studio.studioName}
-                  </div>
-                  <div className="truncate text-[10px] font-bold text-slate-500">
-                    {studio.ceoName}
-                  </div>
-                </div>
+      {/* SYSTEM & RESET */}
+      {subTab === 'system' && (
+        <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border-2 border-rose-200 bg-rose-50/70 p-4 sm:flex-row">
+          <div>
+            <h3 className="flex items-center gap-1.5 text-sm font-black text-rose-900">
+              <AlertTriangle className="h-4 w-4 text-rose-600" />
+              <span>إعادة تأسيس الاستوديو من الصفر</span>
+            </h3>
+            <p className="mt-1 text-xs font-medium text-slate-600">
+              يتم حفظ تقدمك تلقائياً. إذا أردت البدء باستوديو جديد تماماً يمكنك مسح البيانات الحالية.
+            </p>
+          </div>
 
-                <div className="mt-2 rounded-xl bg-violet-50 px-2 py-1 font-display text-xs font-black text-violet-700">
-                  {formatMoney(studio.netWorth)} ج.م
-                </div>
+          <div className="shrink-0">
+            {!confirmReset ? (
+              <button
+                type="button"
+                onClick={() => setConfirmReset(true)}
+                className="flex min-h-[38px] items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-black text-white shadow-xs hover:bg-rose-700"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>إعادة ضبط اللعبة</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetEntireGameAndStartFresh();
+                    setConfirmReset(false);
+                  }}
+                  className="min-h-[38px] rounded-xl bg-rose-700 px-3.5 py-2 text-xs font-black text-white"
+                >
+                  تأكيد المسح النهائي
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReset(false)}
+                  className="min-h-[38px] rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700"
+                >
+                  إلغاء
+                </button>
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
       )}
-
-      {/* Full Strictly-Sorted Studio League Table (Ranked by Market Valuation) */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-3xl border-2 border-indigo-100 bg-white p-5 shadow-xs"
-      >
-        <div className="flex items-center justify-between border-b border-indigo-50 pb-3">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-amber-500" />
-            <h3 className="font-display text-sm font-black text-slate-900">
-              جدول الترتيب الرسمي لشركات الإنتاج
-            </h3>
-          </div>
-          <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[10px] font-black text-violet-700">
-            مرتب حسب القيمة السوقية
-          </span>
-        </div>
-
-        <div className="mt-3 space-y-2 tabular-nums">
-          {entries.map((row) => {
-            const isEmerging = emergingCompetitors.some(
-              (em) => em.name === row.studioName
-            );
-            const deltaObj = competitorNetWorthDelta[row.studioName];
-            const netDelta = deltaObj?.netWorthDelta || 0;
-
-            return (
-              <div
-                key={row.studioName}
-                className={`flex items-center justify-between gap-2 rounded-2xl border-2 p-3 text-xs transition ${
-                  row.isPlayer
-                    ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/90 font-black text-slate-900 shadow-xs'
-                    : 'border-indigo-50 bg-[#F8FAFF] text-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-black ${
-                      row.rank === 1
-                        ? 'bg-amber-500 text-white'
-                        : row.rank === 2
-                        ? 'bg-slate-600 text-white'
-                        : row.rank === 3
-                        ? 'bg-orange-500 text-white'
-                        : row.isPlayer
-                        ? 'bg-violet-600 text-white'
-                        : 'bg-indigo-100 text-indigo-800'
-                    }`}
-                  >
-                    #{row.rank}
-                  </span>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 truncate font-black text-slate-900">
-                      <span className="truncate">{row.studioName}</span>
-                      {row.isPlayer && (
-                        <span className="rounded-md bg-violet-600 px-1.5 py-0.5 text-[9px] text-white">
-                          شركتك
-                        </span>
-                      )}
-                      {isEmerging && (
-                        <span className="inline-flex items-center gap-0.5 rounded-md bg-cyan-600 px-1.5 py-0.5 text-[9px] text-white">
-                          <Sparkles className="h-2.5 w-2.5" /> صاعدة
-                        </span>
-                      )}
-                      {!row.isPlayer && netDelta !== 0 && (
-                        <span
-                          className={`rounded-md px-1.5 py-0.5 text-[9px] font-black ${
-                            netDelta > 0
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-rose-100 text-rose-700'
-                          }`}
-                        >
-                          {netDelta > 0 ? '▲ صعود' : '▼ تراجع'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] font-bold text-slate-500">
-                      <span>{row.ceoName}</span>
-                      <span className="inline-flex items-center gap-0.5 text-indigo-600">
-                        <Film className="h-3 w-3" /> {row.releasesCount} عمل
-                      </span>
-                      <span className="inline-flex items-center gap-0.5 text-amber-600">
-                        <Award className="h-3 w-3" /> {row.awardsCount} جائزة
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="shrink-0 text-left">
-                  <div className="font-display text-sm font-black text-violet-700">
-                    {formatMoney(row.netWorth)} ج.م
-                  </div>
-                  <div className="text-[9px] font-bold text-slate-400">
-                    القيمة السوقية
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </motion.div>
-
-      {/* Clean Studio Account Sync Card */}
-      <div className="rounded-3xl border-2 border-indigo-100 bg-white p-5">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-violet-600" />
-          <h3 className="text-sm font-black text-slate-900">
-            ربط حساب الاستوديو وحفظ الترتيب السحابي (Supabase)
-          </h3>
-        </div>
-
-        <form
-          onSubmit={handleCloudSyncLogin}
-          className="mt-3 flex flex-col gap-2.5 sm:flex-row"
-        >
-          <input
-            type="email"
-            value={emailInput}
-            onChange={(e) => setEmailInput(e.target.value)}
-            placeholder="البريد الإلكتروني لحفظ تقدم شركتك..."
-            aria-label="البريد الإلكتروني لحفظ التقدم"
-            className="flex-1 rounded-xl border-2 border-indigo-100 bg-[#F5F7FF] px-3.5 py-2.5 text-xs font-medium text-slate-900 focus:border-violet-600 focus:bg-white focus:outline-none"
-          />
-          <button
-            type="submit"
-            className="min-h-[42px] rounded-xl border-b-4 border-indigo-950/30 bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-xs font-black text-white whitespace-nowrap shrink-0"
-          >
-            <UserCheck className="ml-1 inline h-4 w-4" />
-            حفظ الحساب
-          </button>
-        </form>
-
-        {authStatus && (
-          <p className="mt-2.5 rounded-xl bg-emerald-50 p-2.5 text-xs font-bold text-emerald-700">
-            {authStatus}
-          </p>
-        )}
-      </div>
-      </div>
-    </StepModalFrame>
+    </div>
   );
 }
+
+export default LeaderboardAndSettingsView;

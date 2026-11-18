@@ -1,706 +1,660 @@
 'use client';
 
 import React, { useState } from 'react';
-import { StepModalFrame } from './StepModalFrame';
-import { FloatingToast } from './FloatingToast';
-import { motion, AnimatePresence } from 'motion/react';
 import { useGameStore } from '@/lib/store';
-import { GENRES, GenreId } from '@/lib/db-resolver';
+import { GENRES } from '@/lib/db-resolver';
 import {
-  ProjectFormat,
+  AgeRating,
+  GenreId,
+  FilmReleaseSeason,
   SeriesEpisodes,
   SeriesSeason,
-  FilmReleaseSeason,
-  AgeRating,
 } from '@/lib/game-engine';
 import {
-  Film,
+  Clapperboard,
   Tv,
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  FileText,
-  Check,
   Calendar,
-  Layers,
+  ShieldAlert,
+  Sparkles,
+  Check,
+  Wand2,
+  Loader2,
   Flame,
-  Laugh,
-  Skull,
+  Users,
+  Smile,
+  Brain,
+  Ghost,
   Search,
   Rocket,
-  Drama,
   Heart,
   Crown,
+  BookOpen,
   KeyRound,
-  Compass,
-  Ban,
+  Shield,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
-const GENRE_VISUAL_META: Record<
-  GenreId,
-  {
-    subtitle: string;
-    accentBg: string;
-    accentText: string;
-    activeBorder: string;
-    activeBg: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }
-> = {
-  action: {
-    subtitle: 'مطاردات وإثارة جماهيرية',
-    accentBg: 'bg-rose-100',
-    accentText: 'text-rose-700',
-    activeBorder: 'border-rose-500 border-b-4 border-b-rose-700',
-    activeBg: 'bg-gradient-to-br from-rose-50 via-white to-orange-50',
-    icon: Flame,
-  },
-  popular_drama: {
-    subtitle: 'صراعات الحارة والواقع',
-    accentBg: 'bg-emerald-100',
-    accentText: 'text-emerald-700',
-    activeBorder: 'border-emerald-600 border-b-4 border-b-emerald-800',
-    activeBg: 'bg-gradient-to-br from-emerald-50 via-white to-teal-50',
-    icon: Drama,
-  },
-  comedy: {
-    subtitle: 'كوميديا ساخرة وذكية',
-    accentBg: 'bg-amber-100',
-    accentText: 'text-amber-700',
-    activeBorder: 'border-amber-500 border-b-4 border-b-amber-700',
-    activeBg: 'bg-gradient-to-br from-amber-50 via-white to-yellow-50',
-    icon: Laugh,
-  },
-  light_comedy: {
-    subtitle: 'ضحك عائلي لجميع الأعمار',
-    accentBg: 'bg-orange-100',
-    accentText: 'text-orange-700',
-    activeBorder: 'border-orange-500 border-b-4 border-b-orange-700',
-    activeBg: 'bg-gradient-to-br from-orange-50 via-white to-amber-50',
-    icon: Laugh,
-  },
-  psychological_horror: {
-    subtitle: 'توتر نفسي وأجواء غامضة',
-    accentBg: 'bg-purple-100',
-    accentText: 'text-purple-700',
-    activeBorder: 'border-purple-600 border-b-4 border-b-purple-800',
-    activeBg: 'bg-gradient-to-br from-purple-50 via-white to-fuchsia-50',
-    icon: Skull,
-  },
-  supernatural_horror: {
-    subtitle: 'أساطير مرعبة وما وراء الطبيعة',
-    accentBg: 'bg-fuchsia-100',
-    accentText: 'text-fuchsia-700',
-    activeBorder: 'border-fuchsia-600 border-b-4 border-b-fuchsia-800',
-    activeBg: 'bg-gradient-to-br from-fuchsia-50 via-white to-purple-50',
-    icon: Skull,
-  },
-  crime_mystery: {
-    subtitle: 'تحقيقات بوليسية وألغاز',
-    accentBg: 'bg-indigo-100',
-    accentText: 'text-indigo-700',
-    activeBorder: 'border-indigo-600 border-b-4 border-b-indigo-800',
-    activeBg: 'bg-gradient-to-br from-indigo-50 via-white to-blue-50',
-    icon: Search,
-  },
-  sci_fi: {
-    subtitle: 'عوالم مستقبلية وتقنيات',
-    accentBg: 'bg-cyan-100',
-    accentText: 'text-cyan-700',
-    activeBorder: 'border-cyan-500 border-b-4 border-b-cyan-700',
-    activeBg: 'bg-gradient-to-br from-cyan-50 via-white to-sky-50',
-    icon: Rocket,
-  },
-  romance: {
-    subtitle: 'مشاعر إنسانية وقصص حب',
-    accentBg: 'bg-pink-100',
-    accentText: 'text-pink-700',
-    activeBorder: 'border-pink-500 border-b-4 border-b-pink-700',
-    activeBg: 'bg-gradient-to-br from-pink-50 via-white to-rose-50',
-    icon: Heart,
-  },
-  historical: {
-    subtitle: 'ملاحم تاريخية وحربية ضخمة',
-    accentBg: 'bg-yellow-100',
-    accentText: 'text-yellow-800',
-    activeBorder: 'border-yellow-600 border-b-4 border-b-yellow-800',
-    activeBg: 'bg-gradient-to-br from-yellow-50 via-white to-amber-50',
-    icon: Crown,
-  },
-  biography: {
-    subtitle: 'قصص شخصيات استثنائية',
-    accentBg: 'bg-sky-100',
-    accentText: 'text-sky-700',
-    activeBorder: 'border-sky-600 border-b-4 border-b-sky-800',
-    activeBg: 'bg-gradient-to-br from-sky-50 via-white to-indigo-50',
-    icon: Crown,
-  },
-  heist: {
-    subtitle: 'خطط ذكية وعمليات سطو',
-    accentBg: 'bg-violet-100',
-    accentText: 'text-violet-700',
-    activeBorder: 'border-violet-600 border-b-4 border-b-violet-800',
-    activeBg: 'bg-gradient-to-br from-violet-50 via-white to-indigo-50',
-    icon: KeyRound,
-  },
-  fantasy: {
-    subtitle: 'عوالم سحرية وأساطير قديمة',
-    accentBg: 'bg-teal-100',
-    accentText: 'text-teal-700',
-    activeBorder: 'border-teal-600 border-b-4 border-b-teal-800',
-    activeBg: 'bg-gradient-to-br from-teal-50 via-white to-cyan-50',
-    icon: Compass,
-  },
-  superhero: {
-    subtitle: 'قوى خارقة ومعارك ملحمية',
-    accentBg: 'bg-blue-100',
-    accentText: 'text-blue-700',
-    activeBorder: 'border-blue-600 border-b-4 border-b-blue-800',
-    activeBg: 'bg-gradient-to-br from-blue-50 via-white to-cyan-50',
-    icon: Flame,
-  },
+const GENRE_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Flame,
+  Users,
+  Smile,
+  Sparkles,
+  Brain,
+  Ghost,
+  Search,
+  Rocket,
+  Heart,
+  Crown,
+  BookOpen,
+  KeyRound,
+  Wand2,
+  Shield,
 };
+
+const FILM_SEASONS: { id: FilmReleaseSeason; label: string; desc: string }[] = [
+  {
+    id: 'eid_adha',
+    label: 'موسم عيد الأضحى',
+    desc: 'أعلى إقبال جماهيري على شباك التذاكر ومنافسة شرسة مع الكبار',
+  },
+  {
+    id: 'eid_fitr',
+    label: 'موسم عيد الفطر',
+    desc: 'موسم عائلي وشبابي سريع الإيقاع بإيرادات افتتاحية قوية',
+  },
+  {
+    id: 'summer',
+    label: 'موسم الصيف السينمائي',
+    desc: 'فترة عرض طويلة في السينمات تمنح الأفلام نفساً أطول لحصد الإيرادات',
+  },
+  {
+    id: 'mid_year',
+    label: 'إجازة نصف العام',
+    desc: 'موسم متوازن بمنافسة هادئة وفرصة ممتازة لتصدر شباك التذاكر',
+  },
+];
+
+const SERIES_SEASONS: { id: SeriesSeason; label: string; desc: string }[] = [
+  {
+    id: 'ramadan',
+    label: 'الموسم الرمضاني الكبير',
+    desc: 'أعلى نسب مشاهدات بالملايين وعوائد إعلانات ضخمة عبر القنوات والمنصات',
+  },
+  {
+    id: 'off_season',
+    label: 'موسم المنصات (Off-Season)',
+    desc: 'مناسب للمسلسلات القصيرة المركزة ويتيح تصدر قوائم المشاهدة الرقمية',
+  },
+];
+
+const AGE_RATINGS: { id: AgeRating; label: string; desc: string }[] = [
+  {
+    id: 'G',
+    label: 'عرض عام (عائلي)',
+    desc: 'يفتح أبواب القاعات والمشاهدات لكل أفراد الأسرة (+12% جمهور)',
+  },
+  {
+    id: '+12',
+    label: 'إرشاد عائلي (+12)',
+    desc: 'التصنيف القياسي المتوازن لأغلب الأعمال الجماهيرية',
+  },
+  {
+    id: '+18',
+    label: 'للبالغين فقط (+18)',
+    desc: 'حرية فنية ونقدية عالية للمشاهد المركبة مقابل تقليص شريحة التذاكر العائلية',
+  },
+];
+
+const EPISODE_COUNTS: { count: SeriesEpisodes; label: string; desc: string }[] = [
+  { count: 7, label: '7 حلقات', desc: 'حكاية مكثفة سريعة الإيقاع للمنصات' },
+  { count: 10, label: '10 حلقات', desc: 'قالب المنصات الرقمية القياسي' },
+  { count: 15, label: '15 حلقة', desc: 'نصف موسم رمضاني مشدود بلا مط أو تطويل' },
+  { count: 30, label: '30 حلقة', desc: 'ملحمة درامية كاملة طوال الشهر بأعلى مشاهدات' },
+];
 
 export function Stage2ProjectSetup() {
   const {
     draft,
     updateDraft,
     setActiveScreen,
+    showToast,
+    groqApiKeyClient,
+    preferredGroqModel,
   } = useGameStore();
-  const [subStep, setSubStep] = useState<1 | 2 | 3 | 4>(1);
-  const [genrePickTab, setGenrePickTab] = useState<'primary' | 'secondary'>('primary');
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [genrePickMode, setGenrePickMode] = useState<'primary' | 'secondary'>('primary');
+  const [aiGeneratingIdea, setAiGeneratingIdea] = useState(false);
 
-  const primaryGenreName =
-    GENRES.find((g) => g.id === draft.primaryGenre)?.name || draft.primaryGenre;
-  const secondaryGenreName = draft.secondaryGenre
-    ? GENRES.find((g) => g.id === draft.secondaryGenre)?.name || ''
-    : '';
+  const isSeries = draft.format === 'series';
 
-  const unlockNext = (next: 1 | 2 | 3 | 4) => {
-    setValidationError(null);
-    setSubStep(next);
+  const handleGenerateAiScriptIdea = async () => {
+    setAiGeneratingIdea(true);
+    try {
+      const primaryGenreObj = GENRES.find((g) => g.id === draft.primaryGenre);
+      const secondaryGenreObj = GENRES.find((g) => g.id === draft.secondaryGenre);
+      const res = await fetch('/api/generate-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'generate_script_idea',
+          groqKeyOverride: groqApiKeyClient,
+          preferredModel: preferredGroqModel,
+          payload: {
+            format: draft.format,
+            primaryGenre: draft.primaryGenre,
+            primaryGenreName: primaryGenreObj?.name || 'دراما',
+            secondaryGenre: draft.secondaryGenre || '',
+            secondaryGenreName: secondaryGenreObj?.name || '',
+            ageRating: draft.ageRating,
+            currentTitle: draft.title,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data?.title && data?.synopsis) {
+        updateDraft({
+          title: data.title,
+          scriptSynopsis: data.synopsis,
+        });
+      }
+    } catch {
+      showToast('تعذر الاتصال بورشة التأليف حالياً، يمكنك الكتابة مباشرة', 'warning');
+    } finally {
+      setAiGeneratingIdea(false);
+    }
   };
 
-  const handleProceedToCrew = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!draft.title.trim()) {
-      setValidationError('يرجى كتابة اسم الفيلم أو المسلسل أولاً.');
-      return;
-    }
-    if (draft.scriptSynopsis.trim().length < 15) {
-      setValidationError(
-        'اكتب نبذة عن فكرة المشروع (15 حرفاً على الأقل) قبل الانتقال للتفاوض مع المواهب.'
-      );
-      return;
-    }
-    setValidationError(null);
-    setActiveScreen('CREW_CAST_CARDS');
+  // Silent background AI evaluation of the player's written script (never shown to player)
+  const triggerSilentAiScriptEvaluation = () => {
+    const primaryGenreObj = GENRES.find((g) => g.id === draft.primaryGenre);
+    fetch('/api/generate-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'analyze_script_synopsis',
+        groqKeyOverride: groqApiKeyClient,
+        preferredModel: preferredGroqModel,
+        payload: {
+          title: draft.title,
+          synopsis: draft.scriptSynopsis,
+          format: draft.format,
+          primaryGenre: draft.primaryGenre,
+          primaryGenreName: primaryGenreObj?.name || 'دراما',
+        },
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (typeof data?.score === 'number') {
+          updateDraft({
+            aiScriptAnalysis: {
+              score: data.score,
+              verdict: String(data.verdict || ''),
+              castingAdvice: String(data.castingAdvice || ''),
+              modelUsed: preferredGroqModel,
+            },
+          });
+        }
+      })
+      .catch(() => {});
   };
+
+  const handleSelectGenre = (genreId: GenreId) => {
+    if (genrePickMode === 'primary') {
+      updateDraft({
+        primaryGenre: genreId,
+        secondaryGenre: draft.secondaryGenre === genreId ? null : draft.secondaryGenre,
+      });
+      setGenrePickMode('secondary');
+    } else {
+      if (draft.primaryGenre === genreId) {
+        showToast('هذا التصنيف مختار بالفعل كتصنيف أساسي للعمل', 'info');
+        return;
+      }
+      updateDraft({
+        secondaryGenre: draft.secondaryGenre === genreId ? null : genreId,
+      });
+    }
+  };
+
+  const handleNextStep = () => {
+    if (step === 1) {
+      setStep(2);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (step === 2) {
+      if (!draft.primaryGenre) {
+        showToast('يرجى اختيار التصنيف الدرامي الأساسي للعمل أولاً', 'warning');
+        return;
+      }
+      setStep(3);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (step === 3) {
+      if (!draft.title.trim()) {
+        showToast('يرجى كتابة اسم العمل الفني قبل الانتقال للتعاقدات', 'warning');
+        return;
+      }
+      if ((draft.scriptSynopsis || '').trim().split(/\s+/).length < 5) {
+        showToast('يرجى كتابة ملخص القصة والحبكة الدرامية (5 كلمات على الأقل)', 'warning');
+        return;
+      }
+      triggerSilentAiScriptEvaluation();
+      setActiveScreen('CREW_CAST_CARDS');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handlePrevStep = () => {
+    if (step === 1) {
+      setActiveScreen('STUDIO_HUB');
+    } else {
+      setStep((s) => (s === 3 ? 2 : 1));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const primaryGenreObj = GENRES.find((g) => g.id === draft.primaryGenre);
+  const secondaryGenreObj = GENRES.find((g) => g.id === draft.secondaryGenre);
 
   return (
-    <StepModalFrame label="إعداد المشروع الفني">
-      <div className="mx-auto max-w-3xl space-y-4 py-1">
-      <div className="rounded-2xl border border-white/80 bg-white/90 p-3 shadow-[0_8px_28px_-14px_rgba(79,70,229,0.28)] backdrop-blur">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <span className="text-[10px] font-black text-violet-700">غرفة تطوير المشروع</span>
-            <h2 className="font-display truncate text-base font-black text-slate-900 sm:text-lg">
-              {['شكل العمل الفني', 'موعد العرض', 'التصنيف العمري', 'فكرة المشروع'][subStep - 1]}
-            </h2>
+    <div className="mx-auto max-w-xl space-y-3 pb-24" dir="rtl">
+      {/* Clean Current-Activity Header (No Step Numbers or Future Step Dots) */}
+      <div className="glass-panel rounded-3xl px-4 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm">
+            <Sparkles className="h-5 w-5" />
           </div>
-          <span className="shrink-0 rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-black tabular-nums text-violet-800">
-            {subStep} / 4
-          </span>
-        </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-gradient-to-l from-cyan-400 via-violet-500 to-fuchsia-500 transition-all duration-500" style={{ width: `${(subStep / 4) * 100}%` }} />
+          <h1 className="font-display text-sm font-black text-slate-900 sm:text-base">
+            {step === 1 && 'تحديد نوع العمل، الموسم، والتصنيف العمري'}
+            {step === 2 && 'اختيار التصنيف الدرامي للعمل'}
+            {step === 3 && 'كتابة عنوان العمل والسيناريو'}
+          </h1>
         </div>
       </div>
-      <FloatingToast message={validationError} onDismiss={() => setValidationError(null)} />
 
-      {/* Focused Step Deck */}
+      {/* Step 1: Format (Film vs Series), Season & Age Rating */}
       <AnimatePresence mode="wait">
-        {subStep === 1 && (
+        {step === 1 && (
           <motion.div
-            key="proj-s1"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -16, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-            className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-6 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.16)]"
+            key="setup-step-1"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="space-y-3"
           >
-            <span className="text-[11px] font-black text-violet-600">الخطوة 1 من 4</span>
-            <h3 className="font-display mt-0.5 text-xl font-black text-slate-900">
-              اختر شكل العمل الفني القادم
-            </h3>
-
-            <div className="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => updateDraft({ format: 'film' as ProjectFormat })}
-                className={`flex flex-col items-start rounded-3xl border-2 p-5 text-right transition-all ${
-                  draft.format === 'film'
-                    ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/70 shadow-sm'
-                    : 'border-indigo-100 bg-[#F8FAFF] hover:border-violet-300'
-                }`}
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-sm">
-                  <Film className="h-6 w-6" />
-                </div>
-                <div className="font-display mt-3 text-base font-black text-slate-900">
-                  فيلم سينمائي (Feature Film)
-                </div>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  منافسة أسبوعية في شباك التذاكر السينمائي ثم بيع حقوق البث للمنصات.
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => updateDraft({ format: 'series' as ProjectFormat })}
-                className={`flex flex-col items-start rounded-3xl border-2 p-5 text-right transition-all ${
-                  draft.format === 'series'
-                    ? 'border-cyan-500 border-b-4 border-b-cyan-600 bg-cyan-50/70 shadow-sm'
-                    : 'border-indigo-100 bg-[#F8FAFF] hover:border-cyan-300'
-                }`}
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500 text-white shadow-sm">
-                  <Tv className="h-6 w-6" />
-                </div>
-                <div className="font-display mt-3 text-base font-black text-slate-900">
-                  مسلسل درامي (TV Series)
-                </div>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  عرض درامي حلقة بحلقة عبر القنوات والمنصات مع متابعة تفاعل الجمهور مع كل حلقة.
-                </p>
-              </button>
-            </div>
-
-            {draft.format === 'series' && (
-              <div className="mt-4 rounded-2xl border-2 border-indigo-100 bg-[#F5F7FF] p-4">
-                <label className="block text-xs font-black text-slate-700">عدد حلقات المسلسل</label>
-                <div className="mt-2 grid grid-cols-4 gap-2 tabular-nums">
-                  {([7, 10, 15, 30] as SeriesEpisodes[]).map((ep) => (
-                    <button
-                      key={ep}
-                      type="button"
-                      onClick={() => updateDraft({ episodes: ep })}
-                      className={`min-h-[42px] rounded-xl border-2 text-xs font-black transition ${
-                        draft.episodes === ep
-                          ? 'border-violet-600 bg-violet-600 text-white'
-                          : 'border-indigo-100 bg-white text-slate-700'
+            {/* Format Selection: Film vs Series */}
+            <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm space-y-3">
+              <h2 className="font-display text-sm font-black text-slate-900">
+                نوع العمل الفني
+              </h2>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => updateDraft({ format: 'film' })}
+                  className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-right transition-all ${
+                    !isSeries
+                      ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/80 shadow-xs'
+                      : 'border-indigo-100 bg-[#F8FAFF] hover:border-indigo-200'
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                        !isSeries ? 'bg-violet-600 text-white' : 'bg-indigo-100 text-indigo-700'
                       }`}
                     >
-                      {ep} حلقة
-                    </button>
-                  ))}
+                      <Clapperboard className="h-5 w-5" />
+                    </div>
+                    {!isSeries && (
+                      <span className="rounded-lg bg-violet-600 px-2 py-0.5 text-[9px] font-black text-white">
+                        مختار ✓
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-black text-slate-900">فيلم سينمائي</p>
+                  <p className="text-[10px] leading-relaxed font-bold text-slate-600">
+                    يقاس بـ <strong className="text-violet-700">إيرادات شباك التذاكر (ج.م)</strong> وعدد شاشات السينما
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => updateDraft({ format: 'series' })}
+                  className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-right transition-all ${
+                    isSeries
+                      ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/80 shadow-xs'
+                      : 'border-indigo-100 bg-[#F8FAFF] hover:border-indigo-200'
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                        isSeries ? 'bg-violet-600 text-white' : 'bg-indigo-100 text-indigo-700'
+                      }`}
+                    >
+                      <Tv className="h-5 w-5" />
+                    </div>
+                    {isSeries && (
+                      <span className="rounded-lg bg-violet-600 px-2 py-0.5 text-[9px] font-black text-white">
+                        مختار ✓
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-black text-slate-900">مسلسل درامي</p>
+                  <p className="text-[10px] leading-relaxed font-bold text-slate-600">
+                    يقاس بـ <strong className="text-violet-700">عدد المشاهدات بالمليون</strong> وعقود المنصات والقنوات
+                  </p>
+                </button>
+              </div>
+
+              {isSeries && (
+                <div className="pt-2 border-t border-indigo-100 space-y-2">
+                  <p className="text-xs font-black text-slate-700">
+                    عدد حلقات المسلسل:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {EPISODE_COUNTS.map((ep) => (
+                      <button
+                        key={ep.count}
+                        type="button"
+                        onClick={() => updateDraft({ episodes: ep.count })}
+                        className={`rounded-xl border-2 p-2.5 text-right transition ${
+                          draft.episodes === ep.count
+                            ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50 text-violet-950'
+                            : 'border-indigo-100 bg-[#F8FAFF] text-slate-700'
+                        }`}
+                      >
+                        <p className="text-xs font-black">{ep.label}</p>
+                        <p className="mt-0.5 text-[10px] text-slate-500">{ep.desc}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-
-            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
-              <button
-                type="button"
-                onClick={() => setActiveScreen('STUDIO_HUB')}
-                className="flex min-h-[48px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"
-              >
-                <ArrowRight className="h-4 w-4" />
-                <span>العودة للمقر</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => unlockNext(2)}
-                className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border-b-4 border-indigo-900/40 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-indigo-500/25 transition active:border-b-0 active:translate-y-1"
-              >
-                <span>تأكيد والانتقال لموسم الطرح والرقابة</span>
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {subStep === 2 && (
-          <motion.div
-            key="proj-s2"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -16, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-            className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-6 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.16)]"
-          >
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-violet-600" />
-              <div>
-                <span className="text-[11px] font-black text-violet-600">الخطوة 2 من 4</span>
-                <h3 className="font-display text-lg font-black text-slate-900">
-                  توقيت العرض والتصنيف العمري
-                </h3>
-              </div>
+              )}
             </div>
 
-            {draft.format === 'series' ? (
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => updateDraft({ seriesSeason: 'ramadan' as SeriesSeason })}
-                  className={`rounded-2xl border-2 p-4 text-right text-xs font-black transition ${
-                    draft.seriesSeason === 'ramadan'
-                      ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50 text-violet-900'
-                      : 'border-indigo-100 bg-[#F8FAFF] text-slate-700'
-                  }`}
-                >
-                  <div className="text-sm font-black">موسم دراما رمضان</div>
-                  <div className="mt-1 text-[11px] font-medium text-slate-500">عرض يومي وإعلانات ضخمة</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateDraft({ seriesSeason: 'off_season' as SeriesSeason })}
-                  className={`rounded-2xl border-2 p-4 text-right text-xs font-black transition ${
-                    draft.seriesSeason === 'off_season'
-                      ? 'border-cyan-500 border-b-4 border-b-cyan-600 bg-cyan-50 text-cyan-900'
-                      : 'border-indigo-100 bg-[#F8FAFF] text-slate-700'
-                  }`}
-                >
-                  <div className="text-sm font-black">أعمال المنصات الأصلية</div>
-                  <div className="mt-1 text-[11px] font-medium text-slate-500">عرض أسبوعي/حصري للمشتركين</div>
-                </button>
+            {/* Season Selection */}
+            <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-violet-600" />
+                <h2 className="font-display text-sm font-black text-slate-900">
+                  {isSeries ? 'موسم البث التلفزيوني والرقمي' : 'موسم الطرح في شباك التذاكر'}
+                </h2>
               </div>
-            ) : (
-              <div className="mt-4 grid grid-cols-2 gap-2.5">
-                {(
-                  [
-                    { id: 'eid_adha', label: 'موسم عيد الأضحى', sub: 'ذروة شباك التذاكر' },
-                    { id: 'eid_fitr', label: 'موسم عيد الفطر', sub: 'إقبال عائلي وشبابي' },
-                    { id: 'summer', label: 'موسم الصيف', sub: 'عروض طويلة المدى' },
-                    { id: 'mid_year', label: 'إجازة نصف العام', sub: 'فرصة للأعمال المبتكرة' },
-                  ] as { id: FilmReleaseSeason; label: string; sub: string }[]
-                ).map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => updateDraft({ filmSeason: s.id })}
-                    className={`rounded-2xl border-2 p-3.5 text-right transition ${
-                      draft.filmSeason === s.id
-                        ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50 text-slate-900'
-                        : 'border-indigo-100 bg-[#F8FAFF] text-slate-700'
-                    }`}
-                  >
-                    <div className="text-xs font-black">{s.label}</div>
-                    <div className="mt-0.5 text-[10px] text-slate-500">{s.sub}</div>
-                  </button>
-                ))}
-              </div>
-            )}
 
-            <div className="mt-5">
-              <label className="block text-xs font-black text-slate-700">
-                التصنيف العمري والرقابة
-              </label>
-              <div className="mt-2 grid grid-cols-3 gap-2.5">
-                {(
-                  [
-                    { id: 'G', title: 'عائلي (G)', desc: '+15% تذاكر' },
-                    { id: '+12', title: 'شبابي (+12)', desc: 'توازن مثالي' },
-                    { id: '+18', title: 'للكبار (+18)', desc: 'جرأة نقدية' },
-                  ] as { id: AgeRating; title: string; desc: string }[]
-                ).map((r) => (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {!isSeries
+                  ? FILM_SEASONS.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => updateDraft({ filmSeason: s.id })}
+                        className={`rounded-2xl border-2 p-3 text-right transition ${
+                          draft.filmSeason === s.id
+                            ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/70'
+                            : 'border-indigo-100 bg-[#F8FAFF]'
+                        }`}
+                      >
+                        <p className="text-xs font-black text-slate-900">{s.label}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-600">{s.desc}</p>
+                      </button>
+                    ))
+                  : SERIES_SEASONS.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => updateDraft({ seriesSeason: s.id })}
+                        className={`rounded-2xl border-2 p-3 text-right transition ${
+                          draft.seriesSeason === s.id
+                            ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/70'
+                            : 'border-indigo-100 bg-[#F8FAFF]'
+                        }`}
+                      >
+                        <p className="text-xs font-black text-slate-900">{s.label}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-600">{s.desc}</p>
+                      </button>
+                    ))}
+              </div>
+            </div>
+
+            {/* Age Rating */}
+            <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm space-y-2.5">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-amber-600" />
+                <h2 className="font-display text-sm font-black text-slate-900">
+                  التصنيف الرقابي والعمري
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {AGE_RATINGS.map((ar) => (
                   <button
-                    key={r.id}
+                    key={ar.id}
                     type="button"
-                    onClick={() => updateDraft({ ageRating: r.id })}
-                    className={`rounded-2xl border-2 p-3 text-center transition ${
-                      draft.ageRating === r.id
-                        ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50'
+                    onClick={() => updateDraft({ ageRating: ar.id })}
+                    className={`rounded-2xl border-2 p-3 text-right transition ${
+                      draft.ageRating === ar.id
+                        ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/70'
                         : 'border-indigo-100 bg-[#F8FAFF]'
                     }`}
                   >
-                    <div className="font-display text-xs font-black text-slate-900">{r.title}</div>
-                    <div className="mt-0.5 text-[10px] font-bold text-violet-600">{r.desc}</div>
+                    <p className="text-xs font-black text-slate-900">{ar.label}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-600">{ar.desc}</p>
                   </button>
                 ))}
               </div>
             </div>
-
-            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
-              <button
-                type="button"
-                onClick={() => setSubStep(1)}
-                className="flex min-h-[48px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"
-              >
-                <ArrowRight className="h-4 w-4" />
-                <span>السابق</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => unlockNext(3)}
-                className="flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 border-indigo-900/40 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-indigo-500/25 transition active:border-b-0 active:translate-y-1"
-              >
-                <span>التالي: تحديد التصنيف الدرامي</span>
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            </div>
           </motion.div>
         )}
 
-        {subStep === 3 && (
+        {/* Step 2: Pure Genre Choice with Floating Sticky Primary/Secondary Switcher & Real Icons */}
+        {step === 2 && (
           <motion.div
-            key="proj-s3"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -16, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-            className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-6 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.16)]"
+            key="setup-step-2"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="space-y-3"
           >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Layers className="h-5 w-5 text-violet-600" />
-                <div>
-                  <span className="text-[11px] font-black text-violet-600">الخطوة 3 من 4</span>
-                  <h3 className="font-display text-lg font-black text-slate-900">
-                    اختيار التصنيف الدرامي والدمج الفني
-                  </h3>
-                </div>
-              </div>
-            </div>
-
-            {/* Interactive Switcher between Primary Genre and Secondary Genre */}
-            <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-[#F2F5FF] p-1.5">
-              <button
-                type="button"
-                onClick={() => setGenrePickTab('primary')}
-                className={`flex flex-col items-center justify-center rounded-xl py-2 px-2 text-xs font-black transition ${
-                  genrePickTab === 'primary'
-                    ? 'border-2 border-violet-600 bg-white text-violet-800 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span className="text-[10px] text-slate-400">النوع الرئيسي (إجباري)</span>
-                <span className="mt-0.5 truncate max-w-full font-display text-xs text-violet-700">
-                  {primaryGenreName}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setGenrePickTab('secondary')}
-                className={`flex flex-col items-center justify-center rounded-xl py-2 px-2 text-xs font-black transition ${
-                  genrePickTab === 'secondary'
-                    ? 'border-2 border-cyan-500 bg-white text-cyan-800 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span className="text-[10px] text-slate-400">النوع الفرعي (دمج اختياري)</span>
-                <span className="mt-0.5 truncate max-w-full font-display text-xs text-cyan-700">
-                  {secondaryGenreName || 'بدون تصنيف فرعي'}
-                </span>
-              </button>
-            </div>
-
-            {/* Visual Genre Card Grid (Replaces native black <select> menu!) */}
-            <div
-              data-testid="visual-genre-card-grid"
-              className="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-2"
-            >
-              {genrePickTab === 'secondary' && (
+            {/* Floating Sticky Primary & Secondary Genre Switcher */}
+            <div className="sticky top-14 z-30 rounded-2xl border-2 border-indigo-200/90 bg-white/95 p-2.5 shadow-md backdrop-blur-md">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => updateDraft({ secondaryGenre: null })}
-                  className={`col-span-2 flex items-center justify-between rounded-2xl border-2 px-4 py-3 text-right transition ${
-                    draft.secondaryGenre === null
-                      ? 'border-slate-700 border-b-4 border-b-slate-900 bg-slate-100 text-slate-900'
-                      : 'border-indigo-100 bg-[#F8FAFF] text-slate-600 hover:border-slate-300'
+                  onClick={() => setGenrePickMode('primary')}
+                  className={`rounded-xl border-2 p-2.5 text-right transition ${
+                    genrePickMode === 'primary'
+                      ? 'border-violet-600 bg-violet-50/90'
+                      : 'border-indigo-100 bg-[#F8FAFF]'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-200 text-slate-700">
-                      <Ban className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="font-display text-xs font-black">بدون تصنيف فرعي</div>
-                      <div className="text-[10px] font-bold text-slate-500">
-                        التركيز الكامل على التصنيف الأساسي فقط
-                      </div>
-                    </div>
-                  </div>
-                  {draft.secondaryGenre === null && (
-                    <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[10px] font-black text-white">
-                      مُختار ✓
-                    </span>
-                  )}
+                  <span className="text-[10px] font-bold text-slate-500">
+                    التصنيف الأساسي (إلزامي)
+                  </span>
+                  <p className="mt-0.5 text-xs font-black text-violet-950">
+                    {primaryGenreObj ? primaryGenreObj.name : 'اختر الآن'}
+                  </p>
                 </button>
-              )}
 
-              {GENRES.map((g) => {
-                const visual = GENRE_VISUAL_META[g.id];
-                const IconComp = visual.icon;
-                const isSelected =
-                  genrePickTab === 'primary'
-                    ? draft.primaryGenre === g.id
-                    : draft.secondaryGenre === g.id;
-                const isDisabledInSecondary =
-                  genrePickTab === 'secondary' && draft.primaryGenre === g.id;
-
-                return (
-                  <button
-                    key={g.id}
-                    type="button"
-                    disabled={isDisabledInSecondary}
-                    onClick={() => {
-                      if (genrePickTab === 'primary') {
-                        updateDraft({
-                          primaryGenre: g.id,
-                          secondaryGenre:
-                            draft.secondaryGenre === g.id ? null : draft.secondaryGenre,
-                        });
-                      } else {
-                        updateDraft({
-                          secondaryGenre: draft.secondaryGenre === g.id ? null : g.id,
-                        });
-                      }
-                    }}
-                    className={`relative flex flex-col justify-between rounded-2xl border-2 p-3.5 text-right transition-all ${
-                      isSelected
-                        ? `${visual.activeBorder} ${visual.activeBg} shadow-sm`
-                        : isDisabledInSecondary
-                        ? 'cursor-not-allowed border-slate-100 bg-slate-50 opacity-45'
-                        : 'border-indigo-100 bg-[#F8FAFF] hover:border-violet-300 hover:bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${visual.accentBg} ${visual.accentText}`}
+                <button
+                  type="button"
+                  onClick={() => setGenrePickMode('secondary')}
+                  className={`rounded-xl border-2 p-2.5 text-right transition ${
+                    genrePickMode === 'secondary'
+                      ? 'border-violet-600 bg-violet-50/90'
+                      : 'border-indigo-100 bg-[#F8FAFF]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500">
+                      التصنيف الفرعي (اختياري)
+                    </span>
+                    {draft.secondaryGenre && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateDraft({ secondaryGenre: null });
+                        }}
+                        className="cursor-pointer text-[10px] font-black text-rose-600 hover:underline"
                       >
-                        <IconComp className="h-4 w-4" />
-                      </div>
-                      {isSelected && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-black text-white">
-                          <Check className="h-2.5 w-2.5 stroke-[3]" />
-                          <span>{genrePickTab === 'primary' ? 'أساسي' : 'فرعي'}</span>
-                        </span>
-                      )}
-                      {isDisabledInSecondary && (
-                        <span className="text-[9px] font-black text-slate-400">مختار كأساسي</span>
-                      )}
-                    </div>
-
-                    <div className="mt-2.5">
-                      <div className="font-display text-xs font-black text-slate-900">
-                        {g.name}
-                      </div>
-                      <div className="mt-0.5 text-[10px] font-bold text-slate-500">
-                        {visual.subtitle}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+                        إلغاء
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs font-black text-indigo-950">
+                    {secondaryGenreObj ? secondaryGenreObj.name : 'بدون تصنيف فرعي'}
+                  </p>
+                </button>
+              </div>
             </div>
 
-
-
-            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
-              <button
-                type="button"
-                onClick={() => setSubStep(2)}
-                className="flex min-h-[48px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"
-              >
-                <ArrowRight className="h-4 w-4" />
-                <span>السابق</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => unlockNext(4)}
-                className="flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 border-indigo-900/40 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-indigo-500/25 transition active:border-b-0 active:translate-y-1"
-              >
-                <span>التالي: كتابة فكرة العمل والسيناريو</span>
-                <ArrowLeft className="h-4 w-4" />
-              </button>
+            {/* Genres Grid with Proper Lucide Icons */}
+            <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                {GENRES.map((g) => {
+                  const isPrimary = draft.primaryGenre === g.id;
+                  const isSecondary = draft.secondaryGenre === g.id;
+                  const IconComp = GENRE_ICON_MAP[g.icon] || Sparkles;
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => handleSelectGenre(g.id as GenreId)}
+                      className={`flex flex-col items-start justify-between rounded-2xl border-2 p-3 text-right transition-all ${
+                        isPrimary
+                          ? 'border-violet-700 border-b-4 border-b-violet-900 bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-md'
+                          : isSecondary
+                          ? 'border-cyan-500 border-b-4 border-b-cyan-600 bg-cyan-50 text-cyan-950'
+                          : 'border-indigo-100 bg-[#F8FAFF] text-slate-800 hover:border-indigo-200'
+                      }`}
+                    >
+                      <div className="flex w-full items-center justify-between">
+                        <div
+                          className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                            isPrimary
+                              ? 'bg-white/20 text-white'
+                              : isSecondary
+                              ? 'bg-cyan-600 text-white'
+                              : 'bg-indigo-100 text-violet-700'
+                          }`}
+                        >
+                          <IconComp className="h-4 w-4" />
+                        </div>
+                        {isPrimary && (
+                          <span className="rounded-lg bg-white/25 px-2 py-0.5 text-[9px] font-black text-white">
+                            أساسي ✓
+                          </span>
+                        )}
+                        {isSecondary && (
+                          <span className="rounded-lg bg-cyan-600 px-2 py-0.5 text-[9px] font-black text-white">
+                            فرعي ✓
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-2">
+                        <p className="text-xs font-black">{g.name}</p>
+                        <p
+                          className={`mt-0.5 text-[10px] leading-relaxed ${
+                            isPrimary ? 'text-indigo-100' : 'text-slate-500'
+                          }`}
+                        >
+                          {g.description}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </motion.div>
         )}
 
-        {subStep === 4 && (
+        {/* Step 3: Custom Script Writing & AI Script Idea Generator */}
+        {step === 3 && (
           <motion.div
-            key="proj-s4"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -16, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-            className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-6 shadow-[0_16px_40px_-12px_rgba(99,102,241,0.16)]"
+            key="setup-step-3"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm space-y-4 sm:p-5"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-violet-600" />
-                <div>
-                  <span className="text-[11px] font-black text-violet-600">الخطوة 4 من 4</span>
-                  <h3 className="font-display text-lg font-black text-slate-900">
-                    عنوان العمل وفكرة المشروع
-                  </h3>
-                </div>
-              </div>
+              <h2 className="font-display text-sm font-black text-slate-900">
+                عنوان {isSeries ? 'المسلسل' : 'الفيلم'} وملخص السيناريو
+              </h2>
+              <button
+                type="button"
+                disabled={aiGeneratingIdea}
+                onClick={handleGenerateAiScriptIdea}
+                className="flex items-center gap-1.5 rounded-xl border-2 border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 shadow-2xs transition hover:bg-violet-100 disabled:opacity-50"
+              >
+                {aiGeneratingIdea ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3.5 w-3.5" />
+                )}
+                <span>ابتكار فكرة وسيناريو درامي ✨</span>
+              </button>
             </div>
 
-            <div className="mt-4 space-y-4">
+            <div className="space-y-3">
               <div>
-                <label htmlFor="project-title-input" className="block text-xs font-black text-slate-700">
-                  اسم الفيلم / المسلسل
+                <label className="mb-1.5 block text-xs font-black text-slate-700">
+                  عنوان {isSeries ? 'المسلسل الدرامي' : 'الفيلم السينمائي'}
                 </label>
                 <input
-                  id="project-title-input"
                   type="text"
                   value={draft.title}
                   onChange={(e) => updateDraft({ title: e.target.value })}
-                  placeholder="مثال: الفرعون الأخير"
-                  className="mt-1.5 w-full rounded-2xl border-2 border-indigo-100 bg-[#F5F7FF] px-4 py-3 text-sm font-black text-slate-900 focus:border-violet-600 focus:bg-white focus:outline-none"
+                  placeholder={
+                    isSeries
+                      ? 'مثال: العهد السري / ليالي المحروسة'
+                      : 'مثال: شفرة باب الخلق / ليلة سقوط القناع'
+                  }
+                  className="w-full rounded-2xl border-2 border-indigo-100 bg-[#F4F7FF] px-4 py-3 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:border-violet-600 focus:bg-white focus:outline-hidden"
                 />
               </div>
 
               <div>
-                <div className="flex items-center justify-between gap-2">
-                  <label htmlFor="script-synopsis-input" className="block text-xs font-black text-slate-700">
-                    ملخص فكرة المشروع
-                  </label>
-
-                </div>
+                <label className="mb-1.5 block text-xs font-black text-slate-700">
+                  ملخص القصة والصراع الدرامي والنهاية
+                </label>
                 <textarea
-                  id="script-synopsis-input"
-                  rows={3}
+                  rows={4}
                   value={draft.scriptSynopsis}
                   onChange={(e) => updateDraft({ scriptSynopsis: e.target.value })}
-                  placeholder="اكتب الفكرة الأساسية للعمل والشخصيات أو العالم الذي تدور فيه الأحداث..."
-                  className="mt-1.5 w-full rounded-2xl border-2 border-indigo-100 bg-[#F5F7FF] p-3.5 text-xs leading-relaxed font-medium text-slate-900 focus:border-violet-600 focus:bg-white focus:outline-none"
+                  placeholder="اكتب بداية الأحداث، الصراع الرئيسي الذي يواجه البطل، والمفاجأة الدرامية في النهاية..."
+                  className="w-full rounded-2xl border-2 border-indigo-100 bg-[#F4F7FF] p-3.5 text-xs leading-relaxed font-bold text-slate-900 placeholder:text-slate-400 focus:border-violet-600 focus:bg-white focus:outline-hidden"
                 />
               </div>
-            </div>
-
-
-
-            <div className="step-navigation mt-6 flex items-center justify-between gap-3 border-t border-indigo-50 pt-4">
-              <button
-                type="button"
-                onClick={() => setSubStep(3)}
-                className="flex min-h-[48px] items-center gap-1.5 rounded-2xl border-2 border-indigo-100 border-b-4 border-b-indigo-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700"
-              >
-                <ArrowRight className="h-4 w-4" />
-                <span>السابق</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleProceedToCrew()}
-                className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border-b-4 border-emerald-900/40 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-emerald-500/25 transition active:border-b-0 active:translate-y-1"
-              >
-                <span>اعتماد السيناريو وفتح سوق النجوم والمخرجين</span>
-                <ArrowLeft className="h-4 w-4" />
-              </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Floating Bottom Navigation Box */}
+      <div className="fixed bottom-3 right-0 left-0 z-30 mx-auto max-w-xl px-3">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border-2 border-indigo-200/90 bg-white/95 p-3 shadow-xl backdrop-blur-md">
+          <button
+            type="button"
+            onClick={handlePrevStep}
+            className="flex min-h-[44px] items-center justify-center rounded-xl border-2 border-indigo-100 bg-[#F4F7FF] px-5 py-2.5 text-xs font-black text-slate-700 transition hover:bg-indigo-50"
+          >
+            <span>{step === 1 ? 'عودة للمقر' : 'السابق'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleNextStep}
+            className="flex min-h-[44px] items-center gap-2 rounded-xl border-b-4 border-indigo-950/40 bg-gradient-to-l from-violet-600 to-indigo-600 px-6 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-105 active:border-b-0 active:translate-y-0.5"
+          >
+            {step === 3 && <Check className="h-4 w-4" />}
+            <span>{step < 3 ? 'التالي' : 'الانتقال لغرفة التعاقدات'}</span>
+          </button>
+        </div>
       </div>
-    </StepModalFrame>
+    </div>
   );
 }

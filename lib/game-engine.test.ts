@@ -84,7 +84,7 @@ test('Cast Chemistry triggers severe ego clash when 2+ stars have ego >= 90', ()
   assert.ok(chemistry.warningMessage?.includes(highEgoStars[0].name));
 });
 
-test('Negotiated salary accounts for contract perks; paid dinner is a separate relationship cost', () => {
+test('Negotiated salary and expected salary account for perks, ego, and genre mastery', () => {
   const baseSalary = 10_000_000;
   const normalOffer = calculateNegotiatedSalary(baseSalary, 0, 'visionary_director', false);
   assert.equal(normalOffer, 10_000_000);
@@ -93,7 +93,7 @@ test('Negotiated salary accounts for contract perks; paid dinner is a separate r
   assert.equal(sharkOffer, 8_500_000);
 
   const vipDinnerOffer = calculateNegotiatedSalary(baseSalary, 0, 'visionary_director', true);
-  assert.equal(vipDinnerOffer, 10_000_000);
+  assert.equal(vipDinnerOffer, 8_000_000);
 
   // Out-of-genre + high ego increases expected salary demand
   const highDemand = calculateTalentExpectedSalary({
@@ -220,4 +220,90 @@ test('calculateStudioMarketValue separates liquid cash from studio enterprise ma
     ],
   });
   assert.ok(postHitValuation > initialValuation + 80_000_000);
+
+  // Upgrading 3D physical buildings & equipment increases studio market value and production quality
+  const upgradedValuation = calculateStudioMarketValue({
+    cash: 95_000_000,
+    reputation: 64,
+    releasedProjects: [],
+    facilitiesLevels: {
+      soundstage: 3,
+      camera_rig: 3,
+      vfx_tower: 3,
+      audio_stage: 2,
+      marketing_hub: 2,
+    },
+  });
+  assert.ok(upgradedValuation > initialValuation + 100_000_000);
 });
+
+test('Dynamic simulation engine penalizes genre repetition and generates unpredictable market twists', () => {
+  const repeatedGenreRun = calculateFinancialsAndQuality({
+    format: 'film',
+    filmSeason: 'summer',
+    primaryGenre: 'action',
+    secondaryGenre: null,
+    ageRating: '+12',
+    director: baseDb.crew[0],
+    writers: [baseDb.crew[4]],
+    dop: baseDb.crew[7],
+    composer: baseDb.crew[9],
+    vfx: baseDb.crew[11],
+    leads: [baseDb.actors[0]],
+    antagonist: baseDb.actors[1],
+    supporting: [],
+    cameos: [],
+    budgetAllocation: {
+      setsAndLocations: 8_000_000,
+      costumesAndMakeup: 4_000_000,
+      vfxAndStunts: 10_000_000,
+      extrasAndCrowds: 3_000_000,
+    },
+    marketingBudget: 12_000_000,
+    screensCount: 140,
+    platformDealAmount: 20_000_000,
+    founderPerk: 'visionary_director',
+    hypeScore: 75,
+    aiBoxOfficeMultiplier: 1.0,
+    marketRegion: 'egypt',
+    previousGenres: ['action', 'action'],
+    entropySeed: 42,
+  });
+
+  const freshGenreRun = calculateFinancialsAndQuality({
+    format: 'film',
+    filmSeason: 'summer',
+    primaryGenre: 'action',
+    secondaryGenre: null,
+    ageRating: '+12',
+    director: baseDb.crew[0],
+    writers: [baseDb.crew[4]],
+    dop: baseDb.crew[7],
+    composer: baseDb.crew[9],
+    vfx: baseDb.crew[11],
+    leads: [baseDb.actors[0]],
+    antagonist: baseDb.actors[1],
+    supporting: [],
+    cameos: [],
+    budgetAllocation: {
+      setsAndLocations: 8_000_000,
+      costumesAndMakeup: 4_000_000,
+      vfxAndStunts: 10_000_000,
+      extrasAndCrowds: 3_000_000,
+    },
+    marketingBudget: 12_000_000,
+    screensCount: 140,
+    platformDealAmount: 20_000_000,
+    founderPerk: 'visionary_director',
+    hypeScore: 75,
+    aiBoxOfficeMultiplier: 1.0,
+    marketRegion: 'egypt',
+    previousGenres: ['comedy', 'romance'],
+    entropySeed: 42,
+  });
+
+  assert.ok(repeatedGenreRun.simulationTwists.some((t) => t.id === 'genre_fatigue'));
+  assert.ok(freshGenreRun.simulationTwists.some((t) => t.id === 'genre_fresh_wave'));
+  assert.ok(freshGenreRun.totalBoxOfficeRevenue > repeatedGenreRun.totalBoxOfficeRevenue);
+});
+

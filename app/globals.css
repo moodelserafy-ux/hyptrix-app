@@ -1,42 +1,55 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @layer base {
-  html,
-  body {
-    min-height: 100%;
-    overscroll-behavior-y: auto;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  body {
-    overflow-x: hidden;
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Arabic", "SF Pro AR",
+      "SF Pro Rounded", var(--font-cairo), var(--font-changa), system-ui,
+      sans-serif;
+    --font-display: -apple-system, BlinkMacSystemFont, "SF Arabic",
+      "SF Pro Display", "SF Pro Rounded", var(--font-changa), var(--font-cairo),
+      system-ui, sans-serif;
+    --font-mono: -apple-system, BlinkMacSystemFont, "SF Pro Rounded",
+      var(--font-space-mono), monospace;
   }
 
   * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(124, 108, 220, 0.42) rgba(226, 232, 240, 0.55);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
-  *::-webkit-scrollbar {
-    width: 9px;
-    height: 9px;
-  }
-
-  *::-webkit-scrollbar-track {
-    border-radius: 999px;
-    background: rgba(226, 232, 240, 0.55);
-  }
-
+  *::-webkit-scrollbar,
+  *::-webkit-scrollbar-button,
+  *::-webkit-scrollbar-track,
   *::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background: rgba(124, 108, 220, 0.42);
-    background-clip: padding-box;
+    display: none;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
   }
 
-  *::-webkit-scrollbar-thumb:hover {
-    background: rgba(99, 75, 205, 0.68);
-    background-clip: padding-box;
+  html,
+  body {
+    min-height: 100dvh;
+    width: 100%;
+    overflow-x: clip;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    background-color: #EEF2FF;
+    background-image:
+      radial-gradient(at 15% 10%, rgba(139, 92, 246, 0.14) 0px, transparent 50%),
+      radial-gradient(at 85% 15%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+      radial-gradient(at 50% 85%, rgba(245, 158, 11, 0.08) 0px, transparent 55%);
+    background-attachment: fixed;
+    color: #0F172A;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
   }
 
   h1,
@@ -44,64 +57,73 @@
   h3,
   h4,
   .font-display {
-    font-family: var(--font-alexandria), var(--font-readex), system-ui, sans-serif;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.4;
   }
 
+  p,
+  span,
+  label,
   button,
-  header,
-  nav {
-    user-select: none;
-    -webkit-user-select: none;
-  }
-
   input,
   textarea,
   select {
-    user-select: text;
-    -webkit-user-select: text;
+    font-family: var(--font-sans);
   }
 
-  input[type="number"]::-webkit-inner-spin-button,
-  input[type="number"]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
+  button {
+    transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 160ms ease;
+  }
+
+  button:active:not(:disabled) {
+    transform: scale(0.975);
   }
 }
 
-/* Scrollable workspaces must remain scrollable on touch, trackpads and mouse wheels. */
-.step-modal-scroll {
-  min-height: 0;
-  height: auto;
-  flex: 1 1 0%;
-  overscroll-behavior: contain;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior-y: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
-  scrollbar-gutter: stable;
-}
-
-.step-search-bar {
-  position: sticky;
-  top: -0.35rem;
-  z-index: 30;
-  margin-top: -0.15rem;
-  padding-top: 0.8rem;
-  background-clip: padding-box;
-  box-shadow: 0 10px 18px -18px rgba(30, 41, 59, 0.8);
-}
-
-.step-navigation {
-  position: relative;
-  z-index: 1;
-  margin-top: 0 !important;
-  padding-bottom: 0.15rem;
-}
-
-@media (max-width: 640px) {
-  .step-modal-scroll {
-    scrollbar-width: thin;
+@layer utilities {
+  .glass-nav {
+    background: rgba(255, 255, 255, 0.84);
+    backdrop-filter: blur(22px) saturate(190%);
+    -webkit-backdrop-filter: blur(22px) saturate(190%);
+    border: 1.5px solid rgba(255, 255, 255, 0.92);
+    box-shadow:
+      0 10px 30px -6px rgba(79, 70, 229, 0.14),
+      0 2px 6px -1px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
   }
 
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1.5px solid rgba(255, 255, 255, 0.92);
+    box-shadow:
+      0 12px 32px -8px rgba(79, 70, 229, 0.11),
+      0 4px 12px -2px rgba(15, 23, 42, 0.05),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(16px) saturate(175%);
+    -webkit-backdrop-filter: blur(16px) saturate(175%);
+    border: 1.5px solid rgba(224, 231, 255, 0.9);
+    box-shadow:
+      0 8px 24px -6px rgba(79, 70, 229, 0.09),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.92);
+  }
+
+  .glass-modal {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(26px) saturate(200%);
+    -webkit-backdrop-filter: blur(26px) saturate(200%);
+    border: 1.5px solid rgba(255, 255, 255, 0.98);
+    box-shadow:
+      0 24px 60px -12px rgba(30, 27, 75, 0.3),
+      inset 0 1px 0 0 rgba(255, 255, 255, 1);
+  }
 }
