@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useId } from 'react';
+import React, { useId, useState } from 'react';
 import {
   CoreEmblemId,
   LogoFrameId,
@@ -255,9 +255,35 @@ export function StudioLogoSvg({
   className?: string;
 }) {
   const uid = useId().replace(/:/g, '');
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const palette =
     PALETTE_OPTIONS.find((p) => p.id === config.palette) || PALETTE_OPTIONS[0];
   const { primary, secondary, bg, bgEnd, isDark } = palette;
+
+  const customUrl = config.customImageUrl?.trim();
+  if (customUrl && failedUrl !== customUrl) {
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderColor: primary,
+          background: `linear-gradient(135deg, ${bg}, ${bgEnd})`,
+        }}
+        className={`relative overflow-hidden rounded-[22%] border-2 shadow-inner ${className}`}
+        aria-label="شعار الاستوديو"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={customUrl}
+          alt="شعار الاستوديو"
+          referrerPolicy="no-referrer"
+          onError={() => setFailedUrl(customUrl)}
+          className="h-full w-full object-cover"
+        />
+      </div>
+    );
+  }
 
   const bgGradId = `bg_${uid}`;
   const mainGradId = `main_${uid}`;

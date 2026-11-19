@@ -22,7 +22,35 @@ import {
   RefreshCw,
   Crown,
   Award,
+  Flame,
+  Gift,
+  Copy,
+  Check,
+  Share2,
+  Send,
 } from 'lucide-react';
+
+interface WeeklyChallengeData {
+  weekKey: string;
+  title: string;
+  description: string;
+  requiredGenre: string;
+  requiredGenreAr: string;
+  maxBudget: number;
+  rewardLabel: string;
+  endsInDays: number;
+}
+
+interface WeeklyChallengeEntry {
+  studio_instance_id: string;
+  studio_name: string;
+  ceo_name: string;
+  project_title: string;
+  world_market: string;
+  score_value: number;
+  budget_used: number;
+  critic_score: number;
+}
 
 export function LeaderboardAndSettingsView() {
   const {
@@ -42,14 +70,15 @@ export function LeaderboardAndSettingsView() {
     resetEntireGameAndStartFresh,
     worldMarket,
     openMarketSelector,
+    showToast,
   } = useGameStore();
 
   const marketProfile = getMarketProfile(worldMarket);
   const currencyLabel = marketProfile.currencyLabel;
 
-  const [subTab, setSubTab] = useState<'real_players' | 'world_studios' | 'system'>(
-    'real_players'
-  );
+  const [subTab, setSubTab] = useState<
+    'real_players' | 'world_studios' | 'challenges' | 'system'
+  >('real_players');
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmSwitchMarket, setConfirmSwitchMarket] = useState(false);
   const [page, setPage] = useState(0);
@@ -58,6 +87,20 @@ export function LeaderboardAndSettingsView() {
   const [realLeaderboard, setRealLeaderboard] =
     useState<RealPlayersLeaderboardResponse | null>(null);
   const [loadingReal, setLoadingReal] = useState(false);
+
+  // Weekly Global Challenge & Viral Referrals State (/api/social-growth)
+  const [weeklyChallenge, setWeeklyChallenge] =
+    useState<WeeklyChallengeData | null>(null);
+  const [challengeEntries, setChallengeEntries] = useState<
+    WeeklyChallengeEntry[]
+  >([]);
+  const [referralCount, setReferralCount] = useState(0);
+  const [botUsername, setBotUsername] = useState('');
+  const [loadingSocial, setLoadingSocial] = useState(false);
+  const [submittingChallengeId, setSubmittingChallengeId] = useState<
+    string | null
+  >(null);
+  const [copiedRefLink, setCopiedRefLink] = useState(false);
 
   const db = useMemo(
     () => getResolvedDatabase(customDbPatch, worldMarket),
@@ -209,6 +252,139 @@ export function LeaderboardAndSettingsView() {
       ? Math.max(0, realLeaderboard.fifteenthMarketValue - marketValue + 1_000_000)
       : 0;
 
+  const loadSocialGrowthData = useCallback(async () => {
+    setLoadingSocial(true);
+    try {
+      const res = await fetch(
+        `/api/social-growth?studioInstanceId=${encodeURIComponent(
+          myStudioInstanceId
+        )}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.challenge) setWeeklyChallenge(data.challenge);
+        if (Array.isArray(data?.topEntries)) setChallengeEntries(data.topEntries);
+        if (typeof data?.referralCount === 'number') {
+          setReferralCount(data.referralCount);
+        }
+        if (typeof data?.botUsername === 'string') {
+          setBotUsername(data.botUsername);
+        }
+      }
+    } catch {
+      // Non-blocking
+    } finally {
+      setLoadingSocial(false);
+    }
+  }, [myStudioInstanceId]);
+
+  useEffect(() => {
+    if (subTab !== 'challenges') return;
+    let active = true;
+
+    fetch(
+      `/api/social-growth?studioInstanceId=${encodeURIComponent(
+        myStudioInstanceId
+      )}`
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        if (data.challenge) setWeeklyChallenge(data.challenge);
+        if (Array.isArray(data.topEntries)) setChallengeEntries(data.topEntries);
+        if (typeof data.referralCount === 'number') {
+          setReferralCount(data.referralCount);
+        }
+        if (typeof data.botUsername === 'string') {
+          setBotUsername(data.botUsername);
+        }
+      })
+      .catch(() => {
+        // Non-blocking
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [subTab, myStudioInstanceId]);
+
+  const qualifyingChallengeProjects = useMemo(() => {
+    if (!weeklyChallenge) return [];
+    return releasedProjects
+      .filter((p) => {
+        const genreMatches =
+          p.primaryGenre === weeklyChallenge.requiredGenre ||
+          (weeklyChallenge.requiredGenre === 'psychological_horror' &&
+            p.primaryGenre === 'supernatural_horror') ||
+          (weeklyChallenge.requiredGenre === 'comedy' &&
+            p.primaryGenre === 'light_comedy');
+        return genreMatches && p.totalBudget <= weeklyChallenge.maxBudget;
+      })
+      .sort((a, b) => b.netProfit - a.netProfit);
+  }, [releasedProjects, weeklyChallenge]);
+
+  const referralShareUrl = useMemo(() => {
+    if (botUsername.trim()) {
+      return `https://t.me/${botUsername.trim()}?startapp=ref_${myStudioInstanceId}`;
+    }
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/?ref=${encodeURIComponent(myStudioInstanceId)}`;
+    }
+    return `https://neelyo.app/?ref=${myStudioInstanceId}`;
+  }, [botUsername, myStudioInstanceId]);
+
+  const handleCopyReferralLink = async () => {
+    try {
+      await navigator.clipboard.writeText(referralShareUrl);
+      setCopiedRefLink(true);
+      showToast('تم نسخ رابط الدعوة الخاص باستوديوك!', 'success');
+      setTimeout(() => setCopiedRefLink(false), 2200);
+    } catch {
+      showToast('انسخ الرابط يدوياً من الخانة', 'info');
+    }
+  };
+
+  const handleSubmitProjectToChallenge = async (
+    project: (typeof releasedProjects)[number]
+  ) => {
+    if (submittingChallengeId) return;
+    setSubmittingChallengeId(project.id);
+    try {
+      const res = await fetch('/api/social-growth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit_challenge',
+          studioInstanceId: myStudioInstanceId,
+          studioName: studioName || marketProfile.defaultStudioName,
+          ceoName: ceoName || 'المدير التنفيذي',
+          projectTitle: project.title,
+          worldMarket,
+          primaryGenre: project.primaryGenre,
+          budgetUsed: project.totalBudget,
+          netProfit: project.netProfit,
+          criticScore: project.criticScore,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        showToast(data?.error || 'تعذر تسجيل العمل في التحدي حالياً.', 'warning');
+      } else {
+        if (Array.isArray(data.topEntries)) {
+          setChallengeEntries(data.topEntries);
+        }
+        showToast(
+          `تم تسجيل «${project.title}» في التحدي الأسبوعي بنجاح!`,
+          'success'
+        );
+      }
+    } catch {
+      showToast('حدث خطأ في الاتصال بخادم التحديات.', 'warning');
+    } finally {
+      setSubmittingChallengeId(null);
+    }
+  };
+
   return (
     <div className="space-y-4" dir="rtl">
       {/* Unified Royal Cinema Header & Tabs */}
@@ -269,6 +445,19 @@ export function LeaderboardAndSettingsView() {
           >
             <Building2 className="h-3.5 w-3.5" />
             <span>بورصة شركات العالم</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSubTab('challenges')}
+            className={`flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition cursor-pointer whitespace-nowrap ${
+              subTab === 'challenges'
+                ? 'bg-[#15803D] text-white border border-[#D4AF37] shadow'
+                : 'text-[#F9F6F0]/75 hover:text-[#F9F6F0]'
+            }`}
+          >
+            <Flame className="h-3.5 w-3.5 text-[#D4AF37]" />
+            <span>التحدي والدعوات</span>
           </button>
 
           <button
@@ -562,7 +751,259 @@ export function LeaderboardAndSettingsView() {
         </div>
       )}
 
-      {/* TAB 3: SYSTEM, WORLD MARKET SWITCH & RESET */}
+      {/* TAB 3: WEEKLY GLOBAL CHALLENGE & VIRAL REFERRALS */}
+      {subTab === 'challenges' && (
+        <div className="space-y-4">
+          {/* Card 1: Weekly Global Challenge */}
+          <div className="rounded-3xl border-2 border-[#D4AF37] bg-white p-4 sm:p-5 shadow-md space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-[#1A2530]/12 pb-3">
+              <div className="flex items-start gap-2.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#1A2530] text-[#D4AF37] border border-[#D4AF37]">
+                  <Flame className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-display text-base font-black text-[#1A2530]">
+                      {weeklyChallenge?.title || 'التحدي الأسبوعي العالمي'}
+                    </h3>
+                    {weeklyChallenge && (
+                      <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[10px] font-black text-white">
+                        متبقي {weeklyChallenge.endsInDays} يوم
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs font-bold text-[#1A2530]/75 leading-relaxed">
+                    {weeklyChallenge?.description ||
+                      'أطلق عملاً يطابق شروط الأسبوع وسجّل أعلى صافي ربح لتتصدر التحدي العالمي.'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={loadSocialGrowthData}
+                disabled={loadingSocial}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#1A2530]/20 bg-[#F9F6F0] px-3 py-1.5 text-xs font-black text-[#1A2530] hover:border-[#D4AF37] cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${loadingSocial ? 'animate-spin' : ''}`}
+                />
+                <span>تحديث</span>
+              </button>
+            </div>
+
+            {weeklyChallenge && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="rounded-2xl border border-[#1A2530]/12 bg-[#F9F6F0] px-3 py-2">
+                  <span className="block text-[10px] font-bold text-[#1A2530]/60">
+                    التصنيف المطلوب
+                  </span>
+                  <span className="text-xs font-black text-[#D91624]">
+                    {weeklyChallenge.requiredGenreAr}
+                  </span>
+                </div>
+                <div className="rounded-2xl border border-[#1A2530]/12 bg-[#F9F6F0] px-3 py-2">
+                  <span className="block text-[10px] font-bold text-[#1A2530]/60">
+                    سقف الميزانية القصوى
+                  </span>
+                  <span
+                    dir="ltr"
+                    className="font-typewriter text-xs font-black text-[#1A2530] tabular-nums"
+                  >
+                    ≤ {formatMoney(weeklyChallenge.maxBudget)} {currencyLabel}
+                  </span>
+                </div>
+                <div className="rounded-2xl border border-[#D4AF37]/60 bg-[#FFF9E6] px-3 py-2">
+                  <span className="block text-[10px] font-bold text-[#9A7209]">
+                    جائزة المتصدر
+                  </span>
+                  <span className="text-xs font-black text-[#1A2530]">
+                    {weeklyChallenge.rewardLabel}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Player Qualifying Releases for 1-Click Submit */}
+            <div className="space-y-2">
+              <span className="block text-xs font-black text-[#1A2530]">
+                أعمالك المطابقة لشروط تحدي هذا الأسبوع:
+              </span>
+              {qualifyingChallengeProjects.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#1A2530]/25 bg-[#F9F6F0] p-3 text-xs font-bold text-[#1A2530]/70">
+                  لا يوجد لديك عمل مطابق بعد. أنتج عملاً بتصنيف{' '}
+                  <strong className="text-[#D91624]">
+                    {weeklyChallenge?.requiredGenreAr || 'التحدي'}
+                  </strong>{' '}
+                  بميزانية إجمالية لا تتجاوز{' '}
+                  <strong className="font-typewriter">
+                    {formatMoney(weeklyChallenge?.maxBudget || 40_000_000)}{' '}
+                    {currencyLabel}
+                  </strong>{' '}
+                  ثم سجّله هنا فوراً!
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {qualifyingChallengeProjects.slice(0, 3).map((proj) => (
+                    <div
+                      key={proj.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#D4AF37]/60 bg-[#FFFDF8] px-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-display text-xs sm:text-sm font-black text-[#1A2530] truncate">
+                          {proj.title}
+                        </div>
+                        <div className="text-[11px] font-bold text-[#1A2530]/70">
+                          صافي الربح:{' '}
+                          <span className="font-typewriter text-[#15803D]">
+                            {formatMoney(proj.netProfit)} {currencyLabel}
+                          </span>{' '}
+                          · التكلفة:{' '}
+                          <span className="font-typewriter">
+                            {formatMoney(proj.totalBudget)}
+                          </span>{' '}
+                          · النقاد: {proj.criticScore}/10
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={submittingChallengeId === proj.id}
+                        onClick={() => handleSubmitProjectToChallenge(proj)}
+                        className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-[#D91624] border border-[#D4AF37] px-3.5 py-1.5 text-xs font-black text-white hover:brightness-110 transition cursor-pointer disabled:opacity-50"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        <span>
+                          {submittingChallengeId === proj.id
+                            ? 'جاري التسجيل...'
+                            : 'إرسال للتحدي'}
+                        </span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Weekly Challenge Top 10 Board */}
+            <div className="space-y-2 pt-2 border-t border-[#1A2530]/12">
+              <span className="block text-xs font-black text-[#1A2530]">
+                متصدرو التحدي هذا الأسبوع ({weeklyChallenge?.weekKey || 'الأسبوع الحالي'}):
+              </span>
+              {challengeEntries.length === 0 ? (
+                <p className="rounded-2xl bg-[#F9F6F0] px-3 py-3 text-center text-xs font-bold text-[#1A2530]/65">
+                  كن أول منتج يسجّل رقماً قياسياً في تحدي هذا الأسبوع!
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {challengeEntries.map((row, idx) => {
+                    const isMine = row.studio_instance_id === myStudioInstanceId;
+                    return (
+                      <div
+                        key={`${row.studio_instance_id}_${idx}`}
+                        className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-3 py-2 text-xs ${
+                          isMine
+                            ? 'border-[#D91624] bg-[#FFF9E6] font-black'
+                            : 'border-[#1A2530]/12 bg-[#F9F6F0]/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#1A2530] font-typewriter text-[11px] font-black text-[#D4AF37]">
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <span className="block font-black text-[#1A2530] truncate">
+                              {row.studio_name} — «{row.project_title}»
+                            </span>
+                            <span className="block text-[10px] font-bold text-[#1A2530]/65">
+                              المدير: {row.ceo_name} · الميزانية:{' '}
+                              {formatMoney(row.budget_used)} · النقاد:{' '}
+                              {row.critic_score}/10
+                            </span>
+                          </div>
+                        </div>
+                        <span
+                          dir="ltr"
+                          className="rounded-lg bg-[#15803D] px-2.5 py-1 font-typewriter text-[11px] font-black text-white tabular-nums"
+                        >
+                          +{formatMoney(row.score_value)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Card 2: Viral Referral Hub (Telegram Mini App & Web) */}
+          <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] p-4 sm:p-5 text-[#F9F6F0] shadow-lg space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#D4AF37] text-[#1A2530]">
+                  <Gift className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-black text-[#FFF3B0]">
+                    ادعُ أصدقاءك واكسب تمويلاً فورياً
+                  </h3>
+                  <p className="text-xs font-bold text-[#F9F6F0]/80">
+                    كل صديق يؤسس استوديو عبر رابطك يحصل فوراً على +15M في خزينته (أو قفل غرفة النجوم).
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[#D4AF37]/60 bg-[#0F171E] px-3 py-1.5 text-center">
+                <span className="block text-[10px] font-bold text-[#D4AF37]">
+                  أصدقاء انضموا عبرك
+                </span>
+                <span className="font-typewriter text-base font-black text-white tabular-nums">
+                  {referralCount}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                dir="ltr"
+                value={referralShareUrl}
+                className="flex-1 min-h-[42px] rounded-xl border border-[#D4AF37]/50 bg-[#0F171E] px-3 py-2 font-typewriter text-xs text-[#FFF3B0] outline-hidden"
+              />
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyReferralLink}
+                  className="inline-flex min-h-[42px] flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl bg-[#D4AF37] px-4 py-2 text-xs font-black text-[#1A2530] hover:brightness-110 transition cursor-pointer"
+                >
+                  {copiedRefLink ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  <span>{copiedRefLink ? 'تم النسخ' : 'نسخ الرابط'}</span>
+                </button>
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(
+                    referralShareUrl
+                  )}&text=${encodeURIComponent(
+                    `أسّس شركة إنتاجك السينمائي في Neelyo ونافس استوديو «${
+                      studioName || marketProfile.defaultStudioName
+                    }» واحصل على 15M مكافأة ترحيب!`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-[#D4AF37] bg-[#D91624] px-3.5 py-2 text-xs font-black text-white hover:brightness-110 transition"
+                >
+                  <Share2 className="h-4 w-4" />
+                  <span>تيليجرام</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: SYSTEM, WORLD MARKET SWITCH & RESET */}
       {subTab === 'system' && (
         <div className="space-y-3">
           {/* Active World Market Switcher */}

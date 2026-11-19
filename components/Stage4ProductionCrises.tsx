@@ -11,6 +11,7 @@ import {
 } from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { getCurrencyLabel } from '@/lib/market-profiles';
+import { composeProceduralFilmingNews } from '@/lib/procedural-dialogue';
 import { formatMoney } from '@/lib/game-engine';
 import { AnimatedFilmingSetGraphic } from '@/components/CinematicGraphicsScene';
 import {
@@ -113,10 +114,12 @@ export function Stage4ProductionCrises() {
             title: draft.title,
             synopsis: draft.scriptSynopsis,
             genre: draft.primaryGenre,
+            format: draft.format,
             leadActorName,
             directorName,
             studioName,
             ceoName,
+            ageRating: draft.ageRating,
             aiMemoryLog,
             worldMarket,
             uiLanguage,
@@ -124,8 +127,31 @@ export function Stage4ProductionCrises() {
         }),
       });
       const data = await res.json();
-      if (Array.isArray(data?.crises) && data.crises.length > 0) {
-        updateDraft({ crises: data.crises });
+      const nextCrises =
+        Array.isArray(data?.crises) && data.crises.length > 0
+          ? data.crises
+          : undefined;
+      const mergedNewsRaw = data?.pressNews;
+      if (mergedNewsRaw?.headline) {
+        const newsItem: DailyAiNewsItem = {
+          id: `film_news_${Date.now()}`,
+          day: gameDay,
+          headline: String(mergedNewsRaw.headline),
+          detail: String(mergedNewsRaw.detail || ''),
+          impactType: mergedNewsRaw.impactType || 'positive',
+          hypeDelta: Number(mergedNewsRaw.hypeDelta || 3),
+        };
+        updateDraft({
+          ...(nextCrises ? { crises: nextCrises } : {}),
+          filmingDaysElapsed: Math.min(
+            draft.filmingDurationDays,
+            draft.filmingDaysElapsed + 2
+          ),
+          hypeScore: Math.min(100, Math.max(10, draft.hypeScore + newsItem.hypeDelta)),
+          productionNews: [newsItem, ...(draft.productionNews || [])].slice(0, 6),
+        });
+      } else if (nextCrises) {
+        updateDraft({ crises: nextCrises });
       }
     } catch {
       // fallback handled silently
@@ -134,67 +160,52 @@ export function Stage4ProductionCrises() {
     }
   };
 
+  // Extra filming press leak — instant 0-token procedural news composer
   const generateFilmingPressNews = async () => {
     setIsLoadingNews(true);
     try {
-      const res = await fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'generate_daily_news',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            phase: 'filming',
-            day: draft.filmingDaysElapsed + 1,
-            title: draft.title,
-            synopsis: draft.scriptSynopsis,
-            genre: draft.primaryGenre,
-            leadActorName,
-            directorName,
-            studioName,
-            ceoName,
-            worldMarket,
-            uiLanguage,
-          },
-        }),
+      const generated = composeProceduralFilmingNews({
+        worldMarket,
+        projectTitle: draft.title,
+        studioName,
+        directorName,
+        leadName: leadActorName,
+        synopsis: draft.scriptSynopsis,
+        format: draft.format,
+        gameDay: gameDay + (draft.productionNews?.length || 0),
+        hypeScore: draft.hypeScore,
       });
-      const data = await res.json();
-      if (data?.headline) {
-        const newsItem: DailyAiNewsItem = {
-          id: `film_news_${Date.now()}`,
-          day: gameDay,
-          headline: data.headline,
-          detail: data.detail || '',
-          impactType: data.impactType || 'positive',
-          hypeDelta: Number(data.hypeDelta || 2),
-        };
-        updateDraft({
-          filmingDaysElapsed: Math.min(
-            draft.filmingDurationDays,
-            draft.filmingDaysElapsed + 2
-          ),
-          hypeScore: Math.min(100, Math.max(10, draft.hypeScore + newsItem.hypeDelta)),
-          productionNews: [newsItem, ...(draft.productionNews || [])].slice(0, 6),
-        });
-        pushBreakingNewsModal({
-          id: `modal_${newsItem.id}`,
-          day: gameDay,
-          year: useGameStore.getState().currentYear,
-          category: 'production_news',
-          badgeLabel: `تغطية كواليس البلاتوه · ${formatGameDate(
-            gameDay,
-            useGameStore.getState().currentYear
-          )}`,
-          headline: newsItem.headline,
-          detail: newsItem.detail,
-          highlightName: draft.title,
-          extraStatBadge: `ضجة ${newsItem.hypeDelta >= 0 ? `+${newsItem.hypeDelta}` : newsItem.hypeDelta}`,
-          gameImpactLabel: `تفاعل الإعلام مع تصوير «${draft.title}»`,
-        });
-      }
-    } catch {
-      // ignore transient error
+      const newsItem: DailyAiNewsItem = {
+        id: `film_news_${Date.now()}`,
+        day: gameDay,
+        headline: generated.headline,
+        detail: generated.detail,
+        impactType: generated.impactType,
+        hypeDelta: generated.hypeDelta,
+      };
+      updateDraft({
+        filmingDaysElapsed: Math.min(
+          draft.filmingDurationDays,
+          draft.filmingDaysElapsed + 2
+        ),
+        hypeScore: Math.min(100, Math.max(10, draft.hypeScore + newsItem.hypeDelta)),
+        productionNews: [newsItem, ...(draft.productionNews || [])].slice(0, 6),
+      });
+      pushBreakingNewsModal({
+        id: `modal_${newsItem.id}`,
+        day: gameDay,
+        year: useGameStore.getState().currentYear,
+        category: 'production_news',
+        badgeLabel: `تغطية كواليس البلاتوه · ${formatGameDate(
+          gameDay,
+          useGameStore.getState().currentYear
+        )}`,
+        headline: newsItem.headline,
+        detail: newsItem.detail,
+        highlightName: draft.title,
+        extraStatBadge: `ضجة ${newsItem.hypeDelta >= 0 ? `+${newsItem.hypeDelta}` : newsItem.hypeDelta}`,
+        gameImpactLabel: `تفاعل الإعلام مع تصوير «${draft.title}»`,
+      });
     } finally {
       setIsLoadingNews(false);
     }
@@ -306,7 +317,6 @@ export function Stage4ProductionCrises() {
             type="button"
             onClick={() => {
               generateProductionCrises();
-              generateFilmingPressNews();
             }}
             disabled={isLoadingCrises}
             className="mx-auto inline-flex items-center gap-2 rounded-xl border-2 border-[#D4AF37] bg-[#D91624] px-6 py-3 text-xs font-black text-white shadow-lg hover:brightness-110 disabled:opacity-50"

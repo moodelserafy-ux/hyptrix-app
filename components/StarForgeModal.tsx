@@ -38,6 +38,11 @@ import {
   playCashRegisterChaChing,
   playHeavyIronStamp,
 } from '@/lib/sound-fx';
+import {
+  compressImageToWebp320,
+  uploadImageToCloudinary,
+  isCloudinaryConfigured,
+} from '@/lib/cloudinary';
 
 function getStatMetaForGender(gender: 'male' | 'female'): {
   key: keyof SixRadarStats;
@@ -219,6 +224,7 @@ export default function StarForgeModal() {
   const [starAgeInput, setStarAgeInput] = useState<string>('');
   const [primaryGenre, setPrimaryGenre] = useState<GenreId>('action');
   const [photoUrl, setPhotoUrl] = useState<string>('');
+  const [pendingPhotoBlob, setPendingPhotoBlob] = useState<Blob | null>(null);
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
   const [cameraFlashActive, setCameraFlashActive] = useState(false);
   const [hoveredStatKey, setHoveredStatKey] =
@@ -276,20 +282,23 @@ export default function StarForgeModal() {
     }, 380);
   };
 
-  const handleFileDropOrSelect = (file?: File | null) => {
+  const handleFileDropOrSelect = async (file?: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       showToast('اختر ملف صورة صحيح (JPG أو PNG أو WEBP)', 'warning');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result;
-      if (typeof result === 'string') {
-        triggerPhotoFlash(result);
-      }
-    };
-    reader.readAsDataURL(file);
+    const compressed = await compressImageToWebp320(file, 320, 0.82);
+    if (!compressed.ok || !compressed.dataUrl || !compressed.blob) {
+      showToast(
+        compressed.error || 'تعذر تجهيز الصورة، اختر ملف JPG أو PNG أو WEBP',
+        'warning'
+      );
+      return;
+    }
+    // Keep compressed blob locally for preview — zero Cloudinary uploads until final certification!
+    setPendingPhotoBlob(compressed.blob);
+    triggerPhotoFlash(compressed.dataUrl);
   };
 
   const handleWatchAdToUnlock = () => {
@@ -424,6 +433,7 @@ export default function StarForgeModal() {
     setStarName('');
     setStarAgeInput('');
     setPhotoUrl('');
+    setPendingPhotoBlob(null);
     setPrimaryGenre('action');
     setStarGender('male');
     setRadarStats(DEFAULT_RADAR_STATS);
@@ -455,11 +465,27 @@ export default function StarForgeModal() {
     return true;
   };
 
-  const handleCertifyDiamondStar = () => {
+  const handleCertifyDiamondStar = async () => {
     if (!validateStep1BeforeContinue()) return;
+    if (isStampingReveal) return;
 
     setIsStampingReveal(true);
     playHeavyIronStamp();
+
+    let finalPortraitUrl = previewPortraitUrl;
+    if (pendingPhotoBlob && photoUrl && isCloudinaryConfigured()) {
+      try {
+        const uploadRes = await uploadImageToCloudinary(
+          pendingPhotoBlob,
+          'neelyo/stars'
+        );
+        if (uploadRes.ok && uploadRes.secureUrl) {
+          finalPortraitUrl = uploadRes.secureUrl;
+        }
+      } catch {
+        // Fallback cleanly to compressed local 320x320 WebP dataUrl
+      }
+    }
 
     const newActor: ActorItem = {
       id: `custom_star_${Date.now()}`,
@@ -467,7 +493,7 @@ export default function StarForgeModal() {
       gender: starGender,
       age: effectiveStarAge,
       tier: 'S',
-      image_url: previewPortraitUrl,
+      image_url: finalPortraitUrl,
       base_salary: estimatedBaseSalary,
       archetype: `${archetypeTitle} · نجم الاستوديو الحصري`,
       isCustomStar: true,
@@ -491,9 +517,10 @@ export default function StarForgeModal() {
 
     setTimeout(() => {
       createCustomVipStar(newActor);
+      setPendingPhotoBlob(null);
       setRevealedStar(newActor);
       setIsStampingReveal(false);
-    }, 550);
+    }, 450);
   };
 
   const handleClose = () => {
@@ -839,6 +866,7 @@ export default function StarForgeModal() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setPhotoUrl('');
+                                    setPendingPhotoBlob(null);
                                     if (fileInputRef.current) {
                                       fileInputRef.current.value = '';
                                     }

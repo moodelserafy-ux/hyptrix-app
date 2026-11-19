@@ -201,7 +201,32 @@ export function Stage5ReleaseSimulation() {
     [draft.primaryGenre]
   );
 
+  const estimatedDistributionFees = useMemo(() => {
+    const activeRegions =
+      draft.selectedDistributionMarkets &&
+      draft.selectedDistributionMarkets.length > 0
+        ? draft.selectedDistributionMarkets
+        : [primaryRegion];
+    return activeRegions.reduce((sum, mId) => {
+      if (mId === primaryRegion) return sum;
+      const cfg = marketConfigs.find((m) => m.id === mId);
+      return sum + (cfg?.distributionFeePerProject || 0);
+    }, 0);
+  }, [draft.selectedDistributionMarkets, marketConfigs, primaryRegion]);
+
+  const upfrontMarketingAndDistCost =
+    draft.marketingBudget + estimatedDistributionFees;
+  const isOverMarketingLiquidity = upfrontMarketingAndDistCost > cash;
+
   const handleLaunchRelease = async () => {
+    if (upfrontMarketingAndDistCost > cash) {
+      showToast(
+        `السيولة الحالية (${formatMoney(cash)} ${currencyLabel}) لا تكفي لتغطية الدعاية والتوزيع (${formatMoney(upfrontMarketingAndDistCost)} ${currencyLabel}) — خفّض ميزانية الدعاية أو الأسواق الدولية أولاً!`,
+        'warning'
+      );
+      return;
+    }
+
     setIsSimulating(true);
     try {
       const approvedDirectorIds =
@@ -217,6 +242,7 @@ export function Stage5ReleaseSimulation() {
         selectedDirectors[0] ||
         db.crew.find((c) => c.id === draft.directorId) ||
         db.crew.find((c) => c.role === 'director')!;
+      const coDirector = selectedDirectors[1] || null;
       const allDirectorsDisplayName =
         selectedDirectors.length > 0
           ? selectedDirectors.map((d) => d.name).join(' و')
@@ -233,6 +259,31 @@ export function Stage5ReleaseSimulation() {
       );
       const cameos = liveActors.filter((a) => draft.cameoActorIds.includes(a.id));
 
+      const signedAllIds = Array.from(
+        new Set(
+          [
+            ...approvedDirectorIds,
+            draft.dopId,
+            draft.composerId,
+            draft.vfxId,
+            ...draft.leadActorIds,
+            draft.antagonistId,
+            ...draft.supportingActorIds,
+            ...draft.cameoActorIds,
+          ].filter(Boolean) as string[]
+        )
+      );
+      const totalBackendPointsPercent = Math.min(
+        45,
+        signedAllIds.reduce((sum, id) => {
+          const pts =
+            draft.talentOffers[id]?.backendPoints ??
+            draft.negotiatedDiscounts[id]?.backendPoints ??
+            0;
+          return sum + Math.max(0, Number(pts || 0));
+        }, 0)
+      );
+
       const scriptWordCount = draft.scriptSynopsis.trim()
         ? draft.scriptSynopsis.trim().split(/\s+/).length
         : 18;
@@ -247,6 +298,7 @@ export function Stage5ReleaseSimulation() {
         secondaryGenre: draft.secondaryGenre,
         ageRating: draft.ageRating,
         director,
+        coDirector,
         writers: [],
         dop,
         composer,
@@ -268,6 +320,8 @@ export function Stage5ReleaseSimulation() {
         marketRegion: currentRegion,
         selectedDistributionMarkets: draft.selectedDistributionMarkets,
         scriptWordCount,
+        scriptSynopsis: draft.scriptSynopsis,
+        totalBackendPointsPercent,
         previousGenres: releasedProjects.slice(0, 3).map((p) => p.primaryGenre),
         worldMarket,
       });
@@ -347,6 +401,7 @@ export function Stage5ReleaseSimulation() {
         secondaryGenre: draft.secondaryGenre,
         ageRating: draft.ageRating,
         director,
+        coDirector,
         writers: [],
         dop,
         composer,
@@ -368,6 +423,8 @@ export function Stage5ReleaseSimulation() {
         marketRegion: currentRegion,
         selectedDistributionMarkets: draft.selectedDistributionMarkets,
         scriptWordCount,
+        scriptSynopsis: draft.scriptSynopsis,
+        totalBackendPointsPercent,
         previousGenres: releasedProjects.slice(0, 3).map((p) => p.primaryGenre),
         worldMarket,
       });
@@ -561,6 +618,7 @@ export function Stage5ReleaseSimulation() {
         totalBudget,
         distributionFeesTotal: fin.distributionFeesTotal,
         selectedDistributionMarkets: draft.selectedDistributionMarkets,
+        backendPointsTotalPercent: totalBackendPointsPercent,
         firstWeekRevenue: fin.firstWeekRevenue,
         boxOfficeRevenue: day1BoxOfficeRevenue,
         streamingRevenue: day1StreamingRevenue,
@@ -724,8 +782,8 @@ export function Stage5ReleaseSimulation() {
                 الحملة الترويجية وشاشات العرض
               </h3>
 
-              <div className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3">
-                <div className="mb-1.5 flex items-center justify-between">
+              <div className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-[#1A2530]">
                     ميزانية الإعلانات والدعاية (Marketing)
                   </span>
@@ -744,6 +802,20 @@ export function Stage5ReleaseSimulation() {
                   }
                   className="w-full accent-[#D91624] cursor-pointer"
                 />
+                <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] font-bold">
+                  <span className="text-[#1A2530]/65">
+                    السيولة المتاحة بالخزينة: {formatMoney(cash)} {currencyLabel}
+                  </span>
+                  {isOverMarketingLiquidity ? (
+                    <span className="text-[#D91624] font-black">
+                      ⚠️ الدعاية + رسوم التوزيع ({formatMoney(upfrontMarketingAndDistCost)}) تتجاوز سيولتك!
+                    </span>
+                  ) : (
+                    <span className="text-[#15803D] font-black">
+                      إجمالي الدعاية والتوزيع: {formatMoney(upfrontMarketingAndDistCost)} {currencyLabel} ✓
+                    </span>
+                  )}
+                </div>
               </div>
 
               {!isSeries && (
@@ -771,15 +843,23 @@ export function Stage5ReleaseSimulation() {
               )}
             </div>
 
-            {/* Streaming Platforms & TV Channels with Dedicated Logo Slots */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {/* Streaming Platforms (always) & TV Channels (Series ONLY — films earn from cinema + VOD!) */}
+            <div
+              className={`grid grid-cols-1 gap-3 ${
+                isSeries ? 'sm:grid-cols-2' : ''
+              }`}
+            >
               {/* Digital Platforms */}
               <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
                 <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
                   <Globe className="h-4 w-4 text-[#D91624]" />
                   منصة البث الرقمي (Streaming / VOD)
                 </h3>
-                <div className="space-y-2">
+                <div
+                  className={`grid grid-cols-1 gap-2 ${
+                    !isSeries ? 'sm:grid-cols-2' : ''
+                  }`}
+                >
                   {streamingPlatforms.map((plat) => {
                     const selected = effectiveSelectedPlatformId === plat.id;
                     const dealVal = Math.round(plat.budget_capacity * 320_000);
@@ -839,71 +919,73 @@ export function Stage5ReleaseSimulation() {
                 </div>
               </div>
 
-              {/* TV Channels */}
-              <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
-                <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
-                  <Tv className="h-4 w-4 text-[#D4AF37]" />
-                  القناة التلفزيونية الفضائية الناقلة
-                </h3>
-                <div className="space-y-2">
-                  {tvChannels.map((tv) => {
-                    const selected = effectiveSelectedTvChannelId === tv.id;
-                    const dealVal = Math.round(tv.budget_capacity * 260_000);
-                    return (
-                      <button
-                        key={tv.id}
-                        type="button"
-                        onClick={() =>
-                          updateDraft({
-                            selectedTvChannelId: tv.id,
-                            tvChannelDealAmount: dealVal,
-                          })
-                        }
-                        className={`flex w-full items-center justify-between gap-2.5 rounded-xl border-2 p-2.5 text-right transition ${
-                          selected
-                            ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
-                            : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#D4AF37] bg-[#1A2530] text-white">
-                            {tv.logo_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={tv.logo_url}
-                                alt={tv.name}
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                  const next = e.currentTarget.nextElementSibling as HTMLElement | null;
-                                  if (next) next.style.display = 'inline';
-                                }}
-                                className="h-full w-full object-contain p-1"
-                              />
-                            ) : null}
-                            <span
-                              style={{ display: tv.logo_url ? 'none' : 'inline' }}
-                              className="text-[10px] font-black text-[#D4AF37]"
-                            >
-                              TV
-                            </span>
-                          </div>
-                          <div>
-                            <div className="text-xs font-black">{tv.name}</div>
-                            <div className="font-mono text-[10px] font-bold text-[#15803D]">
-                              حقوق العرض: {formatMoney(dealVal)} {currencyLabel}
+              {/* TV Channels — shown strictly for Series where broadcast deals apply */}
+              {isSeries && (
+                <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
+                  <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                    <Tv className="h-4 w-4 text-[#D4AF37]" />
+                    القناة التلفزيونية الفضائية الناقلة
+                  </h3>
+                  <div className="space-y-2">
+                    {tvChannels.map((tv) => {
+                      const selected = effectiveSelectedTvChannelId === tv.id;
+                      const dealVal = Math.round(tv.budget_capacity * 260_000);
+                      return (
+                        <button
+                          key={tv.id}
+                          type="button"
+                          onClick={() =>
+                            updateDraft({
+                              selectedTvChannelId: tv.id,
+                              tvChannelDealAmount: dealVal,
+                            })
+                          }
+                          className={`flex w-full items-center justify-between gap-2.5 rounded-xl border-2 p-2.5 text-right transition ${
+                            selected
+                              ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
+                              : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#D4AF37] bg-[#1A2530] text-white">
+                              {tv.logo_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={tv.logo_url}
+                                  alt={tv.name}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const next = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                    if (next) next.style.display = 'inline';
+                                  }}
+                                  className="h-full w-full object-contain p-1"
+                                />
+                              ) : null}
+                              <span
+                                style={{ display: tv.logo_url ? 'none' : 'inline' }}
+                                className="text-[10px] font-black text-[#D4AF37]"
+                              >
+                                TV
+                              </span>
+                            </div>
+                            <div>
+                              <div className="text-xs font-black">{tv.name}</div>
+                              <div className="font-mono text-[10px] font-bold text-[#15803D]">
+                                حقوق العرض: {formatMoney(dealVal)} {currencyLabel}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        {selected && (
-                          <Check className="h-4 w-4 shrink-0 text-[#D91624]" />
-                        )}
-                      </button>
-                    );
-                  })}
+                          {selected && (
+                            <Check className="h-4 w-4 shrink-0 text-[#D91624]" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Regional Distribution Markets */}
@@ -1174,6 +1256,17 @@ export function Stage5ReleaseSimulation() {
                 </span>
               </div>
             </div>
+
+            {Boolean(lastReleasedProject.backendPointsTotalPercent) && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#D4AF37] bg-[#FFF9E6] px-3.5 py-2 text-xs font-bold text-[#1A2530]">
+                <span>
+                  حصة نسب أرباح النجوم المتعاقد عليها ({lastReleasedProject.backendPointsTotalPercent}% من الإيرادات)
+                </span>
+                <span className="font-mono font-black text-[#D91624]" dir="ltr">
+                  -{formatMoney(lastReleasedProject.backendRoyaltiesPaid || 0)} {currencyLabel}
+                </span>
+              </div>
+            )}
 
             {/* Automatic Live Release Progression & Strategic Boosts */}
             {(() => {

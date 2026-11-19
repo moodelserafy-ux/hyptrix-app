@@ -433,6 +433,7 @@ export interface StudioLogoConfig {
   emblem: CoreEmblemId;
   frame: LogoFrameId;
   palette: LogoPaletteId;
+  customImageUrl?: string;
 }
 
 export type OnboardingTourStatus = 'pending_choice' | 'active' | 'completed';
@@ -654,6 +655,9 @@ export interface ReleasedProjectRecord {
   daysTracked?: number;
   dailyNews?: DailyAiNewsItem[];
   festivalsTriggered?: boolean;
+  juryCommentary?: string;
+  backendPointsTotalPercent?: number;
+  backendRoyaltiesPaid?: number;
 }
 
 export interface WorldHistoryEntry {
@@ -883,6 +887,13 @@ function stepProjectRevenueProgress(
   );
 
   const nextGross = proj.totalGrossRevenue + revenueDelta;
+  const backendRate = Math.min(
+    0.45,
+    Math.max(0, Number(proj.backendPointsTotalPercent || 0)) / 100
+  );
+  const royaltyDeduction = Math.round(revenueDelta * backendRate);
+  const netCashDelta = Math.max(0, revenueDelta - royaltyDeduction);
+  const nextRoyaltiesPaid = (proj.backendRoyaltiesPaid || 0) + royaltyDeduction;
   const boShare =
     proj.totalGrossRevenue > 0
       ? proj.boxOfficeRevenue / proj.totalGrossRevenue
@@ -987,11 +998,12 @@ function stepProjectRevenueProgress(
       boxOfficeRevenue: proj.boxOfficeRevenue + boDelta,
       streamingRevenue: proj.streamingRevenue + streamDelta,
       totalGrossRevenue: nextGross,
-      netProfit: nextGross - proj.totalBudget,
+      backendRoyaltiesPaid: nextRoyaltiesPaid,
+      netProfit: nextGross - nextRoyaltiesPaid - proj.totalBudget,
       viewershipMillions: nextViews,
       previousBoxOfficeRank: prevRankMap.PLAYER || proj.boxOfficeRank,
       boxOfficeRank: nextRank,
-      lastDailyRevenueDelta: revenueDelta,
+      lastDailyRevenueDelta: netCashDelta,
       trajectory: playerTrajectory,
       revenueHistory: [
         ...prevHistory,
@@ -1000,7 +1012,7 @@ function stepProjectRevenueProgress(
       rivalReleases: updatedRivals,
       dailyNews: updatedNews,
     },
-    revenueDelta,
+    revenueDelta: netCashDelta,
   };
 }
 
@@ -1685,6 +1697,9 @@ export interface HyptrixGameState {
   setSupabaseUserEmail: (email: string | null) => void;
   setGroqApiKeyClient: (key: string) => void;
   setPreferredGroqModel: (model: GroqModelId) => void;
+  setProjectJuryCommentary: (projectId: string, commentary: string) => void;
+  claimReferralReward: (type: 'cash' | 'star_lock', amount?: number) => void;
+  hydrateCloudState: (snapshot: Record<string, unknown>) => void;
 }
 
 const DEFAULT_DRAFT: ActiveDraftProject = {
@@ -3999,9 +4014,23 @@ export const useGameStore = create<HyptrixGameState>()(
 
       completeProjectRelease: (record) => {
         const prevCash = get().cash;
+        const backendRate = Math.min(
+          0.45,
+          Math.max(0, Number(record.backendPointsTotalPercent || 0)) / 100
+        );
+        const initialRoyalty = Math.round(record.totalGrossRevenue * backendRate);
+        const netInitialGross = Math.max(
+          0,
+          record.totalGrossRevenue - initialRoyalty
+        );
+        const finalRecord: ReleasedProjectRecord = {
+          ...record,
+          backendRoyaltiesPaid: initialRoyalty,
+          netProfit: netInitialGross - record.totalBudget,
+        };
         set((state) => {
-          const newCash = state.cash - record.totalBudget + record.totalGrossRevenue;
-          const nextProjects = [record, ...state.releasedProjects];
+          const newCash = state.cash - finalRecord.totalBudget + netInitialGross;
+          const nextProjects = [finalRecord, ...state.releasedProjects];
 
           const repDelta =
             record.criticScore >= 7.8
@@ -4185,7 +4214,7 @@ export const useGameStore = create<HyptrixGameState>()(
               selectedDistributionMarkets: [...unlocked],
             },
             releasedProjects: nextProjects,
-            lastReleasedProject: record,
+            lastReleasedProject: finalRecord,
             yearlyRivalReleases: nextYearlyRivals,
             actorDynamicState: nextActorDynamic,
             competitorNetWorthDelta: nextCompDelta,
@@ -4194,7 +4223,7 @@ export const useGameStore = create<HyptrixGameState>()(
             worldHistory: [
               {
                 year: state.currentYear,
-                eventText: `طرح ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بإيرادات ${formatMoney(record.totalGrossRevenue)} ${curLabel} (المركز #${record.boxOfficeRank}) وتقييم نقاد ${record.criticScore}/10.`,
+                eventText: `طرح ${finalRecord.format === 'film' ? 'فيلم' : 'مسلسل'} "${finalRecord.title}" بإيرادات ${formatMoney(finalRecord.totalGrossRevenue)} ${curLabel} (المركز #${finalRecord.boxOfficeRank}) وتقييم نقاد ${finalRecord.criticScore}/10.`,
                 category: 'release',
               },
               ...state.worldHistory,
@@ -4207,8 +4236,83 @@ export const useGameStore = create<HyptrixGameState>()(
           amountDelta: afterReleaseCash - prevCash,
           previousCash: prevCash,
           expectedNewCash: afterReleaseCash,
-          itemId: record.id,
-          itemLabel: `طرح عمل: ${record.title}`,
+          itemId: finalRecord.id,
+          itemLabel: `طرح عمل: ${finalRecord.title}`,
+        });
+      },
+
+      setProjectJuryCommentary: (projectId, commentary) => {
+        if (!projectId || !commentary.trim()) return;
+        set((state) => ({
+          releasedProjects: state.releasedProjects.map((p) =>
+            p.id === projectId ? { ...p, juryCommentary: commentary } : p
+          ),
+          lastReleasedProject:
+            state.lastReleasedProject?.id === projectId
+              ? { ...state.lastReleasedProject, juryCommentary: commentary }
+              : state.lastReleasedProject,
+        }));
+      },
+
+      claimReferralReward: (type, amount = 15_000_000) => {
+        const prevCash = get().cash;
+        if (type === 'star_lock') {
+          set((state) => ({
+            starForgeLocksOpened: Math.min(5, (state.starForgeLocksOpened || 0) + 1),
+            activeToast: {
+              id: `ref_lock_${Date.now()}`,
+              message: 'تم تفعيل مكافأة الدعوة! فُتح قفل مجاني في غرفة صناعة النجوم ⭐',
+              type: 'success',
+            },
+          }));
+          return;
+        }
+
+        const bonus = Math.max(1_000_000, Math.min(25_000_000, Math.round(amount)));
+        set((state) => {
+          const nextCash = state.cash + bonus;
+          const nextMarketVal = calculateStudioMarketValue({
+            cash: nextCash,
+            reputation: state.reputation,
+            releasedProjects: state.releasedProjects,
+            marketValueModifier: state.marketValueModifier || 0,
+          });
+          return {
+            cash: nextCash,
+            marketValue: nextMarketVal,
+            activeToast: {
+              id: `ref_cash_${Date.now()}`,
+              message: `مكافأة الدعوة: +${formatMoney(bonus)} ${getCurrencyLabel(state.worldMarket)} أُضيفت لخزينة الاستوديو!`,
+              type: 'success',
+            },
+          };
+        });
+        const afterCash = get().cash;
+        if (afterCash !== prevCash) {
+          enqueueServerLedgerSync(get, set, {
+            transactionType: 'VIP_PACKAGE_TOPUP',
+            amountDelta: afterCash - prevCash,
+            previousCash: prevCash,
+            expectedNewCash: afterCash,
+            itemLabel: 'مكافأة دعوة صديق (Neelyo Referral)',
+          });
+        }
+      },
+
+      hydrateCloudState: (snapshot) => {
+        if (!snapshot || typeof snapshot !== 'object') return;
+        set((state) => {
+          const cloudDay = Number(snapshot.gameDay || 0);
+          const cloudCreated = Boolean(snapshot.studioCreated);
+          // Only overwrite if local hasn't started yet OR cloud save is strictly ahead
+          if (state.studioCreated && cloudDay <= state.gameDay) {
+            return state;
+          }
+          if (!cloudCreated) return state;
+          return {
+            ...state,
+            ...(snapshot as Partial<HyptrixGameState>),
+          };
         });
       },
 

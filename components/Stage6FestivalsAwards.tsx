@@ -38,6 +38,7 @@ export function Stage6FestivalsAwards() {
     customDbPatch,
     resetDraftForNewProject,
     triggerFestivalJuryPR,
+    setProjectJuryCommentary,
     draft,
     showToast,
     groqApiKeyClient,
@@ -63,11 +64,17 @@ export function Stage6FestivalsAwards() {
     Math.max(5, Math.round((daysElapsedInYear / DAYS_PER_YEAR) * 100))
   );
 
-  const [juryCommentary, setJuryCommentary] = useState<string | null>(null);
+  const [fetchedJuryCommentary, setFetchedJuryCommentary] = useState<
+    string | null
+  >(null);
   const [isLoadingJury, setIsLoadingJury] = useState(false);
 
+  const latestProjectId = latestProject?.id || '';
+  const cachedJuryCommentary = latestProject?.juryCommentary || '';
+  const displayedJuryCommentary = cachedJuryCommentary || fetchedJuryCommentary;
+
   useEffect(() => {
-    if (!latestProject) return;
+    if (!latestProject || cachedJuryCommentary) return;
     let isMounted = true;
     const fetchJurySpeech = async () => {
       setIsLoadingJury(true);
@@ -95,8 +102,10 @@ export function Stage6FestivalsAwards() {
           }),
         });
         const data = await res.json();
-        if (isMounted && (data?.juryStatement || data?.jurySpeech)) {
-          setJuryCommentary(data.juryStatement || data.jurySpeech);
+        const speech = data?.juryStatement || data?.jurySpeech;
+        if (isMounted && typeof speech === 'string' && speech.trim()) {
+          setFetchedJuryCommentary(speech);
+          setProjectJuryCommentary(latestProject.id, speech);
         }
       } catch {
         // fallback handled silently
@@ -108,17 +117,8 @@ export function Stage6FestivalsAwards() {
     return () => {
       isMounted = false;
     };
-  }, [
-    latestProject,
-    db.festivals,
-    defaultFestivalName,
-    studioName,
-    ceoName,
-    groqApiKeyClient,
-    preferredGroqModel,
-    worldMarket,
-    uiLanguage,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestProjectId, cachedJuryCommentary]);
 
   const projectsThisYear = useMemo(
     () => releasedProjects.filter((p) => p.year === currentYear),
@@ -240,7 +240,7 @@ export function Stage6FestivalsAwards() {
               )}
             </div>
             <p className="mt-1.5 text-xs font-bold leading-relaxed text-[#1A2530]/85">
-              {juryCommentary ||
+              {displayedJuryCommentary ||
                 `عمل «${latestProject.title}» بتقييم نقدي (${latestProject.criticScore}/10) يمثل إضافة قوية لقائمة ترشيحات استوديو «${studioName}» في الحفل السنوي القادم.`}
             </p>
           </div>

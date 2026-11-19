@@ -32,9 +32,16 @@ import {
   BookOpen,
   PenTool,
   X,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { NeelyoInfoTab } from './NeelyoInfoModal';
+import {
+  compressImageToWebp320,
+  uploadImageToCloudinary,
+  isCloudinaryConfigured,
+} from '@/lib/cloudinary';
 
 const PERKS: {
   id: FounderPerk;
@@ -98,10 +105,12 @@ export function Stage1StudioCreation({
   const [studioName, setStudioName] = useState('');
   const [ceoName, setCeoName] = useState('');
   const [logoConfig, setLogoConfig] = useState<StudioLogoConfig>(initialLogo);
+  const [pendingLogoBlob, setPendingLogoBlob] = useState<Blob | null>(null);
   const [selectedPerk, setSelectedPerk] =
     useState<FounderPerk>('visionary_director');
   const [isSigning, setIsSigning] = useState(false);
 
+  const logoFileInputRef = useRef<HTMLInputElement | null>(null);
   const launchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hapticTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -150,11 +159,36 @@ export function Stage1StudioCreation({
       FRAME_OPTIONS[Math.floor(Math.random() * FRAME_OPTIONS.length)].id;
     const randomPalette =
       PALETTE_OPTIONS[Math.floor(Math.random() * PALETTE_OPTIONS.length)].id;
+    setPendingLogoBlob(null);
     setLogoConfig({
       emblem: randomEmblem,
       frame: randomFrame,
       palette: randomPalette,
+      customImageUrl: undefined,
     });
+  };
+
+  const handleLogoFileSelect = async (file?: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('اختر ملف صورة صحيح (JPG أو PNG أو WEBP)', 'warning');
+      return;
+    }
+    const compressed = await compressImageToWebp320(file, 320, 0.82);
+    if (!compressed.ok || !compressed.dataUrl || !compressed.blob) {
+      showToast(
+        compressed.error || 'تعذر تجهيز صورة الشعار، جرب صورة أخرى',
+        'warning'
+      );
+      return;
+    }
+    triggerTelegramHaptic('success');
+    // Local preview only — uploaded to Cloudinary neelyo/logos only when signing contract!
+    setPendingLogoBlob(compressed.blob);
+    setLogoConfig((prev) => ({
+      ...prev,
+      customImageUrl: compressed.dataUrl,
+    }));
   };
 
   const canLeaveStep1 = () => {
@@ -190,11 +224,32 @@ export function Stage1StudioCreation({
       triggerTelegramHaptic('success');
     }, 320);
 
-    launchTimerRef.current = setTimeout(() => {
+    // Upload custom studio logo to Cloudinary ONLY upon final contract signing (0 wasted uploads)
+    const uploadPromise: Promise<string | undefined> =
+      pendingLogoBlob && logoConfig.customImageUrl && isCloudinaryConfigured()
+        ? Promise.race([
+            uploadImageToCloudinary(pendingLogoBlob, 'neelyo/logos')
+              .then((res) =>
+                res.ok && res.secureUrl
+                  ? res.secureUrl
+                  : logoConfig.customImageUrl
+              )
+              .catch(() => logoConfig.customImageUrl),
+            new Promise<string | undefined>((resolve) =>
+              setTimeout(() => resolve(logoConfig.customImageUrl), 2500)
+            ),
+          ])
+        : Promise.resolve(logoConfig.customImageUrl);
+
+    launchTimerRef.current = setTimeout(async () => {
+      const resolvedCustomLogoUrl = await uploadPromise;
       initializeStudio({
         studioName: studioName.trim(),
         ceoName: ceoName.trim(),
-        logo: logoConfig,
+        logo: {
+          ...logoConfig,
+          customImageUrl: resolvedCustomLogoUrl,
+        },
         founderPerk: selectedPerk,
         region: marketProfile.primaryRegion,
       });
@@ -310,7 +365,7 @@ export function Stage1StudioCreation({
                   <div className="relative flex items-center gap-3.5 lg:flex-col lg:text-center">
                     {/* Illuminated Live Studio Crest */}
                     <motion.div
-                      key={`${logoConfig.emblem}_${logoConfig.frame}_${logoConfig.palette}`}
+                      key={`${logoConfig.emblem}_${logoConfig.frame}_${logoConfig.palette}_${logoConfig.customImageUrl ? 'img' : 'svg'}`}
                       initial={{ scale: 0.9, opacity: 0.7 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ duration: 0.2 }}
@@ -781,8 +836,9 @@ export function Stage1StudioCreation({
                       استوديو تصميم الشعار
                     </h2>
                     <p className="text-[11px] font-bold text-[#9A7209] truncate">
-                      {activeEmblem.name} · {activeFrame.name} ·{' '}
-                      {activePalette.name}
+                      {logoConfig.customImageUrl
+                        ? 'شعار مخصص من المعرض · مضغوط WebP 320×320'
+                        : `${activeEmblem.name} · ${activeFrame.name} · ${activePalette.name}`}
                     </p>
                   </div>
                 </div>
@@ -807,8 +863,69 @@ export function Stage1StudioCreation({
                 </div>
               </div>
 
+              {/* Custom Gallery Image Uploader Bar (Local Preview Only until Signing) */}
+              <div className="px-4 pt-3 sm:px-5">
+                <input
+                  ref={logoFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => handleLogoFileSelect(e.target.files?.[0])}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#D4AF37]/60 bg-[#FFFDF8] px-3 py-2 shadow-2xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#1A2530] text-[#D4AF37]">
+                      <Upload className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-xs font-black text-[#1A2530] truncate">
+                        {logoConfig.customImageUrl
+                          ? 'تم اختيار صورة شعار من معرضك'
+                          : 'أو ارفع شعارك الخاص من المعرض'}
+                      </span>
+                      <span className="block text-[10px] font-bold text-[#1A2530]/60">
+                        ضغط فوري 320×320 WebP · خاص باستوديوك
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => logoFileInputRef.current?.click()}
+                      className="inline-flex min-h-[36px] items-center gap-1 rounded-xl border border-[#D4AF37] bg-[#1A2530] px-3 text-[11px] font-black text-[#FFF3B0] hover:brightness-110 transition cursor-pointer"
+                    >
+                      <Upload className="h-3.5 w-3.5 text-[#D4AF37]" />
+                      <span>
+                        {logoConfig.customImageUrl
+                          ? 'تغيير الصورة'
+                          : 'رفع صورة من المعرض'}
+                      </span>
+                    </button>
+                    {logoConfig.customImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPendingLogoBlob(null);
+                          setLogoConfig((prev) => ({
+                            ...prev,
+                            customImageUrl: undefined,
+                          }));
+                          if (logoFileInputRef.current) {
+                            logoFileInputRef.current.value = '';
+                          }
+                        }}
+                        className="inline-flex min-h-[36px] items-center gap-1 rounded-xl bg-[#D91624] px-2.5 text-[11px] font-black text-white hover:brightness-110 transition cursor-pointer"
+                        aria-label="حذف الصورة المخصصة"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* 4 Clean Sub-Tabs */}
-              <div className="px-4 pt-3 pb-2 sm:px-5">
+              <div className="px-4 pt-2.5 pb-2 sm:px-5">
                 <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-[#1A2530]/12 bg-[#EFE9DC] p-1">
                   {(
                     [
@@ -858,7 +975,8 @@ export function Stage1StudioCreation({
                           type="button"
                           onClick={() => {
                             triggerTelegramHaptic('selection');
-                            setLogoConfig(preset);
+                            setPendingLogoBlob(null);
+                            setLogoConfig({ ...preset, customImageUrl: undefined });
                           }}
                           className={`flex items-center justify-center rounded-2xl border-2 p-2.5 transition cursor-pointer ${
                             isCurrent
@@ -884,9 +1002,11 @@ export function Stage1StudioCreation({
                           type="button"
                           onClick={() => {
                             triggerTelegramHaptic('selection');
+                            setPendingLogoBlob(null);
                             setLogoConfig((prev) => ({
                               ...prev,
                               emblem: emb.id,
+                              customImageUrl: undefined,
                             }));
                           }}
                           className={`flex flex-col items-center gap-1.5 rounded-2xl border-2 p-2 transition cursor-pointer ${
@@ -923,9 +1043,11 @@ export function Stage1StudioCreation({
                           type="button"
                           onClick={() => {
                             triggerTelegramHaptic('selection');
+                            setPendingLogoBlob(null);
                             setLogoConfig((prev) => ({
                               ...prev,
                               frame: fr.id,
+                              customImageUrl: undefined,
                             }));
                           }}
                           className={`flex flex-col items-center gap-1.5 rounded-2xl border-2 p-2 transition cursor-pointer ${

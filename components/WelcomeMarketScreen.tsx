@@ -395,29 +395,39 @@ export function WelcomeMarketScreen({
             <span className="text-[#9A7209]">توسعات دولية</span>
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {upcomingMarkets.map((market) => (
-              <button
-                key={market.id}
-                type="button"
-                onClick={() => handleSelectMarket(market.id, false)}
-                className="group flex min-h-[54px] items-center justify-between gap-2 rounded-2xl border border-[#D4AF37]/40 bg-[#FFFDF8]/90 px-2.5 py-2 sm:px-3.5 sm:py-2.5 text-right shadow-2xs transition hover:border-[#D4AF37] hover:bg-[#FFF9E6] cursor-pointer"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-8 sm:w-10 shrink-0 opacity-90 group-hover:opacity-100 transition">
-                    <WorldFlagArt market={market.id} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[11px] sm:text-xs font-black text-[#1A2530] truncate">
-                      {market.countryNameAr}
+            {upcomingMarkets.map((market) => {
+              const shortLabel =
+                market.id === 'turkey'
+                  ? 'تركيا'
+                  : market.id === 'korea'
+                  ? 'كوريا'
+                  : market.id === 'usa'
+                  ? 'هوليوود'
+                  : market.countryNameAr;
+              return (
+                <button
+                  key={market.id}
+                  type="button"
+                  onClick={() => handleSelectMarket(market.id, false)}
+                  className="group flex min-h-[54px] items-center justify-between gap-1.5 rounded-2xl border border-[#D4AF37]/40 bg-[#FFFDF8]/90 px-2.5 py-2 sm:px-3.5 sm:py-2.5 text-right shadow-2xs transition hover:border-[#D4AF37] hover:bg-[#FFF9E6] cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                    <div className="w-7 sm:w-10 shrink-0 opacity-90 group-hover:opacity-100 transition">
+                      <WorldFlagArt market={market.id} />
                     </div>
-                    <div className="text-[10px] font-extrabold text-[#9A7209]">
-                      قريباً
+                    <div className="min-w-0">
+                      <div className="text-[11px] sm:text-xs font-black text-[#1A2530] whitespace-nowrap">
+                        {shortLabel}
+                      </div>
+                      <div className="text-[10px] font-extrabold text-[#9A7209]">
+                        قريباً
+                      </div>
                     </div>
                   </div>
-                </div>
-                <Lock className="h-3.5 w-3.5 shrink-0 text-[#B8860B]" />
-              </button>
-            ))}
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-[#B8860B]" />
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

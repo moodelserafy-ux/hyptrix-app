@@ -714,6 +714,7 @@ export interface ProjectSimulationInput {
   secondaryGenre: GenreId | null;
   ageRating: AgeRating;
   director: CrewItem;
+  coDirector?: CrewItem | null;
   writers: CrewItem[];
   dop?: CrewItem | null;
   composer?: CrewItem | null;
@@ -734,6 +735,8 @@ export interface ProjectSimulationInput {
   worldMarket?: WorldMarketId;
   selectedDistributionMarkets?: MarketRegion[];
   scriptWordCount?: number;
+  scriptSynopsis?: string;
+  totalBackendPointsPercent?: number;
   previousGenres?: GenreId[];
   entropySeed?: number;
 }
@@ -750,10 +753,116 @@ export interface ProjectFinancialResult {
   totalBoxOfficeRevenue: number;
   totalStreamingRevenue: number;
   totalGrossRevenue: number;
+  backendRoyaltiesTotal: number;
+  netRevenueAfterRoyalties: number;
   synergyReport: GenreSynergyResult;
   chemistryReport: CastChemistryReport;
   distributionFeesTotal: number;
   simulationTwists: SimulationTwistItem[];
+}
+
+/**
+ * Anti-spam lexical quality evaluator for player-written synopses.
+ * Rejects repeated-word spam (e.g., "فيلم فيلم فيلم...") and gibberish tokens,
+ * rewarding genuine vocabulary diversity, Arabic/real-word ratio, and narrative structure.
+ */
+export function evaluateScriptCraftScore(
+  synopsis?: string,
+  fallbackWordCount?: number
+): {
+  score: number;
+  wordCount: number;
+  uniqueRatio: number;
+  isSpam: boolean;
+} {
+  const clean = (synopsis || '').trim();
+  if (!clean) {
+    const words = fallbackWordCount ?? 20;
+    const score =
+      words >= 34
+        ? 86
+        : words >= 24
+        ? 81
+        : words >= 16
+        ? 75
+        : words >= 10
+        ? 68
+        : words >= 6
+        ? 54
+        : 40;
+    return { score, wordCount: words, uniqueRatio: 0.75, isSpam: false };
+  }
+
+  const rawTokens = clean.split(/\s+/).filter(Boolean);
+  const wordCount = rawTokens.length;
+  if (wordCount === 0) {
+    return { score: 34, wordCount: 0, uniqueRatio: 0, isSpam: true };
+  }
+
+  const normalizedTokens = rawTokens
+    .map((tok) =>
+      tok
+        .replace(/[^\u0600-\u06FFa-zA-Z]/g, '')
+        .toLowerCase()
+        .trim()
+    )
+    .filter((tok) => tok.length >= 2);
+
+  const realWordRatio = normalizedTokens.length / Math.max(1, wordCount);
+  const freqMap = new Map<string, number>();
+  for (const tok of normalizedTokens) {
+    freqMap.set(tok, (freqMap.get(tok) || 0) + 1);
+  }
+
+  const uniqueCount = freqMap.size;
+  const uniqueRatio = uniqueCount / Math.max(1, normalizedTokens.length);
+  const maxFreq = Math.max(0, ...Array.from(freqMap.values()));
+  const dominanceRatio = maxFreq / Math.max(1, normalizedTokens.length);
+  const avgWordLen =
+    normalizedTokens.length > 0
+      ? normalizedTokens.reduce((sum, t) => sum + t.length, 0) /
+        normalizedTokens.length
+      : 0;
+  const sentenceSegments = clean
+    .split(/[،.,!؟\n]+/)
+    .filter((s) => s.trim().length >= 8).length;
+
+  const isSpam =
+    realWordRatio < 0.55 ||
+    (wordCount >= 8 && uniqueRatio < 0.42) ||
+    (wordCount >= 6 && dominanceRatio > 0.34) ||
+    avgWordLen < 2.6;
+
+  if (isSpam) {
+    const spamScore = Math.max(
+      30,
+      Math.min(50, Math.round(32 + uniqueCount * 1.1 + realWordRatio * 8))
+    );
+    return {
+      score: spamScore,
+      wordCount,
+      uniqueRatio: Number(uniqueRatio.toFixed(2)),
+      isSpam: true,
+    };
+  }
+
+  const lengthPts = Math.min(34, uniqueCount * 1.15);
+  const diversityPts = Math.min(26, uniqueRatio * 30);
+  const structurePts = Math.min(18, sentenceSegments * 6);
+  const richnessPts =
+    avgWordLen >= 4.2 ? 16 : avgWordLen >= 3.4 ? 12 : 7;
+
+  const finalScore = Math.min(
+    94,
+    Math.max(42, Math.round(lengthPts + diversityPts + structurePts + richnessPts))
+  );
+
+  return {
+    score: finalScore,
+    wordCount,
+    uniqueRatio: Number(uniqueRatio.toFixed(2)),
+    isSpam: false,
+  };
 }
 
 const GENRE_BUDGET_REQUIREMENTS: Record<
@@ -824,24 +933,47 @@ export function calculateFinancialsAndQuality(
     }
   }
 
-  const words = input.scriptWordCount ?? 20;
-  const playerScriptCraft =
-    words >= 34
-      ? 94
-      : words >= 24
-      ? 88
-      : words >= 16
-      ? 81
-      : words >= 10
-      ? 72
-      : words >= 6
-      ? 56
-      : 40;
+  // Anti-spam lexical evaluation of player-written synopsis
+  const scriptEval = evaluateScriptCraftScore(
+    input.scriptSynopsis,
+    input.scriptWordCount
+  );
+  const playerScriptCraft = scriptEval.score;
+  const words = scriptEval.wordCount;
+
+  // Blend primary director + optional co-director stats so hiring a 2nd director genuinely impacts quality & control
+  const hasCoDirector = Boolean(
+    input.coDirector && input.coDirector.id !== input.director.id
+  );
+  const dirVision = input.director.stats.vision ?? input.director.stats.overall;
+  const dirControl = input.director.stats.control ?? input.director.stats.overall;
+  const coVision = input.coDirector
+    ? (input.coDirector.stats.vision ?? input.coDirector.stats.overall)
+    : dirVision;
+  const coControl = input.coDirector
+    ? (input.coDirector.stats.control ?? input.coDirector.stats.overall)
+    : dirControl;
+
+  const effectiveDirectorVision = hasCoDirector && input.coDirector
+    ? Math.round(dirVision * 0.65 + coVision * 0.35 + 2)
+    : dirVision;
+  const effectiveDirectorControl = hasCoDirector && input.coDirector
+    ? Math.round(dirControl * 0.62 + coControl * 0.38 + 3)
+    : dirControl;
+  const effectiveDirectorOverall = hasCoDirector && input.coDirector
+    ? Math.round(input.director.stats.overall * 0.65 + input.coDirector.stats.overall * 0.35)
+    : input.director.stats.overall;
+  const coDirectorSynergyBonus =
+    hasCoDirector && input.coDirector
+      ? input.coDirector.stats.overall >= 80
+        ? 3.2
+        : 1.8
+      : 0;
 
   const synergyReport = calculateGenreSynergy(
     input.primaryGenre,
     input.secondaryGenre,
-    input.director.stats.vision,
+    effectiveDirectorVision,
     playerScriptCraft
   );
 
@@ -852,7 +984,7 @@ export function calculateFinancialsAndQuality(
   ];
   const chemistryReport = evaluateCastChemistry(
     mainCast,
-    input.director.stats.control
+    effectiveDirectorControl
   );
 
   const castActingAvg =
@@ -918,11 +1050,18 @@ export function calculateFinancialsAndQuality(
     Math.max(24, 34 + avgDeptAdequacy * 44 + Math.min(16, (productionSpend / 55_000_000) * 16))
   );
 
-  const directorGenreFit = input.director.best_genres.includes(
-    input.primaryGenre
-  )
-    ? 1.09
-    : 0.92;
+  const primaryDirFits = input.director.best_genres.includes(input.primaryGenre);
+  const coDirFits = Boolean(
+    hasCoDirector &&
+      input.coDirector &&
+      input.coDirector.best_genres.includes(input.primaryGenre)
+  );
+  const directorGenreFit =
+    primaryDirFits && coDirFits
+      ? 1.12
+      : primaryDirFits || coDirFits
+      ? 1.09
+      : 0.92;
 
   const crewTechBonus =
     (input.dop ? (input.dop.stats.overall - 75) * 0.2 : -3.5) +
@@ -933,15 +1072,25 @@ export function calculateFinancialsAndQuality(
     (input.antagonist ? 2.8 : -1.5) +
     Math.min(3.6, input.supporting.length * 1.6);
 
-  const scriptDelta =
-    words < 6 ? -14 : words < 10 ? -7 : words < 16 ? -1 : words >= 26 ? 5.5 : 2.5;
+  const scriptDelta = scriptEval.isSpam
+    ? -12
+    : words < 6
+    ? -14
+    : words < 10
+    ? -7
+    : words < 16
+    ? -1
+    : playerScriptCraft >= 84
+    ? 5.5
+    : 2.5;
   const onSetQualityMod = input.qualityModifier || 0;
   const genreProfile =
     GENRE_MARKET_PROFILES[input.primaryGenre] ||
     GENRE_MARKET_PROFILES.popular_drama;
 
   let rawQuality =
-    (input.director.stats.overall * 0.26 * directorGenreFit +
+    (effectiveDirectorOverall * 0.26 * directorGenreFit +
+      coDirectorSynergyBonus +
       playerScriptCraft * 0.2 +
       castActingAvg * 0.34 +
       productionQualityScore * 0.2 +
@@ -1056,9 +1205,6 @@ export function calculateFinancialsAndQuality(
   );
 
   // Determine revenue run trajectory:
-  // - High commercial appeal + modest critic quality => front_loaded (huge opening, faster decay)
-  // - High critic quality + lower initial hype/commercial draw => sleeper (climbs dynamically via word-of-mouth!)
-  // - Otherwise => steady
   const trajectory: RevenueTrajectory =
     commercialAppeal >= technicalQuality + 9
       ? 'front_loaded'
@@ -1067,8 +1213,6 @@ export function calculateFinancialsAndQuality(
       : 'steady';
 
   // Decoupled revenue math:
-  // Opening week depends heavily on Commercial Appeal + Marketing + Screens + Genre Commercial Draw + Season,
-  // while Word-of-Mouth legs depend heavily on Audience + Critic reception!
   const openingCommercialPower = Math.pow(commercialAppeal / 74, 1.52);
   const openingQualityFloor = Math.pow(Math.max(42, technicalQuality) / 74, 0.55);
 
@@ -1092,7 +1236,9 @@ export function calculateFinancialsAndQuality(
     Math.max(0.45, input.aiBoxOfficeMultiplier)
   );
 
-  const marketCapMult = Math.min(1.5, combinedRevenueMultiplier);
+  // Allow genuine international market expansion scaling (up to 3.35x across Gulf + Europe + Hollywood)
+  // so players paying 14M–42M distribution fees earn strong, fair global ROI!
+  const marketCapMult = Math.min(3.35, combinedRevenueMultiplier);
 
   const openingShare =
     trajectory === 'front_loaded'
@@ -1176,6 +1322,19 @@ export function calculateFinancialsAndQuality(
 
   const totalGrossRevenue = totalBoxOfficeRevenue + totalStreamingRevenue;
 
+  // Enforce real financial cost for signed talent backend points (capped at 45% of gross revenue)
+  const effectiveBackendRate = Math.min(
+    0.45,
+    Math.max(0, Number(input.totalBackendPointsPercent || 0)) / 100
+  );
+  const backendRoyaltiesTotal = Math.round(
+    totalGrossRevenue * effectiveBackendRate
+  );
+  const netRevenueAfterRoyalties = Math.max(
+    0,
+    totalGrossRevenue - backendRoyaltiesTotal
+  );
+
   return {
     technicalQuality,
     commercialAppeal,
@@ -1186,6 +1345,8 @@ export function calculateFinancialsAndQuality(
     totalBoxOfficeRevenue,
     totalStreamingRevenue,
     totalGrossRevenue,
+    backendRoyaltiesTotal,
+    netRevenueAfterRoyalties,
     synergyReport,
     chemistryReport,
     distributionFeesTotal,

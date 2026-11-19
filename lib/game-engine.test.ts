@@ -10,7 +10,12 @@ import {
   calculateStudioMarketValue,
   generateRivalReleases,
   formatCurrency,
+  evaluateScriptCraftScore,
 } from './game-engine';
+import {
+  composeProceduralOfferReply,
+  composeProceduralFilmingNews,
+} from './procedural-dialogue';
 import {
   mergeDatabases,
   validateCustomDatabase,
@@ -565,6 +570,228 @@ test('Annual awards gala in Saudi market never leaks Egyptian fallback directors
   }
   assert.ok(gala.ceremonies.length >= 2);
 });
+
+test('Global expansion ROI exceeds old broken 1.5x cap when adding Gulf, Europe, and Hollywood', () => {
+  const baseParams = {
+    format: 'film' as const,
+    filmSeason: 'eid_adha' as const,
+    primaryGenre: 'action' as const,
+    secondaryGenre: 'crime_mystery' as const,
+    ageRating: '+12' as const,
+    director: baseDb.crew[0],
+    writers: [baseDb.crew[4]],
+    dop: baseDb.crew[7],
+    composer: baseDb.crew[9],
+    vfx: baseDb.crew[11],
+    leads: [baseDb.actors[0]],
+    antagonist: baseDb.actors[1],
+    supporting: [baseDb.actors[8]],
+    cameos: [],
+    budgetAllocation: {
+      setsAndLocations: 9_000_000,
+      costumesAndMakeup: 4_000_000,
+      vfxAndStunts: 11_000_000,
+      extrasAndCrowds: 3_000_000,
+    },
+    marketingBudget: 14_000_000,
+    screensCount: 150,
+    platformDealAmount: 22_000_000,
+    founderPerk: 'marketing_whale' as const,
+    hypeScore: 84,
+    aiBoxOfficeMultiplier: 1.0,
+    marketRegion: 'egypt' as const,
+    entropySeed: 101,
+  };
+
+  const egyptOnly = calculateFinancialsAndQuality({
+    ...baseParams,
+    selectedDistributionMarkets: ['egypt'],
+  });
+  const egyptGulf = calculateFinancialsAndQuality({
+    ...baseParams,
+    selectedDistributionMarkets: ['egypt', 'gulf'],
+  });
+  const globalAll4 = calculateFinancialsAndQuality({
+    ...baseParams,
+    selectedDistributionMarkets: ['egypt', 'gulf', 'europe', 'hollywood'],
+  });
+
+  // Adding Europe + Hollywood MUST substantially outperform Egypt+Gulf (old 1.5x cap froze them!)
+  assert.ok(
+    globalAll4.totalBoxOfficeRevenue > egyptGulf.totalBoxOfficeRevenue * 1.65,
+    `Expected global box office (${globalAll4.totalBoxOfficeRevenue}) to far exceed Egypt+Gulf (${egyptGulf.totalBoxOfficeRevenue})`
+  );
+  assert.ok(
+    globalAll4.totalBoxOfficeRevenue > egyptOnly.totalBoxOfficeRevenue * 2.5,
+    'Global 4-market release must scale well beyond the old 1.5x ceiling'
+  );
+});
+
+test('Backend points deduct real royalties from gross revenue and reduce net revenue', () => {
+  const common = {
+    format: 'film' as const,
+    filmSeason: 'summer' as const,
+    primaryGenre: 'action' as const,
+    secondaryGenre: null,
+    ageRating: '+12' as const,
+    director: baseDb.crew[0],
+    writers: [baseDb.crew[4]],
+    dop: baseDb.crew[7],
+    composer: baseDb.crew[9],
+    vfx: baseDb.crew[11],
+    leads: [baseDb.actors[0]],
+    antagonist: baseDb.actors[1],
+    supporting: [],
+    cameos: [],
+    budgetAllocation: {
+      setsAndLocations: 8_000_000,
+      costumesAndMakeup: 4_000_000,
+      vfxAndStunts: 9_000_000,
+      extrasAndCrowds: 3_000_000,
+    },
+    marketingBudget: 12_000_000,
+    screensCount: 140,
+    platformDealAmount: 20_000_000,
+    founderPerk: 'visionary_director' as const,
+    hypeScore: 80,
+    aiBoxOfficeMultiplier: 1.0,
+    marketRegion: 'egypt' as const,
+    entropySeed: 55,
+  };
+
+  const zeroBackend = calculateFinancialsAndQuality({
+    ...common,
+    totalBackendPointsPercent: 0,
+  });
+  const tenPercentBackend = calculateFinancialsAndQuality({
+    ...common,
+    totalBackendPointsPercent: 10,
+  });
+
+  assert.equal(zeroBackend.backendRoyaltiesTotal, 0);
+  assert.ok(tenPercentBackend.backendRoyaltiesTotal > 0);
+  assert.equal(
+    tenPercentBackend.netRevenueAfterRoyalties,
+    tenPercentBackend.totalGrossRevenue - tenPercentBackend.backendRoyaltiesTotal
+  );
+  assert.ok(
+    tenPercentBackend.netRevenueAfterRoyalties < zeroBackend.netRevenueAfterRoyalties
+  );
+});
+
+test('Co-director blending improves artistic quality when pairing a strong second director', () => {
+  const directors = baseDb.crew.filter((c) => c.role === 'director');
+  const weakerDir = [...directors].sort((a, b) => a.stats.overall - b.stats.overall)[0];
+  const eliteDir = [...directors].sort((a, b) => b.stats.overall - a.stats.overall)[0];
+
+  const resolved = getResolvedDatabase(null);
+  const base = {
+    format: 'film' as const,
+    filmSeason: 'summer' as const,
+    primaryGenre: 'popular_drama' as const,
+    secondaryGenre: null,
+    ageRating: '+12' as const,
+    director: weakerDir,
+    writers: [],
+    dop: null,
+    composer: null,
+    vfx: null,
+    leads: [resolved.actors[60]],
+    antagonist: null,
+    supporting: [],
+    cameos: [],
+    budgetAllocation: {
+      setsAndLocations: 3_000_000,
+      costumesAndMakeup: 2_000_000,
+      vfxAndStunts: 2_000_000,
+      extrasAndCrowds: 1_000_000,
+    },
+    marketingBudget: 6_000_000,
+    screensCount: 90,
+    platformDealAmount: 10_000_000,
+    founderPerk: 'shark_negotiator' as const,
+    hypeScore: 60,
+    aiBoxOfficeMultiplier: 1.0,
+    marketRegion: 'egypt' as const,
+    entropySeed: 12,
+  };
+
+  const soloRun = calculateFinancialsAndQuality(base);
+  const coDirectedRun = calculateFinancialsAndQuality({
+    ...base,
+    coDirector: eliteDir,
+  });
+
+  assert.ok(
+    coDirectedRun.technicalQuality > soloRun.technicalQuality,
+    `Co-director (${coDirectedRun.technicalQuality}) should beat weaker solo director (${soloRun.technicalQuality})`
+  );
+});
+
+test('Anti-spam script evaluator penalizes repeated word spam and rewards rich Arabic synopses', () => {
+  const spamText = Array(42).fill('فيلم').join(' ');
+  const spamEval = evaluateScriptCraftScore(spamText, 42);
+
+  const genuineSynopsis =
+    'بعد اختفاء شقيقه في ظروف غامضة داخل ميناء الإسكندرية، يضطر محقق متقاعد لمواجهة شبكة تهريب دولية تتحكم في خيوط القضية، بينما يكشف كل دليل جديد خيانة أقرب أصدقائه في سباق محموم مع الزمن قبل فجر العيد.';
+  const genuineWords = genuineSynopsis.split(/\s+/).length;
+  const genuineEval = evaluateScriptCraftScore(genuineSynopsis, genuineWords);
+
+  assert.equal(spamEval.isSpam, true);
+  assert.ok(spamEval.score <= 60, `Expected spam score <= 60, got ${spamEval.score}`);
+  assert.equal(genuineEval.isSpam, false);
+  assert.ok(
+    genuineEval.score >= 82 && genuineEval.score > spamEval.score + 25,
+    `Expected rich synopsis (${genuineEval.score}) to far outscore spam (${spamEval.score})`
+  );
+});
+
+test('Procedural dialogue composer produces varied contextual Arabic responses at 0 AI tokens', () => {
+  const acceptedEgypt = composeProceduralOfferReply({
+    worldMarket: 'egypt',
+    talentName: 'أحمد العوضي الخيالي',
+    projectTitle: 'ليلة القبض على السراب',
+    directorName: 'شريف علام',
+    synopsis: 'مطاردة بوليسية مشوقة وسط شوارع القاهرة القديمة قبل الفجر',
+    offeredSalary: 14_000_000,
+    expectedSalary: 12_000_000,
+    backendPoints: 5,
+    vipDinner: true,
+    accepted: true,
+    studioName: 'الذهب ستوديوز',
+  });
+
+  const rejectedSaudi = composeProceduralOfferReply({
+    worldMarket: 'saudi',
+    talentName: 'فهد النجدي',
+    projectTitle: 'رمال العلا',
+    directorName: 'سلطان العتيبي',
+    offeredSalary: 6_000_000,
+    expectedSalary: 15_000_000,
+    backendPoints: 0,
+    ego: 88,
+    accepted: false,
+    studioName: 'الدرعية ستوديوز',
+  });
+
+  assert.ok(acceptedEgypt.includes('14M ج.م'));
+  assert.ok(acceptedEgypt.includes('5%'));
+  assert.ok(rejectedSaudi.includes('6M ر.س'));
+  assert.notEqual(acceptedEgypt, rejectedSaudi);
+
+  const news = composeProceduralFilmingNews({
+    worldMarket: 'saudi',
+    projectTitle: 'رمال العلا',
+    studioName: 'الدرعية ستوديوز',
+    directorName: 'سلطان العتيبي',
+    leadName: 'فهد النجدي',
+    format: 'film',
+    gameDay: 14,
+  });
+  assert.ok(news.headline.includes('رمال العلا'));
+  assert.ok(news.hypeDelta >= 2);
+});
+
 
 
 

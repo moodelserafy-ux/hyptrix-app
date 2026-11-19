@@ -16,6 +16,7 @@ import {
   ActorItem,
   CrewItem,
 } from '@/lib/db-resolver';
+import { composeProceduralOfferReply } from '@/lib/procedural-dialogue';
 import {
   ROLE_BILLING_META,
   RoleBillingSize,
@@ -434,66 +435,91 @@ export function Stage3CrewCastCards() {
       hasSyndicateMediation && offeredSalary >= item.base_salary * 0.85
         ? true
         : deepEval.willAccept;
-    let reason = deepEval.detailedReason;
+    let reason = composeProceduralOfferReply({
+      worldMarket,
+      talentName: item.name,
+      talentType: isActor ? 'actor' : 'crew',
+      roleLabel: isActor
+        ? ROLE_BILLING_META[roleBillingSize]?.label
+        : SLOT_ARABIC_NAMES[(item as CrewItem).role as OfferRoleSlot],
+      projectTitle: draft.title,
+      directorName: selectedDirector?.name,
+      synopsis: draft.scriptSynopsis,
+      offeredSalary,
+      expectedSalary: deepEval.expectedMinimumSalary,
+      backendPoints,
+      vipDinner,
+      ego,
+      accepted: willAccept,
+      studioName,
+      seedSalt: gameDay,
+    });
     let waitDays = starTier === 'S' || ego >= 85 ? 3 : 2;
 
-    try {
-      const res = await fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'evaluate_talent_offer',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            talentName: item.name,
-            roleTitle: isActor
-              ? ROLE_BILLING_META[roleBillingSize]?.label
-              : SLOT_ARABIC_NAMES[(item as CrewItem).role as OfferRoleSlot],
-            isActor,
-            starTier,
-            overall: item.stats.overall,
-            ego,
-            baseSalary: item.base_salary,
-            offeredSalary,
-            expectedMinimumSalary: deepEval.expectedMinimumSalary,
-            backendPoints,
-            vipDinner,
-            roleBillingSize,
-            roleBillingLabel: ROLE_BILLING_META[roleBillingSize]?.label,
-            roleFitScore: deepEval.roleFitScore,
-            roleFitVerdict: deepEval.roleFitVerdict,
-            artisticFitScore: deepEval.artisticFitScore,
-            customRoleDescription: customRoleName,
-            projectTitle: draft.title,
-            scriptSynopsis: draft.scriptSynopsis,
-            genreName: primaryGenreObj?.name || 'دراما',
-            genreMasteryScore,
-            studioName,
-            studioReputation: reputation,
-            directorName: selectedDirector?.name || null,
-            directorOverall: selectedDirector?.stats.overall || null,
-            aiMemoryLog,
-            worldMarket,
-            uiLanguage,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (typeof data?.accepted === 'boolean') {
-        willAccept = data.accepted;
-      } else if (typeof data?.willAccept === 'boolean') {
-        willAccept = data.willAccept;
+    // Golden-Moments AI budget rule: Only invoke Groq for S-Tier Lead Actor offers;
+    // all other actors & crew use our 1,000+ variation procedural grammar engine (0 tokens!)
+    const isGoldenMomentSTierLead =
+      isActor && starTier === 'S' && slot === 'lead';
+
+    if (isGoldenMomentSTierLead) {
+      try {
+        const res = await fetch('/api/generate-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'evaluate_talent_offer',
+            groqKeyOverride: groqApiKeyClient,
+            preferredModel: preferredGroqModel,
+            payload: {
+              talentName: item.name,
+              roleTitle: ROLE_BILLING_META[roleBillingSize]?.label,
+              isActor,
+              starTier,
+              overall: item.stats.overall,
+              ego,
+              baseSalary: item.base_salary,
+              offeredSalary,
+              expectedMinimumSalary: deepEval.expectedMinimumSalary,
+              backendPoints,
+              vipDinner,
+              roleBillingSize,
+              roleBillingLabel: ROLE_BILLING_META[roleBillingSize]?.label,
+              roleFitScore: deepEval.roleFitScore,
+              roleFitVerdict: deepEval.roleFitVerdict,
+              artisticFitScore: deepEval.artisticFitScore,
+              customRoleDescription: customRoleName,
+              projectTitle: draft.title,
+              scriptSynopsis: draft.scriptSynopsis,
+              genreName: primaryGenreObj?.name || 'دراما',
+              genreMasteryScore,
+              studioName,
+              studioReputation: reputation,
+              directorName: selectedDirector?.name || null,
+              directorOverall: selectedDirector?.stats.overall || null,
+              aiMemoryLog,
+              worldMarket,
+              uiLanguage,
+            },
+          }),
+        });
+        const data = await res.json();
+        if (typeof data?.accepted === 'boolean') {
+          willAccept = data.accepted;
+        } else if (typeof data?.willAccept === 'boolean') {
+          willAccept = data.willAccept;
+        }
+        if (typeof data?.reason === 'string' && data.reason.trim()) {
+          reason = data.reason.trim();
+        }
+        if (data?.waitDays === 2 || data?.waitDays === 3) {
+          waitDays = data.waitDays;
+        }
+      } catch {
+        // Fallback already populated by composeProceduralOfferReply
+      } finally {
+        setIsEvaluatingOffer(false);
       }
-      if (typeof data?.reason === 'string' && data.reason.trim()) {
-        reason = data.reason.trim();
-      }
-      if (data?.waitDays === 2 || data?.waitDays === 3) {
-        waitDays = data.waitDays;
-      }
-    } catch {
-      // Fallback to deepEval values
-    } finally {
+    } else {
       setIsEvaluatingOffer(false);
     }
 

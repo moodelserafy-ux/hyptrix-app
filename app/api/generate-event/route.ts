@@ -11,8 +11,48 @@ import {
   WorldMarketId,
   UiLanguageId,
 } from '@/lib/market-profiles';
+import { composeProceduralFilmingNews } from '@/lib/procedural-dialogue';
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+
+// Sliding-window hourly rate limiter (25 Groq calls/hour per studioInstanceId or IP)
+const RATE_LIMIT_MAX_PER_HOUR = 25;
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const aiRateBuckets = new Map<string, number[]>();
+
+function consumeAiRateLimit(bucketKey: string): boolean {
+  const now = Date.now();
+  const prev = aiRateBuckets.get(bucketKey) || [];
+  const active = prev.filter((ts) => now - ts < RATE_LIMIT_WINDOW_MS);
+  if (active.length >= RATE_LIMIT_MAX_PER_HOUR) {
+    aiRateBuckets.set(bucketKey, active);
+    return false;
+  }
+  active.push(now);
+  aiRateBuckets.set(bucketKey, active);
+  if (aiRateBuckets.size > 4000) {
+    const firstKey = aiRateBuckets.keys().next().value;
+    if (firstKey) aiRateBuckets.delete(firstKey);
+  }
+  return true;
+}
+
+const TASK_MAX_TOKENS: Record<string, number> = {
+  evaluate_talent_offer: 220,
+  generate_character_role: 200,
+  generate_daily_news: 220,
+  evaluate_series_episode: 240,
+  evaluate_festival_ceremony: 240,
+  generate_script_idea: 280,
+  analyze_script_synopsis: 260,
+  generate_pr_media_response: 380,
+  mid_production_crises: 520,
+  evaluate_release: 760,
+  discover_ai_rising_star: 260,
+  discover_ai_emerging_studio: 280,
+  generate_ai_rival_releases: 360,
+  generate_ai_memory_news: 280,
+};
 
 function resolveMarketContext(payload: Record<string, unknown>) {
   const worldMarket = (
@@ -24,7 +64,10 @@ function resolveMarketContext(payload: Record<string, unknown>) {
   const profile = getMarketProfile(worldMarket);
   const ctx = getMarketAiContext(worldMarket);
   const langName = getLanguageDisplayName(uiLanguage);
-  const directive = `توجيه اللغة والثقافة والسوق الإلزامي: لغة الإخراج المطلوبة هي ${langName} (اكتب كافة القيم النصية في الـ JSON بهذه اللغة). عالم وأجواء وثقافة السوق هي: ${ctx.industryLabel} (${ctx.citiesAndLandmarks})، العملة المعتمدة: ${ctx.currencyLabel} (${profile.currencyFullName})، الأسلوب: ${ctx.dialectStyle}، وطبيعة شباك التذاكر والموسم: ${ctx.boxOfficeVibe}.`;
+  const marketTone =
+    worldMarket === 'saudi' ? 'Saudi/Gulf cinema tone' : 'Egyptian cinema tone';
+  // Ultra-concise English directive (~35 tokens instead of ~120 Arabic tokens!)
+  const directive = `Return strict JSON with ${langName} values in natural ${marketTone}. Market: ${ctx.industryLabel}, currency: ${ctx.currencyLabel}.`;
   return { worldMarket, uiLanguage, profile, ctx, langName, directive };
 }
 
@@ -33,45 +76,15 @@ export type GroqTaskModel =
   | 'openai/gpt-oss-120b';
 
 /**
- * Automatically selects the optimal Groq model order based on the specific game task:
- * - Complex World, Script Analysis, Rival Releases, Emerging Studios & Festival Galas -> openai/gpt-oss-120b first
- * - Default Base for all other tasks (Contract negotiations, Roles, Crises, PR responses, Daily News, Rising Stars) -> openai/gpt-oss-20b first
+ * Cost-optimized model router (~85-90% cost reduction):
+ * - ONLY `evaluate_release` (the climactic Golden Moment) uses `openai/gpt-oss-120b` first, falling back to `20b`.
+ * - ALL other tasks strictly use fast/cheap `openai/gpt-oss-20b` ONLY.
  */
-function getTaskOrderedGroqModels(
-  taskMode: string,
-  preferredModel?: string
-): GroqTaskModel[] {
-  const allTwo: GroqTaskModel[] = [
-    'openai/gpt-oss-20b',
-    'openai/gpt-oss-120b',
-  ];
-
-  const isComplexReasoningTask =
-    taskMode === 'evaluate_release' ||
-    taskMode === 'analyze_script_synopsis' ||
-    taskMode === 'generate_ai_rival_releases' ||
-    taskMode === 'discover_ai_emerging_studio' ||
-    taskMode === 'evaluate_festival_ceremony';
-
-  const taskPrimary: GroqTaskModel = isComplexReasoningTask
-    ? 'openai/gpt-oss-120b'
-    : 'openai/gpt-oss-20b';
-
-  const ordered: GroqTaskModel[] = [taskPrimary];
-  if (
-    preferredModel &&
-    (preferredModel === 'openai/gpt-oss-120b' ||
-      preferredModel === 'openai/gpt-oss-20b') &&
-    !ordered.includes(preferredModel)
-  ) {
-    ordered.push(preferredModel);
+function getTaskOrderedGroqModels(taskMode: string): GroqTaskModel[] {
+  if (taskMode === 'evaluate_release') {
+    return ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
   }
-  for (const m of allTwo) {
-    if (!ordered.includes(m)) {
-      ordered.push(m);
-    }
-  }
-  return ordered;
+  return ['openai/gpt-oss-20b'];
 }
 
 export async function POST(req: NextRequest) {
@@ -86,59 +99,81 @@ export async function POST(req: NextRequest) {
     };
     const taskTag = String(mode || 'evaluate_release');
 
+    // Enforce hourly rate limit per studioInstanceId or client IP; when exceeded,
+    // pass a sentinel key that skips Groq and returns the rich procedural fallback cleanly.
+    const clientIp =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') ||
+      'unknown';
+    const studioId =
+      typeof body?.studioInstanceId === 'string' && body.studioInstanceId.trim()
+        ? body.studioInstanceId.trim()
+        : typeof rawPayload?.studioName === 'string' && rawPayload.studioName.trim()
+        ? `${clientIp}_${rawPayload.studioName.trim().slice(0, 24)}`
+        : clientIp;
+
+    const rateAllowed = consumeAiRateLimit(studioId);
+    const effectiveKeyOverride = rateAllowed
+      ? groqKeyOverride
+      : '__RATE_LIMITED__';
+
     if (mode === 'generate_script_idea') {
-      return await handleGenerateScriptIdea(p, groqKeyOverride, taskTag);
+      return await handleGenerateScriptIdea(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'analyze_script_synopsis') {
-      return await handleAnalyzeScriptSynopsis(p, groqKeyOverride, taskTag);
+      return await handleAnalyzeScriptSynopsis(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'generate_character_role') {
-      return await handleGenerateCharacterRole(p, groqKeyOverride, taskTag);
+      return await handleGenerateCharacterRole(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'evaluate_talent_offer') {
-      return await handleEvaluateTalentOffer(p, groqKeyOverride, taskTag);
+      return await handleEvaluateTalentOffer(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'evaluate_series_episode') {
-      return await handleEvaluateSeriesEpisode(p, groqKeyOverride, taskTag);
+      return await handleEvaluateSeriesEpisode(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'generate_daily_news') {
-      return await handleGenerateDailyNews(p, groqKeyOverride, taskTag);
+      return await handleGenerateDailyNews(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'mid_production_crises') {
-      return await handleGenerateCrises(p, groqKeyOverride, taskTag);
+      return await handleGenerateCrises(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'evaluate_festival_ceremony') {
-      return await handleEvaluateFestivalCeremony(p, groqKeyOverride, taskTag);
+      return await handleEvaluateFestivalCeremony(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'discover_ai_rising_star') {
-      return await handleDiscoverAiRisingStar(p, groqKeyOverride, taskTag);
+      return await handleDiscoverAiRisingStar(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'discover_ai_emerging_studio') {
-      return await handleDiscoverAiEmergingStudio(p, groqKeyOverride, taskTag);
+      return await handleDiscoverAiEmergingStudio(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'generate_ai_rival_releases') {
-      return await handleGenerateAiRivalReleases(p, groqKeyOverride, taskTag);
+      return await handleGenerateAiRivalReleases(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'generate_ai_memory_news') {
-      return await handleGenerateAiMemoryNews(p, groqKeyOverride, taskTag);
+      return await handleGenerateAiMemoryNews(p, effectiveKeyOverride, taskTag);
     }
 
     if (mode === 'generate_pr_media_response') {
-      return await handleGeneratePrMediaResponse(p, groqKeyOverride, preferredModel);
+      return await handleGeneratePrMediaResponse(
+        p,
+        effectiveKeyOverride,
+        preferredModel || 'generate_pr_media_response'
+      );
     }
 
-    return await handleEvaluateRelease(p, groqKeyOverride, taskTag);
+    return await handleEvaluateRelease(p, effectiveKeyOverride, taskTag);
   } catch (err) {
     console.error('Narrative Engine Error:', err);
     return NextResponse.json(buildGroundedReleaseEvaluation({}), { status: 200 });
@@ -188,9 +223,14 @@ async function callGroqJson(
   systemPrompt: string,
   userPrompt: string,
   groqKeyOverride?: string,
-  taskModeOrPreferred?: string
+  taskModeOrPreferred?: string,
+  maxTokensOverride?: number
 ): Promise<{ data: Record<string, unknown>; modelUsed: string } | null> {
-  const strictJsonSystemPrompt = `${systemPrompt}\n\nتنبيه تقني صارم جداً: يجب أن يكون ردك عبارة عن كائن JSON صالح فقط يبدأ بـ { وينتهي بـ } بدون أي نص إضافي خارج الـ JSON، وتجنب تكرار أي جمل نمطية.`;
+  if (groqKeyOverride === '__RATE_LIMITED__') {
+    return null;
+  }
+
+  const strictJsonSystemPrompt = `${systemPrompt}\nOutput ONLY valid JSON object starting with { and ending with }. No prose, no markdown.`;
 
   const groqKey = (
     groqKeyOverride ||
@@ -200,29 +240,46 @@ async function callGroqJson(
   ).trim();
 
   if (groqKey && groqKey !== 'MY_GROQ_API_KEY') {
-    const orderedModels = getTaskOrderedGroqModels(
-      taskModeOrPreferred || 'evaluate_release',
-      taskModeOrPreferred
-    );
+    const taskKey = taskModeOrPreferred || 'evaluate_release';
+    const orderedModels = getTaskOrderedGroqModels(taskKey);
+    const maxTokens =
+      maxTokensOverride || TASK_MAX_TOKENS[taskKey] || 360;
 
     for (const model of orderedModels) {
+      const attemptBody = (includeReasoningEffort: boolean) =>
+        JSON.stringify({
+          model,
+          temperature: 0.78,
+          max_completion_tokens: maxTokens,
+          response_format: { type: 'json_object' },
+          ...(includeReasoningEffort ? { reasoning_effort: 'low' } : {}),
+          messages: [
+            { role: 'system', content: strictJsonSystemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        });
+
       try {
-        const response = await fetch(GROQ_ENDPOINT, {
+        let response = await fetch(GROQ_ENDPOINT, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${groqKey}`,
           },
-          body: JSON.stringify({
-            model,
-            temperature: 0.84,
-            max_completion_tokens: 1800,
-            messages: [
-              { role: 'system', content: strictJsonSystemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-          }),
+          body: attemptBody(true),
         });
+
+        // Graceful retry without reasoning_effort if endpoint rejects the optional field
+        if (response.status === 400) {
+          response = await fetch(GROQ_ENDPOINT, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${groqKey}`,
+            },
+            body: attemptBody(false),
+          });
+        }
 
         if (response.ok) {
           const resJson = await response.json();
@@ -233,7 +290,7 @@ async function callGroqJson(
           }
         }
       } catch {
-        // Automatically switch to the next Groq model in the task chain
+        // Switch to next model or procedural fallback
       }
     }
   }
@@ -804,38 +861,68 @@ async function handleGenerateDailyNews(
 }
 
 /**
- * Stage 4: Generate 3 Mid-Production Filming Crises
+ * Stage 4 (Merged Golden Moment #1): Generate 3 Mid-Production Filming Crises + 1 Initial Press News in ONE JSON call!
  */
 async function handleGenerateCrises(
   payload: Record<string, unknown>,
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
-  const { ctx, directive } = resolveMarketContext(payload);
+  const { worldMarket, ctx, directive } = resolveMarketContext(payload);
   const title = String(payload?.title || 'العمل الفني الجديد');
   const synopsis = String(payload?.synopsis || '');
+  const directorName = String(payload?.directorName || 'المخرج');
   const leadName = String(payload?.leadActorName || payload?.leadName || 'بطل العمل');
   const antagonistName = String(payload?.antagonistName || 'الخصم الدرامي');
+  const studioName = String(payload?.studioName || 'الاستوديو');
   const ageRating = String(payload?.ageRating || '+12');
   const hasEgoClash = Boolean(payload?.hasEgoClash);
 
   const { openingClause, conflictClause } = extractSynopsisHighlights(synopsis, title);
+  const proceduralNews = composeProceduralFilmingNews({
+    worldMarket,
+    projectTitle: title,
+    studioName,
+    directorName,
+    leadName,
+    synopsis,
+    format: payload?.format === 'series' ? 'series' : 'film',
+  });
 
   const systemPrompt = `${directive}
-أنت محرك مواقف وأزمات إنتاجية في عالم ${ctx.industryLabel}.
-ولّد 3 مواقف إنتاجية واقعية تحدث أثناء تصوير عمل "${title}" الذي تدور قصته حول: "${synopsis}".
-البطل: "${leadName}"، الخصم: "${antagonistName}"، التصنيف العمري: "${ageRating}"، توتر بين النجوم: ${hasEgoClash}.
-يجب أن تكون المواقف مرتبطة بأحداث سيناريو اللاعب ("${openingClause}" و "${conflictClause}") ومكتوبة بـ ${ctx.dialectStyle} وباستخدام عملة (${ctx.currencyLabel}).
-أرجع JSON فقط يحتوي على مصفوفة crises من 3 عناصر، كل عنصر يحتوي على:
-id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB (label, cost, hypeDelta, qualityDelta).`;
+Generate 3 concise on-set production crises AND 1 filming press news item for "${title}" (lead: ${leadName}, antagonist: ${antagonistName}, director: ${directorName}, rating: ${ageRating}, egoClash: ${hasEgoClash}, plot: "${synopsis.slice(0, 220)}").
+JSON keys:
+- crises: array of 3 objects { id, title, description (1-2 sentences), optionA: { label, cost (number), hypeDelta, qualityDelta }, optionB: { label, cost (number), hypeDelta, qualityDelta } }
+- pressNews: { headline, detail (1-2 sentences), impactType: "positive"|"drama"|"rival", hypeDelta (2..6) }`;
 
-  const userPrompt = `ولّد 3 مواقف إنتاجية أثناء تصوير «${title}» بصيغة JSON الآن.`;
+  const userPrompt = `Generate 3 crises + 1 filming pressNews for "${title}" now.`;
 
-  const groqRes = await callGroqJson(systemPrompt, userPrompt, groqKeyOverride, preferredModel);
+  const groqRes = await callGroqJson(
+    systemPrompt,
+    userPrompt,
+    groqKeyOverride,
+    preferredModel || 'mid_production_crises',
+    520
+  );
   if (groqRes && Array.isArray(groqRes.data.crises) && groqRes.data.crises.length >= 2) {
+    const rawNews = groqRes.data.pressNews as Record<string, unknown> | undefined;
+    const pressNews =
+      rawNews && typeof rawNews.headline === 'string' && typeof rawNews.detail === 'string'
+        ? {
+            headline: rawNews.headline,
+            detail: rawNews.detail,
+            impactType:
+              rawNews.impactType === 'drama' || rawNews.impactType === 'rival'
+                ? (rawNews.impactType as 'drama' | 'rival')
+                : ('positive' as const),
+            hypeDelta: Math.min(8, Math.max(-4, Number(rawNews.hypeDelta ?? 4))),
+          }
+        : proceduralNews;
+
     return NextResponse.json({
       source: 'إدارة الإنتاج',
       crises: groqRes.data.crises,
+      pressNews,
     });
   }
 
@@ -897,7 +984,11 @@ id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB 
     },
   ];
 
-  return NextResponse.json({ source: 'إدارة الإنتاج', crises: fallbackCrises });
+  return NextResponse.json({
+    source: 'إدارة الإنتاج',
+    crises: fallbackCrises,
+    pressNews: proceduralNews,
+  });
 }
 
 /**

@@ -247,7 +247,7 @@ export default function HomePage() {
     return () => clearInterval(timer);
   }, [studioCreated, isClockPausedByOverlay, advanceGameDay]);
 
-  // Background AI World Evolution
+  // Background World Evolution — pulls from shared 12-hour /api/world-pool (0 Groq tokens per player!)
   useEffect(() => {
     if (
       !studioCreated ||
@@ -259,40 +259,19 @@ export default function HomePage() {
       return;
     }
 
+    const seed =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('hyptrix_studio_instance_id') || studioName || 'studio'
+        : studioName || 'studio';
+
+    const buildPoolUrl = (type: string, extra = '') =>
+      `/api/world-pool?market=${encodeURIComponent(worldMarket)}&type=${encodeURIComponent(type)}&seed=${encodeURIComponent(seed)}&gameDay=${gameDay}&currentYear=${currentYear}&studioName=${encodeURIComponent(studioName)}${extra}`;
+
     if (gameDay > 6 && gameDay % 16 === 0) {
       lastAiHandledDayRef.current = gameDay;
       aiTickBusyRef.current = true;
-      const availableRivalStars = liveActors
-        .filter(
-          (a) =>
-            !draft.leadActorIds.includes(a.id) &&
-            a.id !== draft.antagonistId &&
-            (a.tier === 'S' || a.tier === 'A')
-        )
-        .slice(0, 14)
-        .map((a) => a.name);
-
-      fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'generate_ai_rival_releases',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            worldMarket,
-            uiLanguage,
-            studioName,
-            ceoName,
-            gameDay,
-            currentYear,
-            format: gameDay % 32 === 0 ? 'series' : 'film',
-            competitorStudios: allCompetitors.map((c) => c.name),
-            availableStars: availableRivalStars,
-            aiMemoryLog,
-          },
-        }),
-      })
+      const fmt = gameDay % 32 === 0 ? 'series' : 'film';
+      fetch(buildPoolUrl('rival_releases', `&format=${fmt}`))
         .then((r) => r.json())
         .then((data) => {
           if (Array.isArray(data?.rivals) && data.rivals.length > 0) {
@@ -306,25 +285,7 @@ export default function HomePage() {
     } else if (activeScreen === 'STUDIO_HUB' && gameDay > 10 && gameDay % 28 === 0) {
       lastAiHandledDayRef.current = gameDay;
       aiTickBusyRef.current = true;
-      fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'discover_ai_rising_star',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            worldMarket,
-            uiLanguage,
-            existingNames: liveActors.map((a) => a.name),
-            studioName,
-            ceoName,
-            gameDay,
-            currentYear,
-            aiMemoryLog,
-          },
-        }),
-      })
+      fetch(buildPoolUrl('rising_star'))
         .then((r) => r.json())
         .then((data) => {
           if (data?.actor && data?.headline) {
@@ -338,25 +299,7 @@ export default function HomePage() {
     } else if (activeScreen === 'STUDIO_HUB' && gameDay > 12 && gameDay % 34 === 0) {
       lastAiHandledDayRef.current = gameDay;
       aiTickBusyRef.current = true;
-      fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'discover_ai_emerging_studio',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            worldMarket,
-            uiLanguage,
-            studioName,
-            ceoName,
-            currentYear,
-            gameDay,
-            existingStudios: allCompetitors.map((c) => c.name),
-            aiMemoryLog,
-          },
-        }),
-      })
+      fetch(buildPoolUrl('emerging_studio'))
         .then((r) => r.json())
         .then((data) => {
           if (data?.studio && data?.headline) {
@@ -370,26 +313,7 @@ export default function HomePage() {
     } else if (activeScreen === 'STUDIO_HUB' && gameDay > 12 && gameDay % 22 === 0) {
       lastAiHandledDayRef.current = gameDay;
       aiTickBusyRef.current = true;
-      fetch('/api/generate-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'generate_ai_memory_news',
-          groqKeyOverride: groqApiKeyClient,
-          preferredModel: preferredGroqModel,
-          payload: {
-            worldMarket,
-            uiLanguage,
-            studioName,
-            ceoName,
-            gameDay,
-            currentYear,
-            marketValue,
-            cash,
-            aiMemoryLog,
-          },
-        }),
-      })
+      fetch(buildPoolUrl('market_news'))
         .then((r) => r.json())
         .then((data) => {
           if (data?.headline && data?.detail) {
@@ -405,22 +329,11 @@ export default function HomePage() {
     gameDay,
     studioCreated,
     worldMarket,
-    uiLanguage,
     isPageActive,
     isClockPausedByOverlay,
     activeScreen,
-    liveActors,
-    allCompetitors,
-    draft.leadActorIds,
-    draft.antagonistId,
     studioName,
-    ceoName,
     currentYear,
-    marketValue,
-    cash,
-    aiMemoryLog,
-    groqApiKeyClient,
-    preferredGroqModel,
     addAiDiscoveredActor,
     addAiEmergingStudio,
     addAiRivalReleases,

@@ -154,43 +154,6 @@ export function Stage2ProjectSetup() {
     }
   };
 
-  // Silent background AI evaluation of the player's written script (never shown to player)
-  const triggerSilentAiScriptEvaluation = () => {
-    const primaryGenreObj = GENRES.find((g) => g.id === draft.primaryGenre);
-    fetch('/api/generate-event', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'analyze_script_synopsis',
-        groqKeyOverride: groqApiKeyClient,
-        preferredModel: preferredGroqModel,
-        payload: {
-          title: draft.title,
-          synopsis: draft.scriptSynopsis,
-          format: draft.format,
-          primaryGenre: draft.primaryGenre,
-          primaryGenreName: primaryGenreObj?.name || 'دراما',
-          worldMarket,
-          uiLanguage,
-        },
-      }),
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (typeof data?.score === 'number') {
-          updateDraft({
-            aiScriptAnalysis: {
-              score: data.score,
-              verdict: String(data.verdict || ''),
-              castingAdvice: String(data.castingAdvice || ''),
-              modelUsed: preferredGroqModel,
-            },
-          });
-        }
-      })
-      .catch(() => {});
-  };
-
   const handleSelectGenre = (genreId: GenreId) => {
     if (genrePickMode === 'primary') {
       updateDraft({
@@ -233,7 +196,6 @@ export function Stage2ProjectSetup() {
         showToast('يرجى كتابة ملخص القصة والحبكة الدرامية (5 كلمات على الأقل)', 'warning');
         return;
       }
-      triggerSilentAiScriptEvaluation();
       setActiveScreen('CREW_CAST_CARDS');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }

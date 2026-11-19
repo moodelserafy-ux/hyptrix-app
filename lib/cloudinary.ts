@@ -1,14 +1,25 @@
 /**
- * Cloudinary CDN Helper for Hyptrix Studio Tycoon
- * Offloads all actor portraits, crew avatars, film posters, and studio asset images
- * to Cloudinary CDN with automatic WebP/AVIF compression (`f_auto,q_auto`) so
- * Supabase database/storage bandwidth is never consumed by image traffic.
+ * Cloudinary CDN Helper for Neelyo Cinema Tycoon
+ *
+ * Pre-compresses user-uploaded images on the client via HTML5 <canvas> into
+ * 320x320 square WebP (~20-40 KB) BEFORE uploading to Cloudinary, and returns
+ * the raw `secure_url` directly WITHOUT injecting transformation strings
+ * (`f_auto,q_auto,g_face`) so it consumes 0 Cloudinary Transformation Credits!
  */
 
 const CLOUDINARY_CLOUD_NAME =
   process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
 const CLOUDINARY_UPLOAD_PRESET =
   process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'hyptrix_unsigned';
+
+const ALLOWED_IMAGE_MIMES = new Set([
+  'image/webp',
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+]);
+
+const MAX_COMPRESSED_BYTES = 500 * 1024; // 500 KB strict safety ceiling
 
 export function isCloudinaryConfigured(): boolean {
   return Boolean(
@@ -19,56 +30,150 @@ export function isCloudinaryConfigured(): boolean {
 }
 
 /**
- * Resolves either a Cloudinary `public_id` (e.g. `hyptrix/actors/actor_12`)
- * or a full Cloudinary/external URL into an optimized CDN URL with `f_auto,q_auto`.
+ * Resolves a stored image URL or Cloudinary public_id without injecting
+ * paid dynamic transformation parameters.
  */
 export function getOptimizedCloudinaryUrl(
-  sourceOrPublicId?: string | null,
-  options: {
-    width?: number;
-    height?: number;
-    crop?: 'fill' | 'thumb' | 'scale';
-    gravity?: 'face' | 'auto' | 'center';
-  } = {}
+  sourceOrPublicId?: string | null
 ): string | null {
   if (!sourceOrPublicId || !sourceOrPublicId.trim()) return null;
   const trimmed = sourceOrPublicId.trim();
 
-  const w = options.width || 320;
-  const h = options.height || 320;
-  const c = options.crop || 'fill';
-  const g = options.gravity || 'face';
-  const transforms = `f_auto,q_auto,c_${c},g_${g},w_${w},h_${h}`;
-
-  // If it's already a full res.cloudinary.com URL, inject optimization transforms if missing
-  if (trimmed.startsWith('https://res.cloudinary.com/')) {
-    if (trimmed.includes('/image/upload/') && !trimmed.includes('f_auto')) {
-      return trimmed.replace('/image/upload/', `/image/upload/${transforms}/`);
-    }
+  if (
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('data:image/')
+  ) {
     return trimmed;
   }
 
-  // If it's another full HTTPS URL, return as-is
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed;
-  }
-
-  // Otherwise treat it as a Cloudinary public_id if Cloud Name is configured
   if (isCloudinaryConfigured()) {
     const cleanId = trimmed.replace(/^\/+/, '');
-    return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/${transforms}/${cleanId}`;
+    return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/${cleanId}`;
   }
 
   return null;
 }
 
 /**
- * Uploads an image file directly from the browser to Cloudinary using an unsigned preset,
- * returning the optimized CDN URL without touching Supabase storage.
+ * Compresses any uploaded JPG/PNG/WebP image client-side into a crisp
+ * 320x320 center-cropped WebP (~20-40 KB) for instant local preview and
+ * zero-transformation-credit Cloudinary upload.
+ */
+export async function compressImageToWebp320(
+  file: File,
+  size = 320,
+  quality = 0.82
+): Promise<{
+  ok: boolean;
+  blob?: Blob;
+  dataUrl?: string;
+  sizeBytes?: number;
+  error?: string;
+}> {
+  if (!file || !ALLOWED_IMAGE_MIMES.has(file.type.toLowerCase())) {
+    return {
+      ok: false,
+      error: 'يرجى اختيار صورة بصيغة WebP أو JPG أو PNG فقط.',
+    };
+  }
+
+  if (file.size > 12 * 1024 * 1024) {
+    return {
+      ok: false,
+      error: 'حجم الصورة الأصلي كبير جداً (الحد الأقصى 12 ميجابايت).',
+    };
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () =>
+      resolve({ ok: false, error: 'تعذر قراءة ملف الصورة المختار.' });
+
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () =>
+        resolve({ ok: false, error: 'ملف الصورة غير صالح أو تالف.' });
+
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve({ ok: false, error: 'تعذر تجهيز معالج الصور في المتصفح.' });
+            return;
+          }
+
+          // Center-crop square focusing slightly toward upper third for portraits
+          const minSide = Math.min(img.width, img.height);
+          const sx = Math.max(0, Math.floor((img.width - minSide) / 2));
+          const sy = Math.max(0, Math.floor((img.height - minSide) * 0.25));
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+
+          const tryEncode = (mime: 'image/webp' | 'image/jpeg', q: number) => {
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  if (mime === 'image/webp') {
+                    tryEncode('image/jpeg', 0.82);
+                    return;
+                  }
+                  resolve({ ok: false, error: 'تعذر ضغط الصورة قبل الحفظ.' });
+                  return;
+                }
+
+                if (blob.size > MAX_COMPRESSED_BYTES && q > 0.55) {
+                  tryEncode(mime, Number((q - 0.14).toFixed(2)));
+                  return;
+                }
+
+                if (blob.size > MAX_COMPRESSED_BYTES) {
+                  resolve({
+                    ok: false,
+                    error: 'حجم الصورة بعد الضغط لا يزال يتجاوز 500 كيلوبايت.',
+                  });
+                  return;
+                }
+
+                const dataUrl = canvas.toDataURL(mime, q);
+                resolve({
+                  ok: true,
+                  blob,
+                  dataUrl,
+                  sizeBytes: blob.size,
+                });
+              },
+              mime,
+              q
+            );
+          };
+
+          tryEncode('image/webp', quality);
+        } catch {
+          resolve({ ok: false, error: 'حدث خطأ أثناء ضغط الصورة.' });
+        }
+      };
+
+      img.src = String(reader.result || '');
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Uploads an already-compressed 320x320 WebP Blob (or File, auto-compressed)
+ * directly to Cloudinary using an unsigned preset and returns the raw
+ * `secure_url` directly (0 Transformation Credits).
  */
 export async function uploadImageToCloudinary(
-  file: File,
-  folder = 'hyptrix/actors'
+  fileOrBlob: File | Blob,
+  folder = 'neelyo/stars'
 ): Promise<{ ok: boolean; secureUrl?: string; publicId?: string; error?: string }> {
   if (!isCloudinaryConfigured()) {
     return {
@@ -78,9 +183,24 @@ export async function uploadImageToCloudinary(
     };
   }
 
+  let uploadPayload: Blob = fileOrBlob;
+  if (fileOrBlob instanceof File) {
+    const compressed = await compressImageToWebp320(fileOrBlob);
+    if (!compressed.ok || !compressed.blob) {
+      return { ok: false, error: compressed.error || 'تعذر ضغط الصورة.' };
+    }
+    uploadPayload = compressed.blob;
+  } else if (fileOrBlob.size > MAX_COMPRESSED_BYTES) {
+    return {
+      ok: false,
+      error: 'حجم الصورة يتجاوز الحد المسموح (500 كيلوبايت).',
+    };
+  }
+
   try {
     const formData = new FormData();
-    formData.append('file', file);
+    const ext = uploadPayload.type === 'image/jpeg' ? 'jpg' : 'webp';
+    formData.append('file', uploadPayload, `neelyo_${Date.now()}.${ext}`);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     formData.append('folder', folder);
 
@@ -97,13 +217,13 @@ export async function uploadImageToCloudinary(
     }
 
     const data = await response.json();
-    const optimizedUrl =
-      getOptimizedCloudinaryUrl(data.public_id || data.secure_url) ||
-      data.secure_url;
+    // Return raw secure_url directly WITHOUT adding transformation segments!
+    const rawSecureUrl =
+      typeof data.secure_url === 'string' ? data.secure_url : undefined;
 
     return {
-      ok: true,
-      secureUrl: optimizedUrl,
+      ok: Boolean(rawSecureUrl),
+      secureUrl: rawSecureUrl,
       publicId: data.public_id,
     };
   } catch {
