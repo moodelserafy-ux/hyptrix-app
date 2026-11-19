@@ -112,6 +112,7 @@ export function Stage5ReleaseSimulation() {
     completeProjectRelease,
     advanceReleaseTrackingDay,
     triggerElectronicTrollsCampaign,
+    claimInternationalDistributionAdBonus,
     customDbPatch,
     aiGeneratedActors,
     actorDynamicState,
@@ -207,7 +208,41 @@ export function Stage5ReleaseSimulation() {
         ? draft.scriptSynopsis.trim().split(/\s+/).length
         : 18;
 
-      // 1. Evaluate release via AI first (analyzing script synopsis, decisions, cast, and rival studios)
+      // 1. Pre-compute authentic engine metrics (technical quality vs decoupled commercial appeal)
+      const prelimFin = calculateFinancialsAndQuality({
+        format: draft.format,
+        episodes: draft.episodes,
+        seriesSeason: draft.seriesSeason,
+        filmSeason: draft.filmSeason,
+        primaryGenre: draft.primaryGenre,
+        secondaryGenre: draft.secondaryGenre,
+        ageRating: draft.ageRating,
+        director,
+        writers: [],
+        dop,
+        composer,
+        vfx,
+        leads,
+        antagonist,
+        supporting,
+        cameos,
+        budgetAllocation: draft.budgetAllocation,
+        marketingBudget: draft.marketingBudget,
+        screensCount: draft.screensCount,
+        platformDealAmount:
+          draft.platformDealAmount +
+          (isSeries ? draft.tvChannelDealAmount : 0),
+        founderPerk,
+        hypeScore: draft.hypeScore,
+        qualityModifier: draft.qualityModifier,
+        aiBoxOfficeMultiplier: 1.0,
+        marketRegion: currentRegion,
+        selectedDistributionMarkets: draft.selectedDistributionMarkets,
+        scriptWordCount,
+        previousGenres: releasedProjects.slice(0, 3).map((p) => p.primaryGenre),
+      });
+
+      // 2. Evaluate release via AI using the REAL engine quality & commercial appeal
       const allCompetitors = [...db.competitor_studios, ...emergingCompetitors];
       const availableRivalStars = liveActors
         .filter(
@@ -234,6 +269,7 @@ export function Stage5ReleaseSimulation() {
               format: draft.format,
               episodes: draft.episodes,
               genre: primaryGenreObj?.name || 'دراما',
+              primaryGenre: primaryGenreObj?.name || 'دراما',
               directorName: director.name,
               leadName: leads.map((a) => a.name).join(' و'),
               leadActors: leads.map((a) => a.name),
@@ -241,6 +277,10 @@ export function Stage5ReleaseSimulation() {
               studioName,
               ceoName,
               hypeScore: draft.hypeScore,
+              technicalQuality: prelimFin.technicalQuality,
+              commercialAppeal: prelimFin.commercialAppeal,
+              expectedCriticScore: prelimFin.expectedCriticScore,
+              expectedAudienceScore: prelimFin.expectedAudienceScore,
               competitorStudios: allCompetitors.slice(0, 6).map((s) => ({
                 name: s.name,
                 specialty: s.specialty,
@@ -260,10 +300,10 @@ export function Stage5ReleaseSimulation() {
           ? aiEval.box_office_multiplier
           : typeof aiEval?.aiBoxOfficeMultiplier === 'number'
           ? aiEval.aiBoxOfficeMultiplier
-          : 1.05;
-      const aiMult = Math.max(0.65, Math.min(1.65, rawAiMult));
+          : 1.02;
+      const aiMult = Math.max(0.55, Math.min(1.4, rawAiMult));
 
-      // 2. Deep simulation modulated by AI multiplier
+      // 3. Final financial simulation modulated by AI market response
       const fin = calculateFinancialsAndQuality({
         format: draft.format,
         episodes: draft.episodes,
@@ -335,77 +375,104 @@ export function Stage5ReleaseSimulation() {
         allCompetitors,
         liveActors,
         [...draft.leadActorIds, ...(draft.antagonistId ? [draft.antagonistId] : [])],
-        1.05,
+        1.02,
         currentYear + releasedProjects.length,
         draft.format
       );
 
       const rawRivals =
         Array.isArray(aiEval?.rival_releases) && aiEval.rival_releases.length >= 2
-          ? aiEval.rival_releases.map((r: any, idx: number) => ({
-              id: `ai_riv_${Date.now()}_${idx}`,
-              studioName: String(r.studioName || fallbackRivals[idx % fallbackRivals.length]?.studioName || 'استوديو منافس'),
-              title: String(r.title || fallbackRivals[idx % fallbackRivals.length]?.title || 'عمل منافس'),
-              genre: String(r.genre || primaryGenreObj?.name || 'دراما'),
-              leadStarName: String(r.leadStarName || fallbackRivals[idx % fallbackRivals.length]?.leadStarName || 'نجم صف أول'),
-              boxOfficeRevenue: Math.max(75_000_000, Number(r.boxOfficeRevenue) || 125_000_000),
-              criticScore: Number(Math.min(9.6, Math.max(6.8, Number(r.criticScore) || 8.1)).toFixed(1)),
-              status: r.status === 'delayed' ? ('delayed' as const) : ('released' as const),
-              delayReason: r.delayReason ? String(r.delayReason) : undefined,
-            }))
+          ? aiEval.rival_releases.map((r: any, idx: number) => {
+              const fb = fallbackRivals[idx % fallbackRivals.length];
+              const rawCrit = Number(r.criticScore ?? fb?.criticScore ?? 7.0);
+              const normCrit = rawCrit > 10 ? rawCrit / 10 : rawCrit;
+              const rawAud = Number(r.audienceScore ?? fb?.audienceScore ?? normCrit + 0.3);
+              const normAud = rawAud > 10 ? rawAud / 10 : rawAud;
+              const traj =
+                r.trajectory === 'front_loaded' ||
+                r.trajectory === 'sleeper' ||
+                r.trajectory === 'steady'
+                  ? r.trajectory
+                  : fb?.trajectory || 'steady';
+              return {
+                id: `ai_riv_${Date.now()}_${idx}`,
+                studioName: String(r.studioName || fb?.studioName || 'استوديو منافس'),
+                title: String(r.title || fb?.title || 'عمل منافس'),
+                genre: String(r.genre || primaryGenreObj?.name || 'دراما'),
+                leadStarName: String(r.leadStarName || fb?.leadStarName || 'نجم صف أول'),
+                boxOfficeRevenue: Math.max(
+                  24_000_000,
+                  Math.min(175_000_000, Number(r.boxOfficeRevenue) || fb?.boxOfficeRevenue || 76_000_000)
+                ),
+                criticScore: Number(Math.min(9.5, Math.max(4.2, normCrit)).toFixed(1)),
+                audienceScore: Number(Math.min(9.6, Math.max(4.4, normAud)).toFixed(1)),
+                trajectory: traj,
+                status: r.status === 'delayed' ? ('delayed' as const) : ('released' as const),
+                delayReason: r.delayReason ? String(r.delayReason) : undefined,
+              };
+            })
           : fallbackRivals;
 
-      // Progressive Day 1 Opening: start at ~22% of target full-run revenue and grow day-by-day!
-      const openingRatio = 0.22;
+      // Trajectory-based Day 1 Opening:
+      // front_loaded commercial movies open hotter (~30%) then fade; sleepers open softer (~17%) then surge past rivals!
+      const getOpeningShare = (traj?: string) =>
+        traj === 'front_loaded' ? 0.3 : traj === 'sleeper' ? 0.17 : 0.23;
+
       const rivalReleases = rawRivals.map((r: any) => {
-        const targetRev = Math.max(75_000_000, r.boxOfficeRevenue);
+        const targetRev = Math.max(24_000_000, r.boxOfficeRevenue);
+        const rOpenShare = getOpeningShare(r.trajectory);
         const day1Rev =
-          r.status === 'delayed' ? 0 : Math.max(12_500_000, Math.round(targetRev * (openingRatio + ((r.criticScore - 6.5) * 0.015))));
+          r.status === 'delayed'
+            ? 0
+            : Math.max(5_500_000, Math.round(targetRev * rOpenShare));
         return {
           ...r,
           boxOfficeRevenue: day1Rev,
           targetBoxOfficeRevenue: targetRev,
+          lastDailyDelta: day1Rev,
         };
       });
 
-      const baseCritic10 = Math.min(9.8, Math.max(3.5, fin.technicalQuality / 10));
-      const aiCritic10 =
-        typeof aiEval?.critic_score === 'number'
-          ? Math.min(9.8, Math.max(3.5, aiEval.critic_score / 10))
-          : baseCritic10;
-      const criticScore10 = Number((baseCritic10 * 0.45 + aiCritic10 * 0.55).toFixed(1));
+      // Normalize 10-point scores accurately (NEVER divide an already 10-point score by 10!)
+      const normalizeScore10 = (raw: unknown, fallback: number, min: number, max: number) => {
+        if (typeof raw !== 'number' || Number.isNaN(raw)) return fallback;
+        const scaled = raw > 10 ? raw / 10 : raw;
+        return Math.min(max, Math.max(min, scaled));
+      };
 
-      const baseAudience10 = Math.min(
-        9.9,
-        Math.max(4.0, (fin.commercialAppeal * 0.55 + fin.technicalQuality * 0.45) / 10)
-      );
-      const aiAudience10 =
-        typeof aiEval?.audience_score === 'number'
-          ? Math.min(9.9, Math.max(4.0, aiEval.audience_score / 10))
-          : baseAudience10;
-      const audienceScore10 = Number((baseAudience10 * 0.45 + aiAudience10 * 0.55).toFixed(1));
+      const baseCritic10 = fin.expectedCriticScore;
+      const aiCritic10 = normalizeScore10(aiEval?.critic_score, baseCritic10, 2.4, 9.7);
+      const criticScore10 = Number((baseCritic10 * 0.55 + aiCritic10 * 0.45).toFixed(1));
+
+      const baseAudience10 = fin.expectedAudienceScore;
+      const aiAudience10 = normalizeScore10(aiEval?.audience_score, baseAudience10, 2.8, 9.8);
+      const audienceScore10 = Number((baseAudience10 * 0.52 + aiAudience10 * 0.48).toFixed(1));
 
       const targetGrossRevenue = fin.totalGrossRevenue;
       const targetBoxOfficeRevenue = fin.totalBoxOfficeRevenue;
       const targetStreamingRevenue = fin.totalStreamingRevenue;
+      const playerOpenShare = getOpeningShare(fin.trajectory);
 
       const day1BoxOfficeRevenue = Math.max(
-        2_500_000,
-        Math.round(targetBoxOfficeRevenue * openingRatio)
+        2_200_000,
+        Math.round(targetBoxOfficeRevenue * playerOpenShare)
       );
       const day1StreamingRevenue = Math.max(
-        1_500_000,
-        Math.round(targetStreamingRevenue * openingRatio)
+        1_200_000,
+        Math.round(targetStreamingRevenue * playerOpenShare)
       );
       const day1GrossRevenue = day1BoxOfficeRevenue + day1StreamingRevenue;
 
+      const activeDay1Rivals = rivalReleases.filter((r: any) => r.status !== 'delayed');
       const allRevs = [
         day1GrossRevenue,
-        ...rivalReleases
-          .filter((r: any) => r.status !== 'delayed')
-          .map((r: any) => r.boxOfficeRevenue),
+        ...activeDay1Rivals.map((r: any) => r.boxOfficeRevenue),
       ].sort((a, b) => b - a);
       const boxOfficeRank = Math.max(1, allRevs.indexOf(day1GrossRevenue) + 1);
+      const topDay1Rival =
+        activeDay1Rivals.length > 0
+          ? Math.max(...activeDay1Rivals.map((r: any) => r.boxOfficeRevenue))
+          : 0;
 
       const targetViewershipMillions = isSeries
         ? Number(
@@ -420,7 +487,7 @@ export function Stage5ReleaseSimulation() {
 
       const viewershipMillions =
         isSeries && targetViewershipMillions
-          ? Number(Math.max(0.9, targetViewershipMillions * openingRatio).toFixed(1))
+          ? Number(Math.max(0.9, targetViewershipMillions * playerOpenShare).toFixed(1))
           : undefined;
 
       const record: ReleasedProjectRecord = {
@@ -469,6 +536,16 @@ export function Stage5ReleaseSimulation() {
         criticScore: criticScore10,
         audienceScore: audienceScore10,
         boxOfficeRank,
+        previousBoxOfficeRank: boxOfficeRank,
+        lastDailyRevenueDelta: day1GrossRevenue,
+        trajectory: fin.trajectory,
+        revenueHistory: [
+          {
+            day: 1,
+            playerTotal: day1GrossRevenue,
+            topRivalTotal: topDay1Rival,
+          },
+        ],
         reviews: Array.isArray(aiEval?.reviews)
           ? aiEval.reviews.map((rev: any) => ({
               criticName: String(rev.criticName || 'ناقد سينمائي'),
@@ -681,23 +758,28 @@ export function Stage5ReleaseSimulation() {
   };
 
   return (
-    <div className="space-y-4 pb-28">
-      {/* Clean Single-Line Current Activity Header (No Step Numbers or Dots) */}
-      <div className="glass-panel rounded-3xl px-4 py-3.5">
+    <div className="mx-auto max-w-4xl space-y-4 pb-28" dir="rtl">
+      {/* Unified Royal Cinema Header */}
+      <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] px-4 py-3.5 text-[#F9F6F0] shadow-lg">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#D4AF37] bg-[#D91624] text-white shadow-sm">
               {isSeries ? <Tv className="h-5 w-5" /> : <Megaphone className="h-5 w-5" />}
             </div>
-            <h2 className="font-display text-sm font-black text-slate-900 sm:text-base">
-              {wizardStep === 1
-                ? isSeries
-                  ? `إعداد التسويق وعقود البث والفضائيات: «${draft.title}»`
-                  : `إعداد الحملة الترويجية وشاشات العرض: «${draft.title}»`
-                : isSeries
-                ? `متابعة المشاهدات المليونية وتقييمات النقاد: «${draft.title}»`
-                : `متابعة إيرادات شباك التذاكر ومنافسة الموسم: «${draft.title}»`}
-            </h2>
+            <div>
+              <span className="text-[10px] font-black text-[#D4AF37]">
+                غرفة التوزيع والعرض وشباك التذاكر
+              </span>
+              <h2 className="font-display text-sm font-black text-[#F9F6F0] sm:text-base">
+                {wizardStep === 1
+                  ? isSeries
+                    ? `إعداد التسويق وعقود البث والفضائيات: «${draft.title}»`
+                    : `إعداد الحملة الترويجية وشاشات العرض: «${draft.title}»`
+                  : isSeries
+                  ? `متابعة المشاهدات المليونية وتقييمات النقاد: «${draft.title}»`
+                  : `متابعة إيرادات شباك التذاكر ومنافسة الموسم: «${draft.title}»`}
+              </h2>
+            </div>
           </div>
         </div>
       </div>
@@ -713,17 +795,17 @@ export function Stage5ReleaseSimulation() {
             className="space-y-4"
           >
             {/* Marketing & Cinema Screens Sliders */}
-            <div className="rounded-2xl border-2 border-indigo-200/80 border-b-4 border-b-indigo-300 bg-white/95 p-4 space-y-4 shadow-sm">
-              <h3 className="font-display text-sm font-black text-slate-900">
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-4 shadow-sm">
+              <h3 className="font-display text-sm font-black text-[#1A2530]">
                 الحملة الترويجية وشاشات العرض
               </h3>
 
-              <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+              <div className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3">
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-800">
+                  <span className="text-xs font-black text-[#1A2530]">
                     ميزانية الإعلانات والدعاية (Marketing)
                   </span>
-                  <span className="font-mono text-xs font-black text-violet-700">
+                  <span className="font-mono text-xs font-black text-[#D91624]">
                     {formatMoney(draft.marketingBudget)} ج.م
                   </span>
                 </div>
@@ -736,17 +818,17 @@ export function Stage5ReleaseSimulation() {
                   onChange={(e) =>
                     updateDraft({ marketingBudget: Number(e.target.value) })
                   }
-                  className="w-full accent-violet-600 cursor-pointer"
+                  className="w-full accent-[#D91624] cursor-pointer"
                 />
               </div>
 
               {!isSeries && (
-                <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+                <div className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800">
+                    <span className="text-xs font-black text-[#1A2530]">
                       عدد قاعات وشاشات السينما المحجوزة
                     </span>
-                    <span className="font-mono text-xs font-black text-amber-700">
+                    <span className="font-mono text-xs font-black text-[#B8860B]">
                       {draft.screensCount} شاشة عرض
                     </span>
                   </div>
@@ -759,7 +841,7 @@ export function Stage5ReleaseSimulation() {
                     onChange={(e) =>
                       updateDraft({ screensCount: Number(e.target.value) })
                     }
-                    className="w-full accent-amber-500 cursor-pointer"
+                    className="w-full accent-[#D4AF37] cursor-pointer"
                   />
                 </div>
               )}
@@ -768,9 +850,9 @@ export function Stage5ReleaseSimulation() {
             {/* Streaming Platforms & TV Channels with Dedicated Logo Slots */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* Digital Platforms */}
-              <div className="rounded-2xl border-2 border-indigo-200/80 border-b-4 border-b-indigo-300 bg-white/95 p-4 space-y-2.5 shadow-sm">
-                <h3 className="flex items-center gap-1.5 text-xs font-black text-indigo-900">
-                  <Globe className="h-4 w-4 text-indigo-600" />
+              <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
+                <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                  <Globe className="h-4 w-4 text-[#D91624]" />
                   منصة البث الرقمي (Streaming / VOD)
                 </h3>
                 <div className="space-y-2">
@@ -789,12 +871,12 @@ export function Stage5ReleaseSimulation() {
                         }
                         className={`flex w-full items-center justify-between gap-2.5 rounded-xl border-2 p-2.5 text-right transition ${
                           selected
-                            ? 'border-indigo-600 bg-indigo-50 text-slate-900'
-                            : 'border-indigo-100 bg-white text-slate-700 hover:border-indigo-300'
+                            ? 'border-[#D91624] bg-[#FFF9E6] text-[#1A2530]'
+                            : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-indigo-200 bg-slate-900 text-white">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#D4AF37] bg-[#1A2530] text-white">
                             {plat.logo_url ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
@@ -803,20 +885,20 @@ export function Stage5ReleaseSimulation() {
                                 className="h-full w-full object-contain p-1"
                               />
                             ) : (
-                              <span className="text-[10px] font-black text-amber-400">
+                              <span className="text-[10px] font-black text-[#D4AF37]">
                                 VOD
                               </span>
                             )}
                           </div>
                           <div>
                             <div className="text-xs font-black">{plat.name}</div>
-                            <div className="font-mono text-[10px] font-bold text-emerald-700">
+                            <div className="font-mono text-[10px] font-bold text-[#15803D]">
                               عقد البث: {formatMoney(dealVal)} ج.م
                             </div>
                           </div>
                         </div>
                         {selected && (
-                          <Check className="h-4 w-4 shrink-0 text-indigo-600" />
+                          <Check className="h-4 w-4 shrink-0 text-[#D91624]" />
                         )}
                       </button>
                     );
@@ -825,9 +907,9 @@ export function Stage5ReleaseSimulation() {
               </div>
 
               {/* TV Channels */}
-              <div className="rounded-2xl border-2 border-indigo-200/80 border-b-4 border-b-indigo-300 bg-white/95 p-4 space-y-2.5 shadow-sm">
-                <h3 className="flex items-center gap-1.5 text-xs font-black text-amber-900">
-                  <Tv className="h-4 w-4 text-amber-600" />
+              <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
+                <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                  <Tv className="h-4 w-4 text-[#D4AF37]" />
                   القناة التلفزيونية الفضائية الناقلة
                 </h3>
                 <div className="space-y-2">
@@ -846,12 +928,12 @@ export function Stage5ReleaseSimulation() {
                         }
                         className={`flex w-full items-center justify-between gap-2.5 rounded-xl border-2 p-2.5 text-right transition ${
                           selected
-                            ? 'border-amber-500 bg-amber-50 text-slate-900'
-                            : 'border-indigo-100 bg-white text-slate-700 hover:border-amber-300'
+                            ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
+                            : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-amber-300 bg-slate-900 text-white">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#D4AF37] bg-[#1A2530] text-white">
                             {tv.logo_url ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
@@ -860,20 +942,20 @@ export function Stage5ReleaseSimulation() {
                                 className="h-full w-full object-contain p-1"
                               />
                             ) : (
-                              <span className="text-[10px] font-black text-amber-300">
+                              <span className="text-[10px] font-black text-[#D4AF37]">
                                 TV
                               </span>
                             )}
                           </div>
                           <div>
                             <div className="text-xs font-black">{tv.name}</div>
-                            <div className="font-mono text-[10px] font-bold text-emerald-700">
+                            <div className="font-mono text-[10px] font-bold text-[#15803D]">
                               حقوق العرض: {formatMoney(dealVal)} ج.م
                             </div>
                           </div>
                         </div>
                         {selected && (
-                          <Check className="h-4 w-4 shrink-0 text-amber-600" />
+                          <Check className="h-4 w-4 shrink-0 text-[#D91624]" />
                         )}
                       </button>
                     );
@@ -883,8 +965,8 @@ export function Stage5ReleaseSimulation() {
             </div>
 
             {/* Regional Distribution Markets */}
-            <div className="rounded-2xl border-2 border-indigo-200/80 border-b-4 border-b-indigo-300 bg-white/95 p-4 space-y-3 shadow-sm">
-              <h3 className="font-display text-xs font-black text-slate-900">
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-3 shadow-sm">
+              <h3 className="font-display text-xs font-black text-[#1A2530]">
                 أسواق التوزيع الإقليمية والدولية
               </h3>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -898,19 +980,19 @@ export function Stage5ReleaseSimulation() {
                       key={m.id}
                       className={`rounded-xl border-2 p-3 ${
                         isSelected
-                          ? 'border-emerald-500 bg-emerald-50/70'
-                          : 'border-indigo-100 bg-indigo-50/40'
+                          ? 'border-[#15803D] bg-emerald-50/70'
+                          : 'border-[#1A2530]/15 bg-[#F9F6F0]'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-slate-900">
+                        <span className="text-xs font-black text-[#1A2530]">
                           {m.name}
                         </span>
                         <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-900">
                           +{Math.round(m.revenueBonusFactor * 100)}% عوائد
                         </span>
                       </div>
-                      <p className="mt-1 text-[10px] font-bold text-slate-500">
+                      <p className="mt-1 text-[10px] font-bold text-[#1A2530]/65">
                         {m.description}
                       </p>
                       <div className="mt-2">
@@ -920,8 +1002,8 @@ export function Stage5ReleaseSimulation() {
                             onClick={() => toggleDraftDistributionMarket(m.id)}
                             className={`w-full rounded-lg py-1.5 text-[11px] font-black ${
                               isSelected
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-200 text-slate-700'
+                                ? 'bg-[#15803D] text-white'
+                                : 'bg-[#1A2530]/10 text-[#1A2530]'
                             }`}
                           >
                             {isSelected ? 'سوق معتمد في التوزيع ✓' : 'تفعيل التوزيع'}
@@ -938,7 +1020,7 @@ export function Stage5ReleaseSimulation() {
                                 );
                               }
                             }}
-                            className="w-full rounded-lg bg-violet-600 py-1.5 text-[11px] font-black text-white hover:bg-violet-500"
+                            className="w-full rounded-lg border border-[#D4AF37] bg-[#1A2530] py-1.5 text-[11px] font-black text-[#D4AF37] hover:brightness-110"
                           >
                             فتح ترخيص السوق ({formatMoney(m.earlyLicenseCost)} ج.م)
                           </button>
@@ -984,55 +1066,96 @@ export function Stage5ReleaseSimulation() {
                 </div>
               </div>
 
-              {/* Animated Stock Chart SVG */}
-              <div className="relative h-36 w-full rounded-2xl bg-[#0F171E] border border-[#D4AF37]/40 p-3 overflow-hidden">
-                <svg viewBox="0 0 500 110" className="w-full h-full overflow-visible">
-                  {/* Horizontal Stock Grid Lines */}
-                  {[20, 50, 80].map((y) => (
-                    <line
-                      key={y}
-                      x1={0}
-                      y1={y}
-                      x2={500}
-                      y2={y}
-                      stroke="rgba(212,175,55,0.16)"
-                      strokeDasharray="4 4"
-                    />
-                  ))}
+              {/* Dynamic Real-Data Stock Chart SVG (Player vs Top Rival Day-by-Day) */}
+              {(() => {
+                const activeRivals = lastReleasedProject.rivalReleases.filter(
+                  (r) => r.status !== 'delayed'
+                );
+                const topRivalNow =
+                  activeRivals.length > 0
+                    ? Math.max(...activeRivals.map((r) => r.boxOfficeRevenue))
+                    : 0;
+                const history =
+                  Array.isArray(lastReleasedProject.revenueHistory) &&
+                  lastReleasedProject.revenueHistory.length > 0
+                    ? lastReleasedProject.revenueHistory
+                    : [
+                        {
+                          day: 1,
+                          playerTotal: lastReleasedProject.totalGrossRevenue,
+                          topRivalTotal: topRivalNow,
+                        },
+                      ];
+                const pointsData =
+                  history.length === 1
+                    ? [
+                        { day: 0, playerTotal: 0, topRivalTotal: 0 },
+                        history[0],
+                      ]
+                    : history;
+                const maxRevVal = Math.max(
+                  10_000_000,
+                  ...pointsData.flatMap((p) => [p.playerTotal, p.topRivalTotal])
+                );
+                const toPoints = (getter: (p: typeof pointsData[number]) => number) =>
+                  pointsData
+                    .map((pt, i) => {
+                      const x = 14 + (i / Math.max(1, pointsData.length - 1)) * 472;
+                      const y = 94 - (getter(pt) / maxRevVal) * 78;
+                      return `${x.toFixed(1)},${y.toFixed(1)}`;
+                    })
+                    .join(' ');
 
-                  {/* Rival Studio Stock Line (Red Dashed) */}
-                  <motion.polyline
-                    fill="none"
-                    stroke="#D91624"
-                    strokeWidth="2.5"
-                    strokeDasharray="5 4"
-                    points="10,92 85,78 165,82 245,66 330,70 415,54 490,48"
-                    initial={{ pathLength: 0 }}
-                    animate={{ pathLength: 1 }}
-                    transition={{ duration: 1.2 }}
-                  />
+                return (
+                  <div className="relative h-36 w-full rounded-2xl bg-[#0F171E] border border-[#D4AF37]/40 p-3 overflow-hidden">
+                    <svg viewBox="0 0 500 110" className="w-full h-full overflow-visible">
+                      {[20, 50, 80].map((y) => (
+                        <line
+                          key={y}
+                          x1={0}
+                          y1={y}
+                          x2={500}
+                          y2={y}
+                          stroke="rgba(212,175,55,0.16)"
+                          strokeDasharray="4 4"
+                        />
+                      ))}
 
-                  {/* Player Film Stock Line (Glowing Gold & Emerald) */}
-                  <motion.polyline
-                    fill="none"
-                    stroke="#4ADE80"
-                    strokeWidth="4"
-                    points="10,95 85,74 165,62 245,48 330,36 415,24 490,14"
-                    initial={{ pathLength: 0 }}
-                    animate={{ pathLength: 1 }}
-                    transition={{ duration: 1.4 }}
-                  />
-                </svg>
+                      <motion.polyline
+                        key={`rival_line_${pointsData.length}`}
+                        fill="none"
+                        stroke="#D91624"
+                        strokeWidth="2.5"
+                        strokeDasharray="5 4"
+                        points={toPoints((p) => p.topRivalTotal)}
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ duration: 0.9 }}
+                      />
 
-                <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[10px] font-typewriter font-bold">
-                  <span className="text-[#4ADE80]">
-                    ▲ سهم فيلمك: متصدر المركز #{lastReleasedProject.boxOfficeRank}
-                  </span>
-                  <span className="text-[#D91624]">
-                    ▼ سهم أفلام المنافسين
-                  </span>
-                </div>
-              </div>
+                      <motion.polyline
+                        key={`player_line_${pointsData.length}`}
+                        fill="none"
+                        stroke="#4ADE80"
+                        strokeWidth="4"
+                        points={toPoints((p) => p.playerTotal)}
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ duration: 1.0 }}
+                      />
+                    </svg>
+
+                    <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[10px] font-typewriter font-bold">
+                      <span className="text-[#4ADE80]">
+                        ● عملك: المركز #{lastReleasedProject.boxOfficeRank} ({formatMoney(lastReleasedProject.totalGrossRevenue)})
+                      </span>
+                      <span className="text-[#D91624]">
+                        ● متصدر المنافسين ({formatMoney(topRivalNow)})
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Animated Premiere Graphic */}
@@ -1060,27 +1183,27 @@ export function Stage5ReleaseSimulation() {
               {isSeries &&
               (lastReleasedProject.viewershipMillions ||
                 simInsights?.viewershipMillions) ? (
-                <div className="rounded-2xl border-2 border-indigo-300 border-b-4 border-b-indigo-500 bg-indigo-50 p-3">
-                  <span className="block text-[10px] font-bold text-indigo-800">
+                <div className="rounded-2xl border-2 border-[#D4AF37] bg-[#FFF9E6] p-3">
+                  <span className="block text-[10px] font-bold text-[#1A2530]/75">
                     المشاهدات المليونية
                   </span>
-                  <span className="flex items-center justify-center gap-1 font-mono text-sm font-black text-indigo-950">
-                    <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                  <span className="flex items-center justify-center gap-1 font-mono text-sm font-black text-[#1A2530]">
+                    <Eye className="h-3.5 w-3.5 text-[#D91624]" />
                     {lastReleasedProject.viewershipMillions ||
                       simInsights?.viewershipMillions}
                     M مشاهدة
                   </span>
                 </div>
               ) : (
-                <div className="rounded-2xl border-2 border-indigo-200 border-b-4 border-b-indigo-300 bg-white/95 p-3">
-                  <span className="block text-[10px] font-bold text-slate-500">
+                <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
+                  <span className="block text-[10px] font-bold text-[#1A2530]/65">
                     صافي الربح / الخسارة
                   </span>
                   <span
                     className={`font-mono text-sm font-black ${
                       lastReleasedProject.netProfit >= 0
-                        ? 'text-emerald-700'
-                        : 'text-rose-600'
+                        ? 'text-[#15803D]'
+                        : 'text-[#D91624]'
                     }`}
                   >
                     {formatMoney(lastReleasedProject.netProfit)} ج.م
@@ -1088,40 +1211,40 @@ export function Stage5ReleaseSimulation() {
                 </div>
               )}
 
-              <div className="rounded-2xl border-2 border-indigo-200 border-b-4 border-b-indigo-300 bg-white/95 p-3">
-                <span className="block text-[10px] font-bold text-slate-500">
+              <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
+                <span className="block text-[10px] font-bold text-[#1A2530]/65">
                   تقييم النقاد
                 </span>
-                <span className="font-mono text-sm font-black text-amber-600">
+                <span className="font-mono text-sm font-black text-[#B8860B]">
                   {lastReleasedProject.criticScore}/10
                 </span>
               </div>
 
-              <div className="rounded-2xl border-2 border-indigo-200 border-b-4 border-b-indigo-300 bg-white/95 p-3">
-                <span className="block text-[10px] font-bold text-slate-500">
+              <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
+                <span className="block text-[10px] font-bold text-[#1A2530]/65">
                   تقييم الجمهور
                 </span>
-                <span className="font-mono text-sm font-black text-violet-700">
+                <span className="font-mono text-sm font-black text-[#D91624]">
                   {lastReleasedProject.audienceScore}/10
                 </span>
               </div>
             </div>
 
             {/* Interactive Live Tracking & Viral Electronic Trolls Boost */}
-            <div className="rounded-2xl border-2 border-indigo-200/80 border-b-4 border-b-indigo-300 bg-white/95 p-4 space-y-3 shadow-sm">
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-3 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <span className="flex items-center gap-1.5 text-xs font-black text-slate-900">
-                    <TrendingUp className="h-4 w-4 text-violet-600" />
+                  <span className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                    <TrendingUp className="h-4 w-4 text-[#D91624]" />
                     {isSeries
                       ? `متابعة عرض الحلقات: الحلقة ${lastReleasedProject.daysTracked || 1} من ${lastReleasedProject.episodes || 15}`
                       : `متابعة أيام شباك التذاكر: اليوم ${lastReleasedProject.daysTracked || 1} من 10`}
                   </span>
-                  <p className="mt-0.5 text-[10px] font-bold text-emerald-700">
+                  <p className="mt-0.5 text-[10px] font-bold text-[#15803D]">
                     تتزايد الإيرادات والمشاهدات تدريجياً مع مرور الأيام وحسب تفاعل الجمهور والنقاد
                   </p>
                   {episodeHighlight && (
-                    <p className="mt-1 text-xs font-bold text-indigo-900">
+                    <p className="mt-1 text-xs font-bold text-[#1A2530]">
                       {episodeHighlight}
                     </p>
                   )}
@@ -1136,12 +1259,12 @@ export function Stage5ReleaseSimulation() {
                       (lastReleasedProject.daysTracked || 1) >=
                         (isSeries ? lastReleasedProject.episodes || 15 : 10)
                     }
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3.5 py-2 text-xs font-black text-white shadow-sm hover:bg-violet-500 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[#D4AF37] bg-[#1A2530] px-3.5 py-2 text-xs font-black text-[#F9F6F0] shadow-sm hover:brightness-110 disabled:opacity-50"
                   >
                     {isTrackingNext ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#D4AF37]" />
                     ) : (
-                      <Newspaper className="h-3.5 w-3.5" />
+                      <Newspaper className="h-3.5 w-3.5 text-[#D4AF37]" />
                     )}
                     <span>
                       {(lastReleasedProject.daysTracked || 1) >=
@@ -1161,19 +1284,40 @@ export function Stage5ReleaseSimulation() {
                       onClick={() => {
                         triggerElectronicTrollsCampaign(lastReleasedProject.id);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 bg-purple-50 px-3 py-2 text-xs font-black text-purple-900 hover:bg-purple-100"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#D91624] bg-[#D91624] px-3 py-2 text-xs font-black text-white hover:brightness-110 cursor-pointer"
                     >
-                      <Bot className="h-3.5 w-3.5" />
+                      <Bot className="h-3.5 w-3.5 text-[#D4AF37]" />
                       <span>إطلاق حملة تريند إلكترونية (+15% عوائد)</span>
+                    </button>
+                  )}
+
+                  {!lastReleasedProject.intlDistributionAdUsed && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        claimInternationalDistributionAdBonus(
+                          lastReleasedProject.id
+                        );
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3.5 py-2 text-xs font-black text-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
+                    >
+                      <Film className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        توزيع دولي إضافي (+25% أرباح · +
+                        {formatMoney(
+                          Math.round(lastReleasedProject.totalGrossRevenue * 0.25)
+                        )}{' '}
+                        ج.م) — إعلان
+                      </span>
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Progress Bar */}
-              <div className="h-2 w-full overflow-hidden rounded-full bg-indigo-100">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-[#1A2530]/10">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-600 transition-all duration-500"
+                  className="h-full rounded-full bg-gradient-to-r from-[#15803D] via-[#D4AF37] to-[#D91624] transition-all duration-500"
                   style={{
                     width: `${Math.min(
                       100,
@@ -1194,12 +1338,12 @@ export function Stage5ReleaseSimulation() {
                     {lastReleasedProject.dailyNews.slice(0, 3).map((n) => (
                       <div
                         key={n.id}
-                        className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-right"
+                        className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] px-3 py-2 text-right"
                       >
-                        <div className="text-[11px] font-black text-indigo-950">
+                        <div className="text-[11px] font-black text-[#1A2530]">
                           {n.headline}
                         </div>
-                        <div className="text-[10px] font-bold text-slate-600">
+                        <div className="text-[10px] font-bold text-[#1A2530]/70">
                           {n.detail}
                         </div>
                       </div>
@@ -1208,12 +1352,17 @@ export function Stage5ReleaseSimulation() {
                 )}
             </div>
 
-            {/* Season Box Office / Viewership Leaderboard vs Rivals */}
-            <div className="rounded-2xl border-2 border-indigo-200/80 border-b-4 border-b-indigo-300 bg-white/95 p-4 space-y-2.5 shadow-sm">
-              <h3 className="flex items-center gap-1.5 text-xs font-black text-slate-900">
-                <Trophy className="h-4 w-4 text-amber-500" />
-                جدول منافسة الموسم أمام شركات الإنتاج المنافسة
-              </h3>
+            {/* Season Box Office / Viewership Leaderboard vs Rivals (Dynamic Daily Rank Shifts!) */}
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                  <Trophy className="h-4 w-4 text-[#D4AF37]" />
+                  جدول منافسة الموسم أمام شركات الإنتاج المنافسة (يتغير يومياً)
+                </h3>
+                <span className="text-[10px] font-bold text-[#1A2530]/60">
+                  اليوم {lastReleasedProject.daysTracked || 1} · الترتيب بالإيرادات وليس بالتقييم النقدي فقط
+                </span>
+              </div>
               <div className="space-y-2">
                 {[
                   {
@@ -1222,94 +1371,140 @@ export function Stage5ReleaseSimulation() {
                     leadStarName: lastReleasedProject.leadNames[0] || 'بطل العمل',
                     boxOfficeRevenue: lastReleasedProject.totalGrossRevenue,
                     criticScore: lastReleasedProject.criticScore,
+                    audienceScore: lastReleasedProject.audienceScore,
+                    previousRank: lastReleasedProject.previousBoxOfficeRank,
+                    lastDailyDelta: lastReleasedProject.lastDailyRevenueDelta,
                     isPlayer: true,
                   },
-                  ...lastReleasedProject.rivalReleases.filter(
-                    (r) => r.status !== 'delayed'
-                  ),
+                  ...lastReleasedProject.rivalReleases
+                    .filter((r) => r.status !== 'delayed')
+                    .map((r) => ({
+                      ...r,
+                      isPlayer: false,
+                    })),
                 ]
                   .sort((a, b) => b.boxOfficeRevenue - a.boxOfficeRevenue)
-                  .map((entry, idx) => (
-                    <div
-                      key={`${entry.title}_${idx}`}
-                      className={`flex items-center justify-between rounded-xl border p-2.5 ${
-                        (entry as any).isPlayer
-                          ? 'border-amber-400 bg-amber-50/90 font-black'
-                          : 'border-indigo-100 bg-indigo-50/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 font-mono text-xs font-black text-amber-400">
-                          #{idx + 1}
-                        </span>
-                        <div>
-                          <div className="text-xs font-black text-slate-900">
-                            {entry.title}{' '}
-                            {(entry as any).isPlayer && (
-                              <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[9px] text-slate-950">
-                                عملك
+                  .map((entry, idx) => {
+                    const currentRank = idx + 1;
+                    const rankDelta =
+                      typeof entry.previousRank === 'number' &&
+                      (lastReleasedProject.daysTracked || 1) > 1
+                        ? entry.previousRank - currentRank
+                        : 0;
+                    return (
+                      <div
+                        key={`${entry.title}_${entry.studioName}`}
+                        className={`flex items-center justify-between gap-2 rounded-xl border p-2.5 transition-all ${
+                          entry.isPlayer
+                            ? 'border-[#D4AF37] bg-[#FFF9E6] font-black shadow-xs'
+                            : 'border-[#1A2530]/15 bg-[#F9F6F0]'
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <div className="flex flex-col items-center shrink-0">
+                            <span
+                              className={`flex h-7 w-7 items-center justify-center rounded-lg font-mono text-xs font-black ${
+                                currentRank === 1
+                                  ? 'bg-[#D4AF37] text-[#1A2530]'
+                                  : 'bg-[#1A2530] text-[#D4AF37]'
+                              }`}
+                            >
+                              #{currentRank}
+                            </span>
+                            {rankDelta !== 0 && (
+                              <span
+                                className={`mt-0.5 font-mono text-[9px] font-black ${
+                                  rankDelta > 0 ? 'text-[#15803D]' : 'text-[#D91624]'
+                                }`}
+                              >
+                                {rankDelta > 0 ? `▲${rankDelta}` : `▼${Math.abs(rankDelta)}`}
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] font-bold text-slate-500">
-                            {entry.studioName} · بطولة: {entry.leadStarName}
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                              <span className="truncate">{entry.title}</span>
+                              {entry.isPlayer && (
+                                <span className="rounded bg-[#D91624] px-1.5 py-0.5 text-[9px] text-white shrink-0">
+                                  عملك
+                                </span>
+                              )}
+                            </div>
+                            <div className="truncate text-[10px] font-bold text-[#1A2530]/65">
+                              {entry.studioName} · بطولة: {entry.leadStarName}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-left">
+                          <div className="font-mono text-xs font-black text-[#15803D]">
+                            {formatMoney(entry.boxOfficeRevenue)} ج.م
+                          </div>
+                          {typeof entry.lastDailyDelta === 'number' &&
+                            entry.lastDailyDelta > 0 &&
+                            (lastReleasedProject.daysTracked || 1) > 1 && (
+                              <div className="font-mono text-[9px] font-bold text-[#15803D]/80">
+                                +{formatMoney(entry.lastDailyDelta)} اليوم
+                              </div>
+                            )}
+                          <div className="text-[10px] font-bold text-[#1A2530]/75">
+                            <span className="text-[#B8860B]">نقاد {entry.criticScore}</span>
+                            {typeof entry.audienceScore === 'number' && (
+                              <>
+                                {' · '}
+                                <span className="text-[#D91624]">
+                                  جمهور {entry.audienceScore}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
-                      <div className="text-left">
-                        <div className="font-mono text-xs font-black text-emerald-700">
-                          {formatMoney(entry.boxOfficeRevenue)} ج.م
-                        </div>
-                        <div className="text-[10px] font-bold text-amber-700">
-                          نقاد {entry.criticScore}/10
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
 
             {/* Critic Reviews & Social Reactions */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border-2 border-indigo-200/80 border-b-4 border-b-indigo-300 bg-white/95 p-4 space-y-2.5 shadow-sm">
-                <h3 className="text-xs font-black text-slate-900">
+              <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
+                <h3 className="text-xs font-black text-[#1A2530]">
                   مراجعات النقاد والصحافة الفنية
                 </h3>
                 {lastReleasedProject.reviews.map((rev, i) => (
                   <div
                     key={i}
-                    className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 space-y-1"
+                    className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 space-y-1"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-slate-900">
+                      <span className="text-xs font-black text-[#1A2530]">
                         {rev.criticName} ·{' '}
-                        <span className="text-violet-700">{rev.publication}</span>
+                        <span className="text-[#D91624]">{rev.publication}</span>
                       </span>
-                      <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-black text-amber-900">
+                      <span className="rounded border border-[#D4AF37]/60 bg-[#FFF9E6] px-1.5 py-0.5 font-mono text-[10px] font-black text-[#1A2530]">
                         {rev.score}/10
                       </span>
                     </div>
-                    <p className="text-[11px] font-bold leading-relaxed text-slate-600">
+                    <p className="text-[11px] font-bold leading-relaxed text-[#1A2530]/75">
                       &ldquo;{rev.quote}&rdquo;
                     </p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-2xl border-2 border-indigo-200/80 border-b-4 border-b-indigo-300 bg-white/95 p-4 space-y-2.5 shadow-sm">
-                <h3 className="text-xs font-black text-slate-900">
+              <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
+                <h3 className="text-xs font-black text-[#1A2530]">
                   نبض الجمهور والسوشيال ميديا
                 </h3>
                 {lastReleasedProject.socialPosts.map((post, i) => (
                   <div
                     key={i}
-                    className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 space-y-1"
+                    className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 space-y-1"
                   >
-                    <div className="flex items-center justify-between text-[10px] font-black text-indigo-700">
+                    <div className="flex items-center justify-between text-[10px] font-black text-[#D91624]">
                       <span>{post.handle}</span>
                       <span>♥ {post.likes}</span>
                     </div>
-                    <p className="text-[11px] font-bold text-slate-700">
+                    <p className="text-[11px] font-bold text-[#1A2530]/80">
                       {post.content}
                     </p>
                   </div>
@@ -1320,19 +1515,19 @@ export function Stage5ReleaseSimulation() {
         )}
       </AnimatePresence>
 
-      {/* FLOATING STICKY BOTTOM NAVIGATION BOX */}
+      {/* FLOATING STICKY BOTTOM NAVIGATION BOX — Royal Cinema Theme */}
       <div className="pointer-events-none fixed right-0 bottom-3 left-0 z-40 px-3">
-        <div className="pointer-events-auto mx-auto flex max-w-xl items-center justify-between rounded-2xl border-2 border-indigo-200/90 border-b-4 border-b-indigo-300 bg-white/95 px-4 py-3 shadow-2xl backdrop-blur-md">
+        <div className="pointer-events-auto mx-auto flex max-w-xl items-center justify-between rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 px-4 py-3 shadow-2xl backdrop-blur-md">
           {wizardStep === 1 ? (
             <button
               type="button"
               onClick={() => setActiveScreen('PRODUCTION_CRISES')}
-              className="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-2 text-xs font-black text-slate-700 transition hover:bg-indigo-100"
+              className="rounded-xl border border-white/20 bg-white/10 px-5 py-2 text-xs font-black text-[#F9F6F0] transition hover:bg-white/20"
             >
               السابق
             </button>
           ) : (
-            <span className="text-xs font-black text-emerald-700">
+            <span className="text-xs font-black text-emerald-400">
               تم تسجيل العمل في أرشيف الاستوديو ✓
             </span>
           )}
@@ -1347,7 +1542,7 @@ export function Stage5ReleaseSimulation() {
               }
             }}
             disabled={isSimulating}
-            className="inline-flex items-center gap-1.5 rounded-xl border-b-2 border-amber-700 bg-gradient-to-r from-amber-500 to-amber-400 px-5 py-2 text-xs font-black text-slate-950 shadow-md transition hover:from-amber-400 hover:to-amber-300 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#D4AF37] bg-[#D91624] px-5 py-2 text-xs font-black text-white shadow-md transition hover:brightness-110 disabled:opacity-50"
           >
             {isSimulating ? (
               <>
@@ -1356,7 +1551,7 @@ export function Stage5ReleaseSimulation() {
               </>
             ) : wizardStep === 1 ? (
               <>
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-4 w-4 text-[#D4AF37]" />
                 <span>
                   {isSeries
                     ? 'بدء بث المسلسل ورصد المشاهدات'

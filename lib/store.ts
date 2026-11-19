@@ -12,6 +12,7 @@ import {
   AgeRating,
   ProductionBudgetAllocation,
   RivalRelease,
+  RevenueTrajectory,
   formatMoney,
   calculateStudioMarketValue,
   generateRivalReleases,
@@ -380,6 +381,8 @@ export interface TalentOfferRecord {
   willAccept: boolean;
   aiReason: string;
   aiSource?: string;
+  rejectionCount?: number;
+  syndicateMediationUsed?: boolean;
 }
 
 export interface DailyAiNewsItem {
@@ -525,11 +528,16 @@ export interface ReleasedProjectRecord {
   criticScore: number;
   audienceScore: number;
   boxOfficeRank: number;
+  previousBoxOfficeRank?: number;
+  lastDailyRevenueDelta?: number;
+  trajectory?: RevenueTrajectory;
+  revenueHistory?: { day: number; playerTotal: number; topRivalTotal: number }[];
   reviews: CriticReviewItem[];
   socialPosts: SocialPostItem[];
   viralTrendLabel: string;
   rivalReleases: RivalRelease[];
   trollsCampaigned?: boolean;
+  intlDistributionAdUsed?: boolean;
   awardsWon: string[];
   releaseDayStart?: number;
   daysTracked?: number;
@@ -593,15 +601,13 @@ export interface ActiveDraftProject {
 
 export type GroqModelId =
   | 'auto'
-  | 'openai/gpt-oss-120b'
   | 'openai/gpt-oss-20b'
-  | 'qwen/qwen3.8-27b';
+  | 'openai/gpt-oss-120b';
 
 export const GROQ_MODEL_OPTIONS: { id: GroqModelId; label: string; provider: string }[] = [
   { id: 'auto', label: 'تبديل تلقائي ذكي (Auto)', provider: 'Groq Task Router' },
-  { id: 'openai/gpt-oss-120b', label: 'openai/gpt-oss-120b', provider: 'OpenAI (120B)' },
   { id: 'openai/gpt-oss-20b', label: 'openai/gpt-oss-20b', provider: 'OpenAI (20B Fast)' },
-  { id: 'qwen/qwen3.8-27b', label: 'qwen/qwen3.8-27b', provider: 'Alibaba Cloud (Qwen 3.8)' },
+  { id: 'openai/gpt-oss-120b', label: 'openai/gpt-oss-120b', provider: 'OpenAI (120B)' },
 ];
 
 export type ActiveStageScreen =
@@ -646,9 +652,50 @@ export function getDaysRemainingUntilAnnualAwards(gameDay: number): number {
 }
 
 /**
+ * Returns a trajectory weight for a given normalized progress (0..1) through the release run:
+ * - front_loaded: huge early opening (Days 1-3), steeper drop-off later (Days 5-10)
+ * - sleeper: modest early opening, surging word-of-mouth mid/late run (overtakes front-loaded films!)
+ * - steady: consistent hold with realistic weekend spikes
+ */
+function getDailyTrajectoryCurveFactor(
+  trajectory: RevenueTrajectory | undefined,
+  stepIndex: number,
+  maxSteps: number,
+  criticScore: number,
+  audienceScore: number
+): number {
+  const progress = Math.min(1, Math.max(0, stepIndex / Math.max(1, maxSteps)));
+  const isWeekendPeak = stepIndex === 3 || stepIndex === 4 || stepIndex === 8 || stepIndex === 9;
+  const weekendBoost = isWeekendPeak ? 1.16 : 0.95;
+
+  let curve = 1.0;
+  if (trajectory === 'front_loaded') {
+    // Starts hot, fades later unless audience loved it
+    curve = progress <= 0.35 ? 1.24 : progress <= 0.65 ? 0.94 : 0.72;
+  } else if (trajectory === 'sleeper') {
+    // Slower start, strong mid-to-late surge from word-of-mouth!
+    curve = progress <= 0.3 ? 0.84 : progress <= 0.75 ? 1.28 : 1.12;
+  } else {
+    curve = progress <= 0.5 ? 1.06 : 0.96;
+  }
+
+  const receptionBlend = audienceScore * 0.62 + criticScore * 0.38;
+  const womFactor =
+    receptionBlend >= 8.5
+      ? 1.14
+      : receptionBlend >= 7.6
+      ? 1.06
+      : receptionBlend >= 6.4
+      ? 0.98
+      : 0.84;
+
+  return curve * weekendBoost * womFactor;
+}
+
+/**
  * Progressively steps a released film/series forward by 1 day/episode:
- * - Grows box-office & streaming revenues toward targetGrossRevenue modulated by AI & critic/audience momentum
- * - Grows rival studio releases' revenues and dynamically recalculates the season leaderboard rank (#1, #2, ...)
+ * - Uses decoupled trajectory curves (front_loaded / steady / sleeper) + weekend surges + independent rival waves
+ * - Enables genuine day-by-day rank swaps (#1 -> #2, sleeper climbing from #4 -> #1)
  */
 function stepProjectRevenueProgress(
   proj: ReleasedProjectRecord,
@@ -677,23 +724,50 @@ function stepProjectRevenueProgress(
   const targetGross =
     proj.targetGrossRevenue || Math.round(proj.totalGrossRevenue * 2.4);
 
-  const wordOfMouthBoost =
-    proj.criticScore >= 8.0 && proj.audienceScore >= 8.0
-      ? 1.08
-      : proj.criticScore >= 7.2
-      ? 1.03
-      : proj.criticScore < 5.8
-      ? 0.9
-      : 1.0;
+  // Record previous rankings before stepping so UI can show rank climb/drop arrows (▲ / ▼)
+  const prevBoard = [
+    { key: 'PLAYER', rev: proj.totalGrossRevenue },
+    ...proj.rivalReleases
+      .filter((r) => r.status !== 'delayed')
+      .map((r, idx) => ({ key: `RIVAL_${idx}`, rev: r.boxOfficeRevenue })),
+  ].sort((a, b) => b.rev - a.rev);
 
-  const effectivePlayerMom = Math.max(
-    0.72,
-    Math.min(1.48, playerMomentum * wordOfMouthBoost)
+  const prevRankMap: Record<string, number> = {};
+  prevBoard.forEach((entry, i) => {
+    prevRankMap[entry.key] = i + 1;
+  });
+
+  const playerTrajectory: RevenueTrajectory =
+    proj.trajectory ||
+    (proj.criticScore >= 8.2 && proj.audienceScore >= 8.0
+      ? 'sleeper'
+      : proj.audienceScore >= proj.criticScore + 1.1
+      ? 'front_loaded'
+      : 'steady');
+
+  const playerCurve = getDailyTrajectoryCurveFactor(
+    playerTrajectory,
+    nextStep,
+    maxSteps,
+    proj.criticScore,
+    proj.audienceScore
   );
 
-  const baseRemaining = Math.max(2_200_000, targetGross - proj.totalGrossRevenue);
+  // Subtle deterministic daily market pulse so no two days feel static
+  const playerDayHash = Array.from(`${proj.id}_d${nextStep}`).reduce(
+    (acc, ch) => acc + ch.charCodeAt(0),
+    0
+  );
+  const playerDailyPulse = 0.9 + ((playerDayHash % 23) / 100); // 0.90 .. 1.12
+
+  const effectivePlayerMom = Math.max(
+    0.62,
+    Math.min(1.62, playerMomentum * playerCurve * playerDailyPulse)
+  );
+
+  const baseRemaining = Math.max(1_800_000, targetGross - proj.totalGrossRevenue);
   const revenueDelta = Math.max(
-    1_100_000,
+    900_000,
     Math.round((baseRemaining / remainingSteps) * effectivePlayerMom)
   );
 
@@ -720,35 +794,80 @@ function stepProjectRevenueProgress(
     nextViews = Number((curViews + viewsDelta).toFixed(1));
   }
 
-  const updatedRivals = proj.rivalReleases.map((r) => {
+  const updatedRivals = proj.rivalReleases.map((r, idx) => {
     if (r.status === 'delayed') return r;
     const rTarget =
       r.targetBoxOfficeRevenue || Math.round(r.boxOfficeRevenue * 2.5);
-    const rQualityBoost =
-      r.criticScore >= 7.8 ? 1.06 : r.criticScore < 5.8 ? 0.91 : 1.0;
-    const rEffectiveMom = Math.max(
-      0.75,
-      Math.min(1.42, rivalMomentum * rQualityBoost)
+    const rAud = r.audienceScore ?? r.criticScore;
+    const rTraj: RevenueTrajectory =
+      r.trajectory ||
+      (r.criticScore >= 8.3
+        ? 'sleeper'
+        : r.criticScore < 6.8
+        ? 'front_loaded'
+        : 'steady');
+
+    const rCurve = getDailyTrajectoryCurveFactor(
+      rTraj,
+      nextStep,
+      maxSteps,
+      r.criticScore,
+      rAud
     );
-    const rRem = Math.max(1_800_000, rTarget - r.boxOfficeRevenue);
+
+    // Independent per-rival daily momentum swing so rivals overtake each other & the player dynamically!
+    const rivalHash = Array.from(`${r.title}_${r.studioName}_d${nextStep}_${idx}`).reduce(
+      (acc, ch, i) => acc + ch.charCodeAt(0) * (i + 3),
+      0
+    );
+    const rivalDailyWave = 0.76 + ((rivalHash % 49) / 100); // 0.76 .. 1.24
+
+    const rEffectiveMom = Math.max(
+      0.58,
+      Math.min(1.58, rivalMomentum * rCurve * rivalDailyWave)
+    );
+    const rRem = Math.max(1_200_000, rTarget - r.boxOfficeRevenue);
     const rDelta = Math.max(
-      850_000,
+      750_000,
       Math.round((rRem / remainingSteps) * rEffectiveMom)
     );
     return {
       ...r,
       boxOfficeRevenue: r.boxOfficeRevenue + rDelta,
       targetBoxOfficeRevenue: rTarget,
+      previousRank: prevRankMap[`RIVAL_${idx}`],
+      lastDailyDelta: rDelta,
     };
   });
 
+  const activeRivals = updatedRivals.filter((r) => r.status !== 'delayed');
   const allRevs = [
     nextGross,
-    ...updatedRivals
-      .filter((r) => r.status !== 'delayed')
-      .map((r) => r.boxOfficeRevenue),
+    ...activeRivals.map((r) => r.boxOfficeRevenue),
   ].sort((a, b) => b - a);
   const nextRank = Math.max(1, allRevs.indexOf(nextGross) + 1);
+  const topRivalTotal =
+    activeRivals.length > 0
+      ? Math.max(...activeRivals.map((r) => r.boxOfficeRevenue))
+      : 0;
+
+  const prevHistory =
+    Array.isArray(proj.revenueHistory) && proj.revenueHistory.length > 0
+      ? proj.revenueHistory
+      : [
+          {
+            day: 1,
+            playerTotal: proj.totalGrossRevenue,
+            topRivalTotal:
+              proj.rivalReleases.filter((r) => r.status !== 'delayed').length > 0
+                ? Math.max(
+                    ...proj.rivalReleases
+                      .filter((r) => r.status !== 'delayed')
+                      .map((r) => r.boxOfficeRevenue)
+                  )
+                : 0,
+          },
+        ];
 
   return {
     updatedProject: {
@@ -759,7 +878,14 @@ function stepProjectRevenueProgress(
       totalGrossRevenue: nextGross,
       netProfit: nextGross - proj.totalBudget,
       viewershipMillions: nextViews,
+      previousBoxOfficeRank: prevRankMap.PLAYER || proj.boxOfficeRank,
       boxOfficeRank: nextRank,
+      lastDailyRevenueDelta: revenueDelta,
+      trajectory: playerTrajectory,
+      revenueHistory: [
+        ...prevHistory,
+        { day: nextStep, playerTotal: nextGross, topRivalTotal },
+      ],
       rivalReleases: updatedRivals,
       dailyNews: updatedNews,
     },
@@ -1329,13 +1455,24 @@ export interface HyptrixGameState {
   isPrWarRoomOpen: boolean;
   starForgeLocksOpened: number;
   isStarForgeOpen: boolean;
+  talentRejectionCounts: Record<string, number>;
+  syndicateMediationUnlocked: Record<string, boolean>;
+  bankruptcyDeadlineDay: number | null;
+  bankruptcyDebtAmount: number;
+  isBankruptLiquidated: boolean;
 
   // Actions
   setChildModalOpen: (open: boolean) => void;
   setPrWarRoomOpen: (open: boolean) => void;
   setStarForgeOpen: (open: boolean) => void;
   unlockNextStarForgeLockWithAd: () => void;
-  buyVipGemPackage: (packageEgp: 10 | 30 | 50) => Promise<void>;
+  watchRewardedAdForVipCoins: () => void;
+  resolveCrisisWithCash8M: (crisisId: string) => void;
+  resolveCrisisWithRewardedAd: (crisisId: string) => void;
+  unlockSyndicateMediationWithAd: (talentId: string, talentName: string) => void;
+  claimInternationalDistributionAdBonus: (projectId: string) => void;
+  claimEmergencyInvestorBailoutWithAd: (customNeededAmount?: number) => void;
+  liquidateAndStartNewStudioInSameWorld: () => void;
   spendForStarForgeUpgrade: (cashCost: number, gemCost: number) => boolean;
   createCustomVipStar: (actor: ActorItem) => void;
   purchaseStudioAsset: (assetId: string) => Promise<boolean>;
@@ -1522,6 +1659,11 @@ export const useGameStore = create<HyptrixGameState>()(
       isPrWarRoomOpen: false,
       starForgeLocksOpened: 0,
       isStarForgeOpen: false,
+      talentRejectionCounts: {},
+      syndicateMediationUnlocked: {},
+      bankruptcyDeadlineDay: null,
+      bankruptcyDebtAmount: 0,
+      isBankruptLiquidated: false,
 
       setChildModalOpen: (open) => set({ isChildModalOpen: open }),
       setPrWarRoomOpen: (open) => set({ isPrWarRoomOpen: open }),
@@ -1532,81 +1674,280 @@ export const useGameStore = create<HyptrixGameState>()(
           const nextLocks = Math.min(5, (state.starForgeLocksOpened || 0) + 1);
           return {
             starForgeLocksOpened: nextLocks,
-            vipCoins: state.vipCoins + 15,
           };
         }),
 
-      buyVipGemPackage: async (packageEgp) => {
+      watchRewardedAdForVipCoins: () => {
+        get().claimEmergencyInvestorBailoutWithAd(15_000_000);
+      },
+
+      resolveCrisisWithCash8M: (crisisId) => {
         const state = get();
-        const rewardMap: Record<10 | 30 | 50, { gems: number; cashBonus: number; label: string }> = {
-          10: { gems: 150, cashBonus: 12_000_000, label: 'باقة النجم الصاعد (10 ج.م)' },
-          30: { gems: 500, cashBonus: 40_000_000, label: 'باقة المنتج الذهبي (30 ج.م)' },
-          50: { gems: 1200, cashBonus: 90_000_000, label: 'باقة الإمبراطور الألماظ (50 ج.م)' },
-        };
-        const pkg = rewardMap[packageEgp];
-        const prevCash = state.cash;
-        const nextCash = prevCash + pkg.cashBonus;
-        const nextMvMod = (state.marketValueModifier || 0) + pkg.cashBonus;
+        const crisis = state.draft.crises.find((c) => c.id === crisisId);
+        if (!crisis || crisis.resolved) return;
+        const cost = 8_000_000;
+        const nextCash = state.cash - cost;
+        const nextRep = Math.min(100, state.reputation + 2);
+        const nextMv = calculateStudioMarketValue({
+          cash: nextCash,
+          reputation: nextRep,
+          releasedProjects: state.releasedProjects,
+          marketValueModifier: state.marketValueModifier || 0,
+        });
+        const enteringDistress =
+          nextCash <= 0 && state.bankruptcyDeadlineDay === null;
+
+        set((cur) => ({
+          cash: nextCash,
+          reputation: nextRep,
+          marketValue: nextMv,
+          bankruptcyDeadlineDay: enteringDistress
+            ? cur.gameDay + 30
+            : nextCash > 5_000_000
+            ? null
+            : cur.bankruptcyDeadlineDay,
+          bankruptcyDebtAmount:
+            nextCash < 0 ? Math.abs(nextCash) + 15_000_000 : cur.bankruptcyDebtAmount,
+          draft: {
+            ...cur.draft,
+            qualityModifier: cur.draft.qualityModifier + 3,
+            hypeScore: Math.min(100, cur.draft.hypeScore + 3),
+            crises: cur.draft.crises.map((c) =>
+              c.id === crisisId ? { ...c, resolved: true, chosenOption: 'A' } : c
+            ),
+          },
+        }));
+        get().showToast(
+          'تم حسم أزمة البلاتوه فورياً مقابل 8 مليون ج.م من الخزينة!',
+          'success',
+          '+3 جودة فنية · +3 ضجة جماهيرية'
+        );
+      },
+
+      resolveCrisisWithRewardedAd: (crisisId) => {
+        const state = get();
+        const crisis = state.draft.crises.find((c) => c.id === crisisId);
+        if (!crisis || crisis.resolved) return;
+        set((cur) => ({
+          draft: {
+            ...cur.draft,
+            qualityModifier: cur.draft.qualityModifier + 4,
+            hypeScore: Math.min(100, cur.draft.hypeScore + 5),
+            crises: cur.draft.crises.map((c) =>
+              c.id === crisisId ? { ...c, resolved: true, chosenOption: 'B' } : c
+            ),
+          },
+        }));
+        get().showToast(
+          'تمت التسوية الإعلامية المجانية لأزمة البلاتوه بنجاح (وفّرت 8 مليون ج.م)!',
+          'magic',
+          'تكلفة 0 ج.م · +4 جودة فنية · +5 ضجة جماهيرية'
+        );
+      },
+
+      unlockSyndicateMediationWithAd: (talentId, talentName) => {
+        set((state) => {
+          const updatedOffers = { ...state.draft.talentOffers };
+          if (updatedOffers[talentId]) {
+            delete updatedOffers[talentId];
+          }
+          return {
+            syndicateMediationUnlocked: {
+              ...(state.syndicateMediationUnlocked || {}),
+              [talentId]: true,
+            },
+            talentRejectionCounts: {
+              ...(state.talentRejectionCounts || {}),
+              [talentId]: 0,
+            },
+            draft: {
+              ...state.draft,
+              talentOffers: updatedOffers,
+            },
+          };
+        });
+        get().showToast(
+          `تدخلت نقابة المهن التمثيلية وتم فتح جولة مفاوضات أخيرة مع «${talentName}»!`,
+          'magic',
+          'تمت تهدئة الخلاف ورفع فرص قبول العرض الجديد بنسبة +25%'
+        );
+      },
+
+      claimInternationalDistributionAdBonus: (projectId) => {
+        const state = get();
+        const target =
+          state.releasedProjects.find((p) => p.id === projectId) ||
+          state.lastReleasedProject;
+        if (!target || target.intlDistributionAdUsed) return;
+
+        const bonusAmount = Math.max(
+          8_000_000,
+          Math.round(target.totalGrossRevenue * 0.25)
+        );
+        const nextCash = state.cash + bonusAmount;
+
+        const updatedProjects = state.releasedProjects.map((p) => {
+          if (p.id !== target.id) return p;
+          return {
+            ...p,
+            totalGrossRevenue: p.totalGrossRevenue + bonusAmount,
+            boxOfficeRevenue: p.boxOfficeRevenue + bonusAmount,
+            netProfit: p.netProfit + bonusAmount,
+            intlDistributionAdUsed: true,
+          };
+        });
+
+        const updatedLast =
+          state.lastReleasedProject?.id === target.id
+            ? {
+                ...state.lastReleasedProject,
+                totalGrossRevenue:
+                  state.lastReleasedProject.totalGrossRevenue + bonusAmount,
+                boxOfficeRevenue:
+                  state.lastReleasedProject.boxOfficeRevenue + bonusAmount,
+                netProfit: state.lastReleasedProject.netProfit + bonusAmount,
+                intlDistributionAdUsed: true,
+              }
+            : state.lastReleasedProject;
+
+        const nextMv = calculateStudioMarketValue({
+          cash: nextCash,
+          reputation: state.reputation,
+          releasedProjects: updatedProjects,
+          marketValueModifier: state.marketValueModifier || 0,
+        });
+
+        set((cur) => ({
+          cash: nextCash,
+          marketValue: nextMv,
+          releasedProjects: updatedProjects,
+          lastReleasedProject: updatedLast,
+          bankruptcyDeadlineDay: nextCash > 5_000_000 ? null : cur.bankruptcyDeadlineDay,
+          bankruptcyDebtAmount: nextCash > 5_000_000 ? 0 : cur.bankruptcyDebtAmount,
+          isBankruptLiquidated: false,
+        }));
+
+        get().showToast(
+          `تم تفعيل صفقة التوزيع الدولي الإضافي (+25% أرباح) لـ «${target.title}»!`,
+          'magic',
+          `+${formatMoney(bonusAmount)} ج.م أرباح توزيع دولي دخلت خزينة الاستوديو فوراً`
+        );
+      },
+
+      claimEmergencyInvestorBailoutWithAd: (customNeededAmount) => {
+        const state = get();
+        const deficit = state.cash < 0 ? Math.abs(state.cash) : 0;
+        const bailoutAmount = Math.max(
+          15_000_000,
+          customNeededAmount || 0,
+          deficit + 15_000_000
+        );
+        const nextCash = state.cash + bailoutAmount;
         const nextMv = calculateStudioMarketValue({
           cash: nextCash,
           reputation: state.reputation,
           releasedProjects: state.releasedProjects,
-          marketValueModifier: nextMvMod,
-        });
-
-        await verifyAndRecordServerTransaction({
-          studioInstanceId: getOrCreateStudioInstanceId(),
-          studioName: state.studioName,
-          ceoName: state.ceoName,
-          userEmail: state.supabaseUserEmail,
-          transactionType: 'VIP_PACKAGE_TOPUP',
-          amountDelta: pkg.cashBonus,
-          previousCash: prevCash,
-          expectedNewCash: nextCash,
-          marketValue: nextMv,
-          reputation: state.reputation,
-          ownedAssets: state.ownedStudioAssets || [],
-          itemId: `vip_pkg_${packageEgp}`,
-          itemLabel: pkg.label,
-          previousSignature: state.ledgerSignature,
+          marketValueModifier: state.marketValueModifier || 0,
         });
 
         set((cur) => ({
-          vipCoins: cur.vipCoins + pkg.gems,
           cash: nextCash,
-          marketValueModifier: nextMvMod,
           marketValue: nextMv,
-          starForgeLocksOpened: 5,
+          bankruptcyDeadlineDay: null,
+          bankruptcyDebtAmount: 0,
+          isBankruptLiquidated: false,
+          worldHistory: [
+            {
+              year: cur.currentYear,
+              eventText: `تمويل إنقاذ استثماري عاجل بقيمة ${formatMoney(bailoutAmount)} ج.م أنقذ شركة «${cur.studioName}» من الإفلاس وأعاد تدوير عجلة الإنتاج.`,
+              category: 'milestone',
+            },
+            ...cur.worldHistory,
+          ],
         }));
 
         get().showToast(
-          `تم شحن «${pkg.label}» بنجاح!`,
+          `تم ضخ تمويل إنقاذ استثماري بقيمة ${formatMoney(bailoutAmount)} ج.م في الخزينة!`,
           'magic',
-          `+${pkg.gems} عملة ذهبية VIP · +${formatMoney(pkg.cashBonus)} ج.م سيولة خزينة`
+          'تمت تسوية المديونية بالكامل وإلغاء إنذار الإفلاس'
         );
       },
 
-      spendForStarForgeUpgrade: (cashCost, gemCost) => {
+      liquidateAndStartNewStudioInSameWorld: () => {
+        set((state) => {
+          const oldStudioName = state.studioName;
+          const oldCeo = state.ceoName;
+          const soldStudioCompetitor: CompetitorStudio = {
+            id: `liquidated_${Date.now()}`,
+            name: `${oldStudioName} (تحت إدارة المستثمرين)`,
+            ceoName: 'تحالف مستثمري الاستحواذ',
+            logo_url: '',
+            specialty: 'popular_drama',
+            preferred_genres: ['popular_drama', 'action', 'comedy'],
+            market_power: Math.max(58, state.reputation),
+            estimated_net_worth: Math.max(120_000_000, state.marketValue),
+            isEmergingStudio: true,
+            foundedYear: state.currentYear,
+          };
+
+          const liquidationEvent = `تصفية وبيع شركة «${oldStudioName}» للمستثمرين لسداد الديون، وبداية رحلة تأسيس شركة إنتاج جديدة في نفس العالم لعام ${state.currentYear}.`;
+
+          return {
+            studioCreated: false,
+            activeScreen: 'STUDIO_CREATION',
+            cash: 75_000_000,
+            marketValue: 110_000_000,
+            marketValueModifier: 0,
+            reputation: 60,
+            ownedStudioAssets: [],
+            releasedProjects: [],
+            lastReleasedProject: null,
+            talentRejectionCounts: {},
+            syndicateMediationUnlocked: {},
+            bankruptcyDeadlineDay: null,
+            bankruptcyDebtAmount: 0,
+            isBankruptLiquidated: false,
+            draft: {
+              ...DEFAULT_DRAFT,
+              title: '',
+              scriptSynopsis: '',
+              talentOffers: {},
+              crises: [],
+            },
+            // Keep the exact same world timeline, year, day, actors, and rival studios!
+            emergingCompetitors: [
+              soldStudioCompetitor,
+              ...(state.emergingCompetitors || []),
+            ],
+            worldHistory: [
+              {
+                year: state.currentYear,
+                eventText: liquidationEvent,
+                category: 'scandal',
+              },
+              ...state.worldHistory,
+            ],
+            aiMemoryLog: [
+              `اضطر المنتج ${oldCeo} لبيع وتصفية شركته السابقة "${oldStudioName}" بعد أزمة سيولة، ويستعد الآن لتأسيس شركة إنتاج جديدة في نفس العالم.`,
+              ...(state.aiMemoryLog || []),
+            ].slice(0, 30),
+          };
+        });
+      },
+
+      spendForStarForgeUpgrade: (cashCost, _gemCost) => {
         const state = get();
-        if (cashCost > 0 && state.cash < cashCost) {
+        const effectiveCash = Math.max(0, cashCost);
+        if (effectiveCash > 0 && state.cash < effectiveCash) {
           state.showToast(
             'رصيد الخزينة لا يكفي لترقية هذه الطاقة!',
             'warning',
-            `تحتاج إلى ${formatMoney(cashCost)} ج.م.`
-          );
-          return false;
-        }
-        if (gemCost > 0 && state.vipCoins < gemCost) {
-          state.showToast(
-            'تحتاج إلى عملات VIP ذهبية لكسر حاجز الـ 80 والوصول لطاقة أسطورية (99)!',
-            'warning',
-            'اشحن باقة الـ 10 أو 30 أو 50 جنيه من الخزنة فوراً.'
+            `تحتاج إلى ${formatMoney(effectiveCash)} ج.م أو يمكنك تفعيل التدريب المجاني عبر الإعلان.`
           );
           return false;
         }
         set((cur) => ({
-          cash: Math.max(0, cur.cash - cashCost),
-          vipCoins: Math.max(0, cur.vipCoins - gemCost),
+          cash: Math.max(0, cur.cash - effectiveCash),
         }));
         return true;
       },
@@ -1845,7 +2186,7 @@ export const useGameStore = create<HyptrixGameState>()(
         const cleanTag = activeProjectTitle.replace(/\s+/g, '_');
         const rivalTag = rivalFilmTitle.replace(/\s+/g, '_');
 
-        // Call Groq AI (qwen/qwen3.8-27b / openai/gpt-oss-120b / openai/gpt-oss-20b) for contextual media response
+        // Call Groq AI (openai/gpt-oss-20b / openai/gpt-oss-120b) for contextual media response
         let aiGeneratedPosts: LiveSocialFeedPost[] = [];
         let aiOfficialStatement = '';
         try {
@@ -2248,31 +2589,55 @@ export const useGameStore = create<HyptrixGameState>()(
       dismissToast: () => set({ activeToast: null }),
 
       initializeStudio: ({ studioName, ceoName, logo, founderPerk, region }) =>
-        set({
-          studioCreated: true,
-          studioName: studioName.trim() || 'العقرب ستوديوز',
-          ceoName: ceoName.trim() || 'المدير التنفيذي',
-          logo,
-          founderPerk,
-          currentRegion: region,
-          unlockedRegions: ['egypt'],
-          cash: 75_000_000,
-          marketValue: 110_000_000,
-          marketValueModifier: 0,
-          currentYear: 2026,
-          gameDay: 1,
-          lastAwardsGalaYear: 2025,
-          activeScreen: 'STUDIO_HUB',
-          worldHistory: [
-            {
-              year: 2026,
-              eventText: `تأسيس شركة "${studioName.trim() || 'العقرب ستوديوز'}" بقيادة ${ceoName.trim() || 'المدير التنفيذي'} بسيولة خزينة 75M ج.م وقيمة سوقية 110M ج.م.`,
-              category: 'milestone',
-            },
-          ],
-          aiMemoryLog: [
-            `أسس المنتج ${ceoName.trim() || 'المدير التنفيذي'} شركة "${studioName.trim() || 'العقرب ستوديوز'}" بسيولة خزينة 75M ج.م وقيمة سوقية ابتدائية 110M ج.م.`,
-          ],
+        set((state) => {
+          const isContinuingSameWorld = state.gameDay > 1;
+          const cleanStudio = studioName.trim() || 'العقرب ستوديوز';
+          const cleanCeo = ceoName.trim() || 'المدير التنفيذي';
+          return {
+            studioCreated: true,
+            studioName: cleanStudio,
+            ceoName: cleanCeo,
+            logo,
+            founderPerk,
+            currentRegion: region,
+            unlockedRegions: ['egypt'],
+            cash: 75_000_000,
+            marketValue: 110_000_000,
+            marketValueModifier: 0,
+            currentYear: isContinuingSameWorld ? state.currentYear : 2026,
+            gameDay: isContinuingSameWorld ? state.gameDay : 1,
+            lastAwardsGalaYear: isContinuingSameWorld ? state.lastAwardsGalaYear : 2025,
+            bankruptcyDeadlineDay: null,
+            bankruptcyDebtAmount: 0,
+            isBankruptLiquidated: false,
+            talentRejectionCounts: {},
+            syndicateMediationUnlocked: {},
+            activeScreen: 'STUDIO_HUB',
+            worldHistory: isContinuingSameWorld
+              ? [
+                  {
+                    year: state.currentYear,
+                    eventText: `عودة مدوية للسوق: تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} بسيولة 75M ج.م في نفس العالم السينمائي لعام ${state.currentYear}.`,
+                    category: 'milestone',
+                  },
+                  ...state.worldHistory,
+                ]
+              : [
+                  {
+                    year: 2026,
+                    eventText: `تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} بسيولة خزينة 75M ج.م وقيمة سوقية 110M ج.م.`,
+                    category: 'milestone',
+                  },
+                ],
+            aiMemoryLog: isContinuingSameWorld
+              ? [
+                  `أسس المنتج ${cleanCeo} شركة جديدة باسم "${cleanStudio}" بسيولة 75M ج.م في عام ${state.currentYear} بعد بيع شركته السابقة للمستثمرين.`,
+                  ...(state.aiMemoryLog || []),
+                ].slice(0, 25)
+              : [
+                  `أسس المنتج ${cleanCeo} شركة "${cleanStudio}" بسيولة خزينة 75M ج.م وقيمة سوقية ابتدائية 110M ج.م.`,
+                ],
+          };
         }),
 
       quickStartDemoStudio: () =>
@@ -2501,12 +2866,16 @@ export const useGameStore = create<HyptrixGameState>()(
             gameDay: newGameDay,
           });
 
+          const nextRejectionCounts = { ...(state.talentRejectionCounts || {}) };
+
           // 1. Evaluate pending talent offers that have reached their responseDueDay (2–3 full game days)
           for (const key of Object.keys(updatedOffers)) {
             const offer = updatedOffers[key];
             if (offer.status === 'pending' && newGameDay >= offer.responseDueDay) {
               if (!offer.willAccept) {
                 updatedOffers[key] = { ...offer, status: 'rejected' };
+                const newRejCount = (nextRejectionCounts[offer.talentId] || 0) + 1;
+                nextRejectionCounts[offer.talentId] = newRejCount;
                 nextMarketValMod -= 2_500_000;
                 updatedDraft.hypeScore = Math.max(15, updatedDraft.hypeScore - 3);
                 const headline = `اعتذر «${offer.talentName}» عن عرض دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}»`;
@@ -2515,13 +2884,18 @@ export const useGameStore = create<HyptrixGameState>()(
                   day: newGameDay,
                   year: newYear,
                   category: 'contract_reply',
-                  badgeLabel: 'رد رسمي من وكيل الأعمال · اعتذار عن التعاقد',
+                  badgeLabel:
+                    newRejCount >= 2
+                      ? 'إغلاق باب التفاوض · يتطلب وساطة النقابة ⚠️'
+                      : 'رد رسمي من وكيل الأعمال · اعتذار عن التعاقد',
                   headline,
                   detail: offer.aiReason,
                   highlightName: offer.talentName,
                   extraStatBadge: `العرض: ${formatMoney(offer.offeredSalary)} ج.م`,
                   gameImpactLabel:
-                    'يمكنك التفاوض بشروط جديدة أو اختيار بديل آخر من القائمة',
+                    newRejCount >= 2
+                      ? 'رفض العرض مرتين وأغلق باب التفاوض — يمكنك تفعيل «وساطة نقابة المهن التمثيلية (إعلان)» لفرصة أخيرة'
+                      : 'يمكنك التفاوض بشروط جديدة أو اختيار بديل آخر من القائمة',
                 });
                 nextHistory.unshift({
                   year: newYear,
@@ -2600,25 +2974,9 @@ export const useGameStore = create<HyptrixGameState>()(
             );
           }
 
-          // 2b. Progressive Daily Box Office / Viewership Growth for Active Released Project!
-          let nextCash = state.cash;
-          if (nextLastReleased) {
-            for (let d = 0; d < days; d++) {
-              const stepped = stepProjectRevenueProgress(
-                nextLastReleased,
-                1.0,
-                1.0
-              );
-              if (stepped.revenueDelta > 0) {
-                nextLastReleased = stepped.updatedProject;
-                nextCash += stepped.revenueDelta;
-              }
-            }
-            const activeReleasedSnap = nextLastReleased;
-            nextReleasedProjects = nextReleasedProjects.map((p) =>
-              p.id === activeReleasedSnap.id ? activeReleasedSnap : p
-            );
-          }
+          // Cash is no longer passively added every few seconds during advanceGameDay.
+          // Players earn box office / streaming cash explicitly on release or when tracking release days.
+          const nextCash = state.cash;
 
           // 3. Organic Rival Studio Releases during the year (every 30 game days):
           if (newGameDay > 5 && newGameDay % 30 === 0) {
@@ -2812,6 +3170,36 @@ export const useGameStore = create<HyptrixGameState>()(
             marketValueModifier: nextMarketValMod,
           });
 
+          // 6. Bankruptcy Grace Period & Mandatory Liquidation Tracking (30 game days = 3 game months)
+          let nextBankruptcyDeadline = state.bankruptcyDeadlineDay;
+          let nextBankruptcyDebt = state.bankruptcyDebtAmount || 0;
+          let nextIsBankruptLiquidated = state.isBankruptLiquidated || false;
+
+          if (nextCash <= 0) {
+            nextBankruptcyDebt = Math.abs(nextCash);
+            if (nextBankruptcyDeadline === null) {
+              nextBankruptcyDeadline = newGameDay + 30;
+              newNewsItems.push({
+                id: `bankruptcy_warning_${newGameDay}`,
+                day: newGameDay,
+                year: newYear,
+                category: 'production_news',
+                badgeLabel: 'إنذار إفلاس رسمي · مهلة سداد 3 أشهر ⚠️',
+                headline: `خزينة «${state.studioName}» تسجل عجزاً مالياً والبنوك تمنح مهلة 3 أشهر قبل التصفية!`,
+                detail: `وصل رصيد السيولة في الخزينة إلى (${formatMoney(nextCash)} ج.م). أمامك مهلة 3 أشهر (30 يوماً في التقويم) لتسديد المديونية أو الحصول على «تمويل إنقاذ من مستثمر (مقابل إعلان)»، وإلا ستُجبر على بيع الشركة وتصفيتها!`,
+                highlightName: state.studioName,
+                extraStatBadge: `العجز: ${formatMoney(Math.abs(nextCash))} ج.م`,
+                gameImpactLabel: 'احصل على تمويل إنقاذ فوري من مستثمر أو حقق إيرادات قبل انتهاء المهلة',
+              });
+            } else if (newGameDay >= nextBankruptcyDeadline) {
+              nextIsBankruptLiquidated = true;
+            }
+          } else {
+            nextBankruptcyDeadline = null;
+            nextBankruptcyDebt = 0;
+            nextIsBankruptLiquidated = false;
+          }
+
           return {
             cash: nextCash,
             gameDay: newGameDay,
@@ -2821,6 +3209,10 @@ export const useGameStore = create<HyptrixGameState>()(
             marketValueModifier: nextMarketValMod,
             marketValue: nextMarketValue,
             draft: updatedDraft,
+            talentRejectionCounts: nextRejectionCounts,
+            bankruptcyDeadlineDay: nextBankruptcyDeadline,
+            bankruptcyDebtAmount: nextBankruptcyDebt,
+            isBankruptLiquidated: nextIsBankruptLiquidated,
             releasedProjects: nextReleasedProjects,
             lastReleasedProject: nextLastReleased,
             yearlyRivalReleases: nextYearlyRivals,
@@ -3034,6 +3426,8 @@ export const useGameStore = create<HyptrixGameState>()(
             filmingDaysElapsed: 0,
             productionNews: [],
           },
+          talentRejectionCounts: {},
+          syndicateMediationUnlocked: {},
           activeScreen: targetScreen,
         })),
 
@@ -3273,11 +3667,29 @@ export const useGameStore = create<HyptrixGameState>()(
             ...(state.aiMemoryLog || []),
           ].slice(0, 25);
 
+          let nextBankruptcyDeadline = state.bankruptcyDeadlineDay;
+          let nextBankruptcyDebt = state.bankruptcyDebtAmount || 0;
+          let nextIsBankruptLiquidated = state.isBankruptLiquidated || false;
+
+          if (newCash <= 0) {
+            nextBankruptcyDebt = Math.abs(newCash);
+            if (nextBankruptcyDeadline === null) {
+              nextBankruptcyDeadline = state.gameDay + 30;
+            }
+          } else {
+            nextBankruptcyDeadline = null;
+            nextBankruptcyDebt = 0;
+            nextIsBankruptLiquidated = false;
+          }
+
           return {
             cash: newCash,
             marketValue: nextMarketValue,
             reputation: nextRep,
             unlockedRegions: unlocked,
+            bankruptcyDeadlineDay: nextBankruptcyDeadline,
+            bankruptcyDebtAmount: nextBankruptcyDebt,
+            isBankruptLiquidated: nextIsBankruptLiquidated,
             releasedProjects: nextProjects,
             lastReleasedProject: record,
             yearlyRivalReleases: nextYearlyRivals,
@@ -3537,11 +3949,11 @@ export const useGameStore = create<HyptrixGameState>()(
             return state;
           }
           const mvDelta = event.marketValueDelta || 0;
-          const cashDelta = event.cashDelta || 0;
+          const cashDelta = 0;
           const repDelta = event.reputationDelta || 0;
           const hypeDelta = event.hypeDelta || 0;
 
-          const nextCash = Math.max(5_000_000, state.cash + cashDelta);
+          const nextCash = state.cash;
           const nextRep = Math.min(100, Math.max(15, state.reputation + repDelta));
           const nextMvMod = (state.marketValueModifier || 0) + mvDelta;
           const nextMarketVal = calculateStudioMarketValue({
@@ -3763,6 +4175,12 @@ export const useGameStore = create<HyptrixGameState>()(
           festivalModalQueue: [],
           customDbPatch: null,
           customDbUrl: '',
+          talentRejectionCounts: {},
+          syndicateMediationUnlocked: {},
+          bankruptcyDeadlineDay: null,
+          bankruptcyDebtAmount: 0,
+          isBankruptLiquidated: false,
+          ownedStudioAssets: [],
         });
       },
 

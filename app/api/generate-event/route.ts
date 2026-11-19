@@ -8,59 +8,44 @@ import {
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
 export type GroqTaskModel =
-  | 'openai/gpt-oss-120b'
   | 'openai/gpt-oss-20b'
-  | 'qwen/qwen3.8-27b';
+  | 'openai/gpt-oss-120b';
 
 /**
  * Automatically selects the optimal Groq model order based on the specific game task:
- * - Heavy World & Box-Office Reasoning -> openai/gpt-oss-120b first
- * - Creative Arabic Drama, PR Media Responses & Story Generation -> qwen/qwen3.8-27b first
- * - Fast Real-Time Contract Negotiations & Daily Ticks -> openai/gpt-oss-20b first
+ * - Complex World, Script Analysis, Rival Releases, Emerging Studios & Festival Galas -> openai/gpt-oss-120b first
+ * - Default Base for all other tasks (Contract negotiations, Roles, Crises, PR responses, Daily News, Rising Stars) -> openai/gpt-oss-20b first
  */
 function getTaskOrderedGroqModels(
   taskMode: string,
   preferredModel?: string
 ): GroqTaskModel[] {
-  const allThree: GroqTaskModel[] = [
-    'openai/gpt-oss-120b',
-    'qwen/qwen3.8-27b',
+  const allTwo: GroqTaskModel[] = [
     'openai/gpt-oss-20b',
+    'openai/gpt-oss-120b',
   ];
 
-  let taskPrimary: GroqTaskModel = 'openai/gpt-oss-120b';
+  const isComplexReasoningTask =
+    taskMode === 'evaluate_release' ||
+    taskMode === 'analyze_script_synopsis' ||
+    taskMode === 'generate_ai_rival_releases' ||
+    taskMode === 'discover_ai_emerging_studio' ||
+    taskMode === 'evaluate_festival_ceremony';
 
-  if (
-    taskMode === 'evaluate_talent_offer' ||
-    taskMode === 'generate_character_role' ||
-    taskMode === 'generate_daily_news' ||
-    taskMode === 'evaluate_series_episode'
-  ) {
-    taskPrimary = 'openai/gpt-oss-20b';
-  } else if (
-    taskMode === 'generate_pr_media_response' ||
-    taskMode === 'generate_script_idea' ||
-    taskMode === 'discover_ai_rising_star' ||
-    taskMode === 'generate_ai_memory_news' ||
-    taskMode === 'mid_production_crises'
-  ) {
-    taskPrimary = 'qwen/qwen3.8-27b';
-  } else {
-    // evaluate_release, analyze_script_synopsis, generate_ai_rival_releases, discover_ai_emerging_studio, evaluate_festival_ceremony
-    taskPrimary = 'openai/gpt-oss-120b';
-  }
+  const taskPrimary: GroqTaskModel = isComplexReasoningTask
+    ? 'openai/gpt-oss-120b'
+    : 'openai/gpt-oss-20b';
 
   const ordered: GroqTaskModel[] = [taskPrimary];
   if (
     preferredModel &&
     (preferredModel === 'openai/gpt-oss-120b' ||
-      preferredModel === 'openai/gpt-oss-20b' ||
-      preferredModel === 'qwen/qwen3.8-27b') &&
+      preferredModel === 'openai/gpt-oss-20b') &&
     !ordered.includes(preferredModel)
   ) {
     ordered.push(preferredModel);
   }
-  for (const m of allThree) {
+  for (const m of allTwo) {
     if (!ordered.includes(m)) {
       ordered.push(m);
     }
@@ -1542,30 +1527,68 @@ function buildGroundedRivalReleases(payload: Record<string, unknown>) {
       ];
 
   const seed = hashSeed(`${payload?.title || 'film'}_${studios[0] || ''}_${Date.now()}`);
-  const count = 3;
+  const count = 4;
+
+  // Fair, varied seasonal rivals across 4 realistic cinema archetypes:
+  // 0: Commercial popcorn crowd-pleaser (lower critics, big opening, front-loaded)
+  // 1: Prestige sleeper gem (high critics, slower opening, builds strong word-of-mouth)
+  // 2: Balanced mid-high contender
+  // 3: Underperforming / mixed release (low critics & modest box office)
+  const archetypes = [
+    {
+      revRange: isSeries ? [95_000_000, 148_000_000] : [88_000_000, 145_000_000],
+      criticRange: [5.5, 6.9],
+      audienceRange: [7.6, 8.8],
+      genre: 'أكشن كوميدي تجاري',
+      trajectory: 'front_loaded' as const,
+    },
+    {
+      revRange: isSeries ? [65_000_000, 112_000_000] : [58_000_000, 108_000_000],
+      criticRange: [8.4, 9.3],
+      audienceRange: [8.1, 9.2],
+      genre: 'دراما نفسية وتشويق',
+      trajectory: 'sleeper' as const,
+    },
+    {
+      revRange: isSeries ? [78_000_000, 128_000_000] : [70_000_000, 124_000_000],
+      criticRange: [7.2, 8.3],
+      audienceRange: [7.4, 8.5],
+      genre: 'جريمة وإثارة',
+      trajectory: 'steady' as const,
+    },
+    {
+      revRange: isSeries ? [34_000_000, 66_000_000] : [28_000_000, 58_000_000],
+      criticRange: [4.5, 6.3],
+      audienceRange: [4.9, 6.6],
+      genre: 'دراما اجتماعية',
+      trajectory: 'front_loaded' as const,
+    },
+  ];
 
   return studios.slice(0, count).map((studioName, idx) => {
-    const title = sampleTitles[(seed + idx) % sampleTitles.length];
-    const leadStarName = stars[(seed + idx) % Math.max(1, stars.length)] || 'نجم شباك';
-    const baseRev = isSeries
-      ? idx === 0
-        ? 185_000_000
-        : idx === 1
-        ? 142_000_000
-        : 108_000_000
-      : idx === 0
-      ? 172_000_000
-      : idx === 1
-      ? 134_000_000
-      : 98_000_000;
-    const criticScore = idx === 0 ? 8.8 : idx === 1 ? 8.2 : 7.7;
+    const arch = archetypes[(seed + idx) % archetypes.length];
+    const title = sampleTitles[(seed + idx * 2) % sampleTitles.length];
+    const leadStarName = stars[(seed + idx * 3) % Math.max(1, stars.length)] || 'نجم شباك';
+    const frac = ((seed * (idx + 3) * 29) % 100) / 100;
+    const baseRev = Math.round(
+      arch.revRange[0] + (arch.revRange[1] - arch.revRange[0]) * frac
+    );
+    const criticScore = Number(
+      (arch.criticRange[0] + (arch.criticRange[1] - arch.criticRange[0]) * frac).toFixed(1)
+    );
+    const audienceScore = Number(
+      (arch.audienceRange[0] + (arch.audienceRange[1] - arch.audienceRange[0]) * frac).toFixed(1)
+    );
+
     return {
       studioName,
       title,
-      genre: idx === 0 ? 'أكشن وتشويق' : idx === 1 ? 'دراما اجتماعية' : 'جريمة وغموض',
+      genre: arch.genre,
       leadStarName,
       boxOfficeRevenue: baseRev,
       criticScore,
+      audienceScore,
+      trajectory: arch.trajectory,
       status: 'released',
     };
   });
@@ -1573,16 +1596,16 @@ function buildGroundedRivalReleases(payload: Record<string, unknown>) {
 
 function evaluateSilentScriptQuality(synopsis: string, title: string): number {
   const clean = synopsis.trim();
-  if (!clean) return 38;
+  if (!clean) return 32;
   const words = clean.split(/\s+/).filter(Boolean).length;
   const sentences = clean.split(/[،.,!؟\n]+/).filter((s) => s.trim().length > 6).length;
   const uniqueWords = new Set(clean.split(/\s+/).map((w) => w.replace(/[^\u0600-\u06FF]/g, ''))).size;
   const titleRelevance = title.trim().length >= 3 ? 6 : 0;
 
-  const lengthScore = words >= 35 ? 38 : words >= 22 ? 30 : words >= 14 ? 22 : words >= 8 ? 14 : 6;
-  const structureScore = Math.min(26, sentences * 6.5);
-  const richnessScore = Math.min(24, uniqueWords * 0.9);
-  return Math.min(95, Math.max(28, Math.round(lengthScore + structureScore + richnessScore + titleRelevance)));
+  const lengthScore = words >= 32 ? 38 : words >= 20 ? 32 : words >= 12 ? 24 : words >= 7 ? 15 : 7;
+  const structureScore = Math.min(28, sentences * 7);
+  const richnessScore = Math.min(26, uniqueWords * 1.05);
+  return Math.min(96, Math.max(26, Math.round(lengthScore + structureScore + richnessScore + titleRelevance)));
 }
 
 function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>) {
@@ -1591,8 +1614,9 @@ function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>
   const directorName = String(payload?.directorName || 'المخرج');
   const leadName = String(payload?.leadName || 'بطل العمل');
   const antagonistName = String(payload?.antagonistName || 'الخصم الدرامي');
-  const primaryGenre = String(payload?.primaryGenre || 'دراما');
-  const technicalQuality = Number(payload?.technicalQuality || 68);
+  const primaryGenre = String(payload?.primaryGenre || payload?.genre || 'دراما');
+  const technicalQuality = Number(payload?.technicalQuality || 72);
+  const commercialAppeal = Number(payload?.commercialAppeal || 72);
   const format = String(payload?.format || 'film');
   const isSeries = format === 'series';
 
@@ -1600,107 +1624,165 @@ function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>
     extractSynopsisHighlights(synopsis, title);
 
   const silentScriptScore = evaluateSilentScriptQuality(synopsis, title);
-  const blendedQuality = technicalQuality * 0.62 + silentScriptScore * 0.38;
+  // Honest, un-nerfed quality blend: great works score 8.4–9.6, weak works score 2.8–5.3
+  const blendedQuality = technicalQuality * 0.68 + silentScriptScore * 0.32;
+  const criticScore = Number(Math.min(9.6, Math.max(2.6, blendedQuality / 10)).toFixed(1));
 
-  const rawCritic = (blendedQuality / 10) * 0.92;
-  const criticScore = Number(Math.min(9.1, Math.max(3.8, rawCritic)).toFixed(1));
-  const audienceScore = Number(
-    Math.min(
-      9.3,
-      Math.max(4.0, criticScore + (silentScriptScore >= 72 ? 0.35 : -0.35))
-    ).toFixed(1)
-  );
+  // Audience score blends entertainment/commercial appeal with quality — can differ noticeably from critics!
+  const rawAudience =
+    (commercialAppeal * 0.44 + technicalQuality * 0.36 + silentScriptScore * 0.2) / 10;
+  const audienceScore = Number(Math.min(9.7, Math.max(2.9, rawAudience)).toFixed(1));
 
+  // Box office multiplier depends more on commercial momentum + audience buzz than pure critic prestige
+  const commercialComposite = audienceScore * 0.65 + (commercialAppeal / 10) * 0.35;
   const box_office_multiplier = Number(
     Math.min(
-      1.32,
-      Math.max(
-        0.38,
-        ((criticScore - 3.0) / 5.5) * (0.65 + (silentScriptScore / 100) * 0.52)
-      )
+      1.34,
+      Math.max(0.52, 0.48 + ((commercialComposite - 3.0) / 6.5) * 0.84)
     ).toFixed(2)
   );
 
-  const posScore = Number(Math.min(9.4, criticScore + 0.7).toFixed(1));
+  const posScore = Number(Math.min(9.7, criticScore + 0.6).toFixed(1));
   const mixedScore = criticScore;
-  const negScore = Number(Math.max(3.5, criticScore - 1.4).toFixed(1));
+  const negScore = Number(Math.max(2.5, criticScore - 1.2).toFixed(1));
 
   const seed = hashSeed(`${title}_${leadName}_${directorName}`);
+
+  const masterpieceQuotes = [
+    `تحفة سينمائية متكاملة! معالجة «${title}» بداية من "${openingClause}" وحتى ذروة "${conflictClause}" تثبت نضج رؤية المخرج ${directorName}، وقدم ${leadName} واحداً من أعظم أدواره.`,
+    `عمل استثنائي يرفع سقف الصناعة؛ التناغم بين السيناريو المحكم وإخراج ${directorName} وحضور ${leadName} يجعل «${title}» مرشحاً بقوة لاكتساح جوائز العام.`,
+  ];
 
   const positiveQuotes = [
     `معالجة فكرة "${openingClause}" في «${title}» منحت المخرج ${directorName} أرضية صلبة للبناء عليها، ونجح ${leadName} في تقديم أداء متماسك ومقنع طوال مشاهد المواجهة.`,
     `يحسب لصناع «${title}» تقديم خط "${openingClause}" بإيقاع مشدود وصورة بصرية متميزة، مع حضور لافت لـ ${leadName} جعل العمل يفرض نفسه بقوة هذا الموسم.`,
-    `تجربة ناضجة فنياً؛ الانطلاقة من "${openingClause}" إلى تصاعد الصراع في "${conflictClause}" عكست تفاهماً واضحاً بين رؤية ${directorName} وحضور ${leadName}.`,
   ];
 
   const negativeQuotes = [
-    `رغم جاذبية الفكرة في بداية "${openingClause}"، إلا أن تطور الصراع عند "${conflictClause}" عانى من بعض الإطالة، وكان يمكن رسم دوافع شخصية ${antagonistName} بعمق أكبر.`,
-    `اعتمد «${title}» بشكل زائد على حضور ${leadName} الكاريزمي لتجاوز بعض الثغرات الدرامية في النصف الثاني، خاصة في معالجة خط "${conflictClause}".`,
-    `البداية كانت واعدة جداً، لكن الإيقاع الدرامي تراجع قبل الوصول إلى "${endingClause}"، وكان السيناريو يحتاج تكثيفاً أكبر في مشاهد الذروة.`,
+    `رغم جاذبية الفكرة في بداية "${openingClause}"، إلا أن تطور الصراع عند "${conflictClause}" عانى من ضعف البناء الدرامي، وكان يمكن رسم دوافع شخصية ${antagonistName} بعمق أكبر.`,
+    `اعتمد «${title}» بشكل زائد على اسم ${leadName} لتغطية ثغرات واضحة في السيناريو والإخراج، خاصة في النصف الثاني عند "${conflictClause}".`,
   ];
 
   const mixedQuotes = [
-    `«${title}» عمل يوازن بين الجاذبية الجماهيرية والصنعة الفنية في إطار الـ (${primaryGenre})؛ البداية عند "${openingClause}" متقنة، وإن كانت النهاية عند "${endingClause}" ستقسم آراء المشاهدين.`,
-    `قدم ${directorName} صورة بصرية محترمة وأداءً جيداً من ${leadName} و${antagonistName}، لكن بعض التحولات في "${conflictClause}" مرت بشكل أسرع مما ينبغي.`,
-    `تجربة تستحق المشاهدة لعشاق هذا النوع الدرامي؛ عناصر الإنتاج متكاملة وإن بقيت قفلة "${endingClause}" مفتوحة للجدل النقدي.`,
+    `«${title}» عمل يوازن بين الجاذبية الجماهيرية والصنعة الفنية في إطار (${primaryGenre})؛ البداية عند "${openingClause}" متقنة، وإن كانت النهاية عند "${endingClause}" ستقسم آراء المشاهدين.`,
+    `قدم ${directorName} صورة بصرية جيدة وأداءً مقنعاً من ${leadName}، لكن بعض التحولات في "${conflictClause}" مرت بشكل أسرع مما ينبغي.`,
   ];
+
+  const isMasterpiece = criticScore >= 8.3;
+  const isWeak = criticScore < 5.8;
 
   return {
     critic_score: criticScore,
     audience_score: audienceScore,
     box_office_multiplier,
     viral_trend_label:
-      criticScore >= 7.5
-        ? isSeries
-          ? `#${title.replace(/\s+/g, '_')} يتصدر قوائم المشاهدة وإشادة بمعالجة "${openingClause}"`
-          : `#${title.replace(/\s+/g, '_')} يتصدر شباك التذاكر وإشادة بمعالجة "${openingClause}"`
-        : criticScore >= 6.0
-        ? `تباين الآراء حول نهاية «${title}» وأداء الأبطال`
-        : `ملاحظات نقدية على حبكة «${title}» رغم حضور ${leadName}`,
+      isMasterpiece
+        ? `#${title.replace(/\s+/g, '_')} إشادة نقدية وجماهيرية كاسحة بعمل الموسم`
+        : audienceScore >= 7.8 && criticScore < 7.0
+        ? `#${title.replace(/\s+/g, '_')} يكتسح شباك التذاكر رغم انقسام النقاد!`
+        : criticScore >= 6.8
+        ? `#${title.replace(/\s+/g, '_')} يتصدر نقاشات الموسم بإقبال قوي`
+        : `انتقادات حادة لحبكة «${title}» ومطالبات بمراجعة الاختيارات القادمة`,
     rival_releases: buildGroundedRivalReleases(payload),
-    reviews: [
-      {
-        criticName: 'طارق الشهاوي',
-        publication: 'الشاشة الذهبية',
-        sentiment: posScore >= 7.0 ? 'positive' : 'mixed',
-        quote: positiveQuotes[seed % positiveQuotes.length],
-        score: posScore,
-      },
-      {
-        criticName: 'ماجدة خيرت',
-        publication: 'بوابة الفن السابع',
-        sentiment: 'negative',
-        quote: negativeQuotes[(seed + 1) % negativeQuotes.length],
-        score: negScore,
-      },
-      {
-        criticName: 'نديم محسن',
-        publication: 'سينما إنسايدر',
-        sentiment: 'mixed',
-        quote: mixedQuotes[(seed + 2) % mixedQuotes.length],
-        score: mixedScore,
-      },
-    ],
+    reviews: isMasterpiece
+      ? [
+          {
+            criticName: 'طارق الشهاوي',
+            publication: 'الشاشة الذهبية',
+            sentiment: 'positive',
+            quote: masterpieceQuotes[seed % masterpieceQuotes.length],
+            score: Number(Math.min(9.8, criticScore + 0.4).toFixed(1)),
+          },
+          {
+            criticName: 'نديم محسن',
+            publication: 'سينما إنسايدر',
+            sentiment: 'positive',
+            quote: positiveQuotes[seed % positiveQuotes.length],
+            score: criticScore,
+          },
+          {
+            criticName: 'ماجدة خيرت',
+            publication: 'بوابة الفن السابع',
+            sentiment: 'positive',
+            quote: `رغم تحفظي البسيط على إيقاع بعض مشاهد المنتصف، إلا أن «${title}» يظل علامة فنية فارقة هذا العام.`,
+            score: Number(Math.max(7.8, criticScore - 0.5).toFixed(1)),
+          },
+        ]
+      : isWeak
+      ? [
+          {
+            criticName: 'ماجدة خيرت',
+            publication: 'بوابة الفن السابع',
+            sentiment: 'negative',
+            quote: negativeQuotes[seed % negativeQuotes.length],
+            score: negScore,
+          },
+          {
+            criticName: 'نديم محسن',
+            publication: 'سينما إنسايدر',
+            sentiment: 'negative',
+            quote: negativeQuotes[(seed + 1) % negativeQuotes.length],
+            score: criticScore,
+          },
+          {
+            criticName: 'طارق الشهاوي',
+            publication: 'الشاشة الذهبية',
+            sentiment: 'mixed',
+            quote: mixedQuotes[seed % mixedQuotes.length],
+            score: Number(Math.min(6.5, criticScore + 0.7).toFixed(1)),
+          },
+        ]
+      : [
+          {
+            criticName: 'طارق الشهاوي',
+            publication: 'الشاشة الذهبية',
+            sentiment: posScore >= 7.0 ? 'positive' : 'mixed',
+            quote: positiveQuotes[seed % positiveQuotes.length],
+            score: posScore,
+          },
+          {
+            criticName: 'ماجدة خيرت',
+            publication: 'بوابة الفن السابع',
+            sentiment: 'negative',
+            quote: negativeQuotes[(seed + 1) % negativeQuotes.length],
+            score: negScore,
+          },
+          {
+            criticName: 'نديم محسن',
+            publication: 'سينما إنسايدر',
+            sentiment: 'mixed',
+            quote: mixedQuotes[(seed + 2) % mixedQuotes.length],
+            score: mixedScore,
+          },
+        ],
     social_posts: [
       {
         handle: '@CinemaMasr_Fan',
         platform: 'X',
-        content: isSeries
-          ? `متابع حلقات «${title}» من أول يوم.. مشهد "${openingClause}" وأداء ${leadName} عاملين نسب مشاهدة قوية الموسم ده 🎬✨`
-          : `لسه خارج من عرض «${title}» في السينما.. مشهد "${openingClause}" شد القاعة كلها، و${leadName} مقدم دور مختلف فعلاً 🎬🔥`,
-        likes: criticScore >= 7.2 ? '34.5K' : '8.2K',
+        content:
+          audienceScore >= 8.0
+            ? isSeries
+              ? `مسلسل «${title}» عامل حالة مش طبيعية.. مشهد "${openingClause}" وأداء ${leadName} خطفوا الموسم كله 🎬🔥`
+              : `لسه خارج من عرض «${title}» في السينما.. القاعة كلها سقفت في النهاية، ${leadName} عمل عظمة بجد! 🎬🔥`
+            : audienceScore >= 6.4
+            ? `«${title}» تجربة ممتعة ومسلية في المجمل، خصوصاً حضور ${leadName} رغم إن فيه شوية مط في النص 🍿`
+            : `بصراحة «${title}» كان أقل بكتير من التوقعات.. الفكرة كانت حلوة بس التنفيذ ضعيف للأسف 😕`,
+        likes: audienceScore >= 8.0 ? '54.2K' : audienceScore >= 6.5 ? '18.4K' : '6.1K',
       },
       {
         handle: '@FilmCritic_Cairo',
         platform: 'X',
-        content: `المواجهة بين ${leadName} و${antagonistName} في خط "${conflictClause}" هي أقوى نقطة في «${title}».. تقييمي الواقعي للعمل ${mixedScore}/10.`,
-        likes: '11.4K',
+        content: `المواجهة بين ${leadName} و${antagonistName} في خط "${conflictClause}" هي النقطة الأبرز في «${title}».. تقييمي الواقعي ${criticScore}/10.`,
+        likes: '12.8K',
       },
       {
         handle: '@DramaTrends_EG',
         platform: 'TikTok',
-        content: `نقاشات الجمهور على قفلة «${title}» ولحظة "${endingClause}".. العمل عامل صدى واسع هذا الموسم 🍿`,
-        likes: criticScore >= 7.5 ? '145K' : '42K',
+        content:
+          audienceScore >= 7.5
+            ? `نقاشات الجمهور مولعة على قفلة «${title}» ولحظة "${endingClause}".. العمل مسيطر على التريند 🍿✨`
+            : `آراء الجمهور متباينة جداً حول «${title}» بعد أول يوم عرض.. هل يستاهل التذكرة ولا لأ؟ 👀`,
+        likes: audienceScore >= 7.5 ? '168K' : '44K',
       },
     ],
   };
@@ -1716,7 +1798,16 @@ async function handleEvaluateRelease(
   const directorName = String(payload?.directorName || 'المخرج');
   const leadName = String(payload?.leadName || 'البطل');
   const antagonistName = String(payload?.antagonistName || 'الخصم الدرامي');
-  const technicalQuality = Number(payload?.technicalQuality || 68);
+  const technicalQuality = Number(payload?.technicalQuality || 72);
+  const commercialAppeal = Number(payload?.commercialAppeal || 72);
+  const expectedCriticScore = Number(
+    payload?.expectedCriticScore || (technicalQuality / 10).toFixed(1)
+  );
+  const expectedAudienceScore = Number(
+    payload?.expectedAudienceScore ||
+      ((technicalQuality * 0.5 + commercialAppeal * 0.5) / 10).toFixed(1)
+  );
+  const genre = String(payload?.genre || 'دراما');
   const format = String(payload?.format || 'film');
   const isSeries = format === 'series';
   const silentScriptScore = evaluateSilentScriptQuality(synopsis, title);
@@ -1734,29 +1825,40 @@ async function handleEvaluateRelease(
   ]).join('، ');
 
   const systemPrompt = `أنت لجنة نقاد سينمائيين ودراميين مصريين ومحللي ${isSeries ? 'نسب مشاهدات المسلسلات والمنصات' : 'إيرادات شباك التذاكر السينمائي'}.
-المطلوب منك أولاً تقييم جودة السيناريو الفعلي الذي كتبه المنتج بصمت وبموضوعية شديدة (قوة الحبكة، تماسك الصراع، منطقية النهاية، مدى ملاءمته لـ ${isSeries ? 'مسلسل درامي يقاس بالمشاهدات واستمرارية الحلقات' : 'فيلم سينمائي يقاس بإيرادات شباك التذاكر وإقبال القاعات'}):
-عنوان العمل: "${title}"
-نص السيناريو: "${synopsis}"
-المخرج: ${directorName}، البطل: ${leadName}، الخصم: ${antagonistName}، الجودة الإنتاجية والفنية: ${technicalQuality}/100، التقييم الأولي لعمق الورق: ${silentScriptScore}/100.
+المطلوب منك تقييم العمل بعدالة وواقعية تامة (لا تقسُ على الأعمال الرائعة ولا تجامل الأعمال الضعيفة):
+- عنوان العمل: "${title}" (${isSeries ? 'مسلسل' : 'فيلم'} — تصنيف: ${genre})
+- نص السيناريو: "${synopsis}"
+- المخرج: ${directorName}، البطل: ${leadName}، الخصم: ${antagonistName}
+- الجودة الإنتاجية والفنية الفعلية في البلاتوه: ${technicalQuality}/100 (المتوقع نقدياً حوالي ${expectedCriticScore}/10)
+- القوة التجارية والنجومية والتسويق: ${commercialAppeal}/100 (المتوقع جماهيرياً حوالي ${expectedAudienceScore}/10)
+- عمق الورق المكتوب: ${silentScriptScore}/100
 
 الشركات المنافسة في السوق هذا الموسم: (${competitorStudios}).
 النجوم المتاحون للشركات المنافسة: (${availableStars}).
 
-قواعد التقييم الصارمة:
-1. قيّم السيناريو بصدق: إذا كان السيناريو قصيراً أو سطحياً أو تقليدياً، اخفض box_office_multiplier (بين 0.38 و 0.72) واجعل الأعمال المنافسة تتفوق عليه في ${isSeries ? 'المشاهدات والعوائد' : 'إيرادات شباك التذاكر'}. أما إذا كان السيناريو عميقاً ومبتكراً ومتكاملاً مع أبطاله، فامنحه box_office_multiplier بين 0.85 و 1.32.
-2. اكتب آراء النقاد ومنشورات الجمهور بلغة مصرية طبيعية وراقية واحترافية تذكر تفاصيل حقيقية من قصة المنتج.
-3. ولّد أعمال الشركات المنافسة (3 شركات منافسة تنزل في نفس الموسم) ضمن مصفوفة rival_releases بأرقام واقعية قوية وشرسة في السوق المصري والعربي (بين 85,000,000 و 220,000,000) وتقييمات بين 7.4 و 9.2 حتى تكون المنافسة حقيقية وشرسة جداً.
+قواعد الواقعية والعدالة الصارمة:
+1. التقييم النقدي الحقيقي (critic_score على مقياس من 2.5 إلى 9.6):
+   - إذا كان العمل قوياً جداً (جودة فنية 82+ وسيناريو متماسك)، امنحه تقييماً ممتازاً حقيقياً (8.3 إلى 9.5) ومراجعات تحتفي بقوته!
+   - إذا كان متوسطاً، امنحه (6.2 إلى 7.6).
+   - إذا كان ضعيفاً فعلاً (جودة أقل من 58 أو سيناريو سطحي قصير جداً)، امنحه تقييماً منخفضاً واقعياً (2.8 إلى 5.4).
+2. فصل التقييم عن الإيرادات (قاعدة السوق الحقيقي):
+   - ليس بالضرورة أن يكون الأعلى تقييماً نقدياً هو الأعلى إيرادات! قد يحقق عمل تجاري جماهيري (أكشن/كوميديا بنجوم كبار) إيرادات ضخمة وتقييم جمهور عالٍ (8.2+) رغم تقييم نقاد متوسط (5.8–6.9)، بينما قد يحقق عمل فني عميق تقييم نقاد 9.1 وإيرادات متوسطة تنمو بالتدريج.
+3. ولّد 4 أعمال منافسة متنوعة وعادلة في rival_releases تمثل السوق الحقيقي:
+   - عمل تجاري ضخم (تقييم نقاد متوسط 5.6–6.9 لكن إيراداته قوية 85M–145M، trajectory: "front_loaded")
+   - عمل فني/نقدي رائع (تقييم نقاد عالٍ 8.4–9.3 وإيرادات متوسطة تنمو بالتدريج 60M–110M، trajectory: "sleeper")
+   - عمل متوازن قوي (تقييم 7.3–8.3، إيرادات 70M–125M، trajectory: "steady")
+   - عمل متعثر أو متوسط (تقييم 4.6–6.3، إيرادات 28M–60M، trajectory: "front_loaded")
 
 أرجع JSON فقط يحتوي على:
-- critic_score (رقم من 3.8 إلى 9.2)
-- audience_score (رقم من 4.0 إلى 9.4)
-- box_office_multiplier (رقم واقعي بين 0.38 و 1.32 يعكس جودة السيناريو والعمل مقارنة بالمنافسين)
+- critic_score (رقم من 2.5 إلى 9.6 — مقياس من 10)
+- audience_score (رقم من 2.8 إلى 9.7 — مقياس من 10)
+- box_office_multiplier (رقم واقعي بين 0.52 و 1.34 يعكس قوة الإقبال التجاري للعمل)
 - viral_trend_label (عنوان الصدى الجماهيري)
-- reviews: مصفوفة من 3 نقاد (criticName, publication, sentiment: "positive"|"mixed"|"negative", quote يذكر تفاصيل القصة، score)
+- reviews: مصفوفة من 3 نقاد (criticName, publication, sentiment: "positive"|"mixed"|"negative", quote يذكر تفاصيل القصة بصدق، score من 10)
 - social_posts: مصفوفة من 3 منشورات سوشيال ميديا (handle, platform, content, likes)
-- rival_releases: مصفوفة من 3 عناصر، كل عنصر يحتوي على (studioName, title, genre, leadStarName, boxOfficeRevenue: رقم بين 85000000 و 220000000, criticScore, status: "released")`;
+- rival_releases: مصفوفة من 4 عناصر، كل عنصر يحتوي على (studioName, title, genre, leadStarName, boxOfficeRevenue: رقم بين 28000000 و 155000000, criticScore من 4.5 إلى 9.3, audienceScore من 4.8 إلى 9.4, trajectory: "front_loaded"|"steady"|"sleeper", status: "released")`;
 
-  const userPrompt = `قيّم ${isSeries ? 'مسلسل' : 'فيلم'} «${title}» وولّد منافسات الموسم الشرسة الآن بصيغة JSON.`;
+  const userPrompt = `قيّم ${isSeries ? 'مسلسل' : 'فيلم'} «${title}» بموضوعية وعدالة تامة وولّد 4 منافسين متنوعين بصيغة JSON الآن.`;
 
   const groqRes = await callGroqJson(systemPrompt, userPrompt, groqKeyOverride, preferredModel);
   if (
@@ -1765,17 +1867,21 @@ async function handleEvaluateRelease(
     Array.isArray(groqRes.data.reviews) &&
     groqRes.data.reviews.length >= 2
   ) {
+    const rawCriticNum = Number(groqRes.data.critic_score);
+    const normalizedCritic = rawCriticNum > 10 ? rawCriticNum / 10 : rawCriticNum;
     const clampedCritic = Number(
-      Math.min(9.2, Math.max(3.8, Number(groqRes.data.critic_score))).toFixed(1)
+      Math.min(9.6, Math.max(2.5, normalizedCritic)).toFixed(1)
     );
+
+    const rawAudienceNum = Number(groqRes.data.audience_score ?? expectedAudienceScore);
+    const normalizedAudience = rawAudienceNum > 10 ? rawAudienceNum / 10 : rawAudienceNum;
     const clampedAudience = Number(
-      Math.min(9.4, Math.max(4.0, Number(groqRes.data.audience_score || clampedCritic))).toFixed(1)
+      Math.min(9.7, Math.max(2.8, normalizedAudience)).toFixed(1)
     );
-    const rawAiMult = Number(groqRes.data.box_office_multiplier || 0.85);
-    const scriptWeightedMult =
-      rawAiMult * 0.7 + (0.42 + (silentScriptScore / 100) * 0.82) * 0.3;
+
+    const rawAiMult = Number(groqRes.data.box_office_multiplier || 1.0);
     const clampedMult = Number(
-      Math.min(1.32, Math.max(0.38, scriptWeightedMult)).toFixed(2)
+      Math.min(1.34, Math.max(0.52, rawAiMult)).toFixed(2)
     );
 
     const fallbackRivals = buildGroundedRivalReleases(payload);
@@ -1783,14 +1889,24 @@ async function handleEvaluateRelease(
       Array.isArray(groqRes.data.rival_releases) &&
       groqRes.data.rival_releases.length >= 2
         ? (groqRes.data.rival_releases as Record<string, unknown>[])
-            .slice(0, 3)
+            .slice(0, 4)
             .map((r, i) => {
               const fb = fallbackRivals[i % fallbackRivals.length];
               const rawRev = Number(r.boxOfficeRevenue || 0);
               const realisticRev =
-                rawRev >= 65_000_000
-                  ? Math.min(245_000_000, rawRev)
-                  : fb?.boxOfficeRevenue || 125_000_000;
+                rawRev >= 22_000_000
+                  ? Math.min(170_000_000, Math.round(rawRev))
+                  : fb?.boxOfficeRevenue || 78_000_000;
+              const rawRivalCrit = Number(r.criticScore || fb.criticScore || 7.2);
+              const normRivalCrit = rawRivalCrit > 10 ? rawRivalCrit / 10 : rawRivalCrit;
+              const rawRivalAud = Number(r.audienceScore || fb.audienceScore || normRivalCrit + 0.3);
+              const normRivalAud = rawRivalAud > 10 ? rawRivalAud / 10 : rawRivalAud;
+              const traj =
+                r.trajectory === 'front_loaded' ||
+                r.trajectory === 'sleeper' ||
+                r.trajectory === 'steady'
+                  ? r.trajectory
+                  : fb.trajectory;
               return {
                 studioName:
                   typeof r.studioName === 'string' && r.studioName.trim()
@@ -1809,9 +1925,9 @@ async function handleEvaluateRelease(
                     ? r.leadStarName.trim()
                     : fb.leadStarName,
                 boxOfficeRevenue: realisticRev,
-                criticScore: Number(
-                  Math.min(9.3, Math.max(7.2, Number(r.criticScore || 8.0))).toFixed(1)
-                ),
+                criticScore: Number(Math.min(9.4, Math.max(4.4, normRivalCrit)).toFixed(1)),
+                audienceScore: Number(Math.min(9.5, Math.max(4.5, normRivalAud)).toFixed(1)),
+                trajectory: traj,
                 status: 'released',
               };
             })
@@ -1834,7 +1950,7 @@ async function handleEvaluateRelease(
 }
 
 /**
- * AI-Powered Contextual PR & Media Response Handler (via Groq qwen/qwen3.8-27b / openai/gpt-oss-120b / openai/gpt-oss-20b)
+ * AI-Powered Contextual PR & Media Response Handler (via Groq openai/gpt-oss-20b / openai/gpt-oss-120b)
  */
 async function handleGeneratePrMediaResponse(
   payload: Record<string, unknown>,

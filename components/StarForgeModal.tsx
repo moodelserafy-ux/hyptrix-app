@@ -10,7 +10,6 @@ import {
   Sparkles,
   X,
   CheckCircle2,
-  Coins,
   Wallet,
   Crown,
   Upload,
@@ -18,6 +17,10 @@ import {
   ArrowRight,
   ArrowLeft,
   Star,
+  ImagePlus,
+  Trash2,
+  Clapperboard,
+  Zap,
 } from 'lucide-react';
 import { useGameStore } from '@/lib/store';
 import { formatMoney } from '@/lib/game-engine';
@@ -34,52 +37,6 @@ import {
   playCashRegisterChaChing,
   playHeavyIronStamp,
 } from '@/lib/sound-fx';
-
-const MALE_PORTRAIT_PRESETS: { label: string; genre: GenreId; url: string }[] = [
-  {
-    label: 'بطل الأكشن والمطاردات',
-    genre: 'action',
-    url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    label: 'نجم الدراما الشعبية',
-    genre: 'popular_drama',
-    url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    label: 'نجم الكوميديا الساخرة',
-    genre: 'comedy',
-    url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    label: 'بطل الغموض والرومانسية',
-    genre: 'romance',
-    url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=600&auto=format&fit=crop&q=80',
-  },
-];
-
-const FEMALE_PORTRAIT_PRESETS: { label: string; genre: GenreId; url: string }[] = [
-  {
-    label: 'نجمة الدراما الأولى',
-    genre: 'popular_drama',
-    url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    label: 'أيقونة الرومانسية والسينما',
-    genre: 'romance',
-    url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    label: 'بطلة الأكشن والإثارة',
-    genre: 'action',
-    url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    label: 'نجمة الكوميديا والاستعراض',
-    genre: 'comedy',
-    url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=600&auto=format&fit=crop&q=80',
-  },
-];
 
 function getStatMetaForGender(gender: 'male' | 'female'): {
   key: keyof SixRadarStats;
@@ -141,12 +98,24 @@ const GENRE_ARCHETYPE_LABELS: Record<
   popular_drama: { male: 'نجم الدراما الشعبية', female: 'سيدة الدراما الأولى' },
   comedy: { male: 'نجم الكوميديا الجماهيرية', female: 'نجمة الكوميديا الساخرة' },
   light_comedy: { male: 'بطل اللايت كوميدي', female: 'نجمة اللايت كوميدي' },
-  psychological_horror: { male: 'بطل الرعب النفسي', female: 'أيقونة الرعب والغموض' },
-  supernatural_horror: { male: 'نجم ما وراء الطبيعة', female: 'بطلة الرعب الخارق' },
-  crime_mystery: { male: 'محقق الجريمة والغموض', female: 'نجمة الإثارة البوليسية' },
+  psychological_horror: {
+    male: 'بطل الرعب النفسي',
+    female: 'أيقونة الرعب والغموض',
+  },
+  supernatural_horror: {
+    male: 'نجم ما وراء الطبيعة',
+    female: 'بطلة الرعب الخارق',
+  },
+  crime_mystery: {
+    male: 'محقق الجريمة والغموض',
+    female: 'نجمة الإثارة البوليسية',
+  },
   sci_fi: { male: 'بطل الخيال العلمي', female: 'نجمة المستقبل والخيال' },
   romance: { male: 'فتى الشاشة الرومانسي', female: 'نجمة الرومانسية الحالمة' },
-  historical: { male: 'فارس الملاحم التاريخية', female: 'ملكة الدراما التاريخية' },
+  historical: {
+    male: 'فارس الملاحم التاريخية',
+    female: 'ملكة الدراما التاريخية',
+  },
   biography: { male: 'بطل السير الذاتية', female: 'نجمة السير الذاتية' },
   heist: { male: 'عقل السطو والذكاء', female: 'ماستر الخداع والسطو' },
   fantasy: { male: 'بطل الفانتازيا والأساطير', female: 'أميرة الأساطير السحرية' },
@@ -161,21 +130,63 @@ const QUICK_GENRE_CHIPS: { id: GenreId; label: string }[] = [
   { id: 'crime_mystery', label: 'جريمة وغموض' },
 ];
 
+/**
+ * Generates a self-contained Royal Cinema monogram SVG data URI when the player
+ * does not upload a custom photo — zero external dependencies or broken URLs.
+ */
+function buildRoyalMonogramPortraitDataUrl(
+  name: string,
+  gender: 'male' | 'female',
+  overall: number
+): string {
+  const cleanName = (name || 'نجم').trim();
+  const initial = cleanName.charAt(0) || '★';
+  const accent = gender === 'female' ? '#D91624' : '#D4AF37';
+  const safeInitial = initial.replace(/[<>&"']/g, '');
+  const safeName = cleanName.slice(0, 18).replace(/[<>&"']/g, '');
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 460">
+    <defs>
+      <radialGradient id="spot" cx="50%" cy="35%" r="65%">
+        <stop offset="0%" stop-color="#2D3F50"/>
+        <stop offset="70%" stop-color="#1A2530"/>
+        <stop offset="100%" stop-color="#0E151C"/>
+      </radialGradient>
+      <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#FFF3B0"/>
+        <stop offset="50%" stop-color="#D4AF37"/>
+        <stop offset="100%" stop-color="#9A7210"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="460" fill="url(#spot)"/>
+    <rect x="18" y="18" width="364" height="424" rx="22" fill="none" stroke="url(#gold)" stroke-width="3" opacity="0.7"/>
+    <circle cx="200" cy="185" r="88" fill="#111921" stroke="url(#gold)" stroke-width="5"/>
+    <circle cx="200" cy="185" r="76" fill="none" stroke="${accent}" stroke-width="2" stroke-dasharray="6 6" opacity="0.8"/>
+    <text x="200" y="212" text-anchor="middle" fill="#D4AF37" font-size="82" font-weight="900" font-family="serif">${safeInitial}</text>
+    <text x="200" y="330" text-anchor="middle" fill="#F9F6F0" font-size="26" font-weight="800" font-family="sans-serif">${safeName}</text>
+    <text x="200" y="370" text-anchor="middle" fill="#D4AF37" font-size="16" font-weight="700" font-family="monospace">ROYAL CASTING · ${overall} OVR</text>
+  </svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 export default function StarForgeModal() {
   const isStarForgeOpen = useGameStore((s) => s.isStarForgeOpen);
   const setStarForgeOpen = useGameStore((s) => s.setStarForgeOpen);
-  const starForgeLocksOpened = useGameStore((s) => s.starForgeLocksOpened || 0);
+  const starForgeLocksOpened = useGameStore(
+    (s) => s.starForgeLocksOpened || 0
+  );
   const unlockNextStarForgeLockWithAd = useGameStore(
     (s) => s.unlockNextStarForgeLockWithAd
   );
   const cash = useGameStore((s) => s.cash);
-  const vipCoins = useGameStore((s) => s.vipCoins);
-  const buyVipGemPackage = useGameStore((s) => s.buyVipGemPackage);
-  const spendForStarForgeUpgrade = useGameStore((s) => s.spendForStarForgeUpgrade);
+  const spendForStarForgeUpgrade = useGameStore(
+    (s) => s.spendForStarForgeUpgrade
+  );
   const createCustomVipStar = useGameStore((s) => s.createCustomVipStar);
   const showToast = useGameStore((s) => s.showToast);
 
-  // Mobile-friendly 3-Step Casting Wizard (1: Identity & Polaroid, 2: Radar & Stats, 3: Preview & Certify)
+  // Mobile-friendly 3-Step Casting Wizard
   const [castingStep, setCastingStep] = useState<1 | 2 | 3>(1);
   const [watchingAdIndex, setWatchingAdIndex] = useState<number | null>(null);
   const [droppedLockIndex, setDroppedLockIndex] = useState<number | null>(null);
@@ -184,10 +195,12 @@ export default function StarForgeModal() {
   const [starName, setStarName] = useState('فارس الدهبي');
   const [starAge, setStarAge] = useState<number>(28);
   const [primaryGenre, setPrimaryGenre] = useState<GenreId>('action');
-  const [photoUrl, setPhotoUrl] = useState<string>(MALE_PORTRAIT_PRESETS[0].url);
+  const [photoUrl, setPhotoUrl] = useState<string>('');
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
   const [cameraFlashActive, setCameraFlashActive] = useState(false);
-  const [hoveredStatKey, setHoveredStatKey] = useState<keyof SixRadarStats>('charisma');
-  const [showPackagesDrawer, setShowPackagesDrawer] = useState(false);
+  const [hoveredStatKey, setHoveredStatKey] =
+    useState<keyof SixRadarStats>('charisma');
+  const [trainingAdLoading, setTrainingAdLoading] = useState(false);
 
   const [radarStats, setRadarStats] = useState<SixRadarStats>({
     charisma: 76,
@@ -205,8 +218,6 @@ export default function StarForgeModal() {
   if (!isStarForgeOpen) return null;
 
   const allLocksOpened = starForgeLocksOpened >= 5;
-  const activePresets =
-    starGender === 'female' ? FEMALE_PORTRAIT_PRESETS : MALE_PORTRAIT_PRESETS;
   const statMetaList = getStatMetaForGender(starGender);
 
   const handleSwitchGender = (nextGender: 'male' | 'female') => {
@@ -216,11 +227,6 @@ export default function StarForgeModal() {
     } else if (nextGender === 'male' && starName === 'ليلى الشامي') {
       setStarName('فارس الدهبي');
     }
-    const matchingPresets =
-      nextGender === 'female' ? FEMALE_PORTRAIT_PRESETS : MALE_PORTRAIT_PRESETS;
-    const genreMatch =
-      matchingPresets.find((p) => p.genre === primaryGenre) || matchingPresets[0];
-    setPhotoUrl(genreMatch.url);
   };
 
   const handleSwitchGenre = (nextGenre: GenreId) => {
@@ -233,7 +239,8 @@ export default function StarForgeModal() {
           ? Math.max(prev.acting, 80)
           : prev.acting,
       comedy: nextGenre === 'comedy' ? Math.max(prev.comedy, 80) : prev.comedy,
-      charisma: nextGenre === 'romance' ? Math.max(prev.charisma, 80) : prev.charisma,
+      charisma:
+        nextGenre === 'romance' ? Math.max(prev.charisma, 80) : prev.charisma,
     }));
   };
 
@@ -243,11 +250,15 @@ export default function StarForgeModal() {
     setPhotoUrl(newUrl);
     setTimeout(() => {
       setCameraFlashActive(false);
-    }, 420);
+    }, 380);
   };
 
   const handleFileDropOrSelect = (file?: File | null) => {
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('اختر ملف صورة صحيح (JPG أو PNG أو WEBP)', 'warning');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result;
@@ -275,15 +286,11 @@ export default function StarForgeModal() {
     const currentVal = radarStats[key];
     if (currentVal >= 99) return;
 
-    const isGoldTier = currentVal >= 80;
-    const cashCost = isGoldTier ? 0 : 1_500_000;
-    const gemCost = isGoldTier ? 25 : 0;
+    const isEliteTier = currentVal >= 80;
+    const cashCost = isEliteTier ? 3_500_000 : 1_500_000;
 
-    const ok = spendForStarForgeUpgrade(cashCost, gemCost);
+    const ok = spendForStarForgeUpgrade(cashCost, 0);
     if (!ok) {
-      if (isGoldTier) {
-        setShowPackagesDrawer(true);
-      }
       return;
     }
 
@@ -301,6 +308,43 @@ export default function StarForgeModal() {
       ...prev,
       [key]: Math.max(60, prev[key] - 2),
     }));
+  };
+
+  const handleAdTrainingCampBoost = () => {
+    if (trainingAdLoading) return;
+    const upgradableKeys = (
+      Object.keys(radarStats) as (keyof SixRadarStats)[]
+    ).filter((k) => radarStats[k] < 99);
+    if (upgradableKeys.length === 0) {
+      showToast('جميع مهارات النجم وصلت للحد الأقصى 99 بالفعل!', 'success');
+      return;
+    }
+    setTrainingAdLoading(true);
+    setTimeout(() => {
+      playCashRegisterChaChing();
+      setRadarStats((prev) => {
+        const next = { ...prev };
+        let pointsLeft = 4;
+        let guard = 0;
+        while (pointsLeft > 0 && guard < 20) {
+          guard++;
+          const pool = (Object.keys(next) as (keyof SixRadarStats)[]).filter(
+            (k) => next[k] < 99
+          );
+          if (pool.length === 0) break;
+          const pick = pool[Math.floor(Math.random() * pool.length)];
+          next[pick] = Math.min(99, next[pick] + 1);
+          pointsLeft--;
+        }
+        return next;
+      });
+      setTrainingAdLoading(false);
+      showToast(
+        'اكتمل معسكر التدريب المكثف! (+4 نقاط طاقة مجاناً)',
+        'success',
+        'ارتفعت مهارات نجمك الجاهز للكاستينج بدون خصم من الخزينة.'
+      );
+    }, 600);
   };
 
   const overallRating = Math.min(
@@ -321,6 +365,9 @@ export default function StarForgeModal() {
     (starGender === 'female' ? 'نجمة شباك حصرية' : 'نجم شباك حصري');
 
   const estimatedBaseSalary = Math.max(8_000_000, overallRating * 180_000);
+  const previewPortraitUrl =
+    photoUrl ||
+    buildRoyalMonogramPortraitDataUrl(starName, starGender, overallRating);
 
   const handleCertifyDiamondStar = () => {
     if (!starName.trim()) {
@@ -328,18 +375,17 @@ export default function StarForgeModal() {
       setCastingStep(1);
       return;
     }
-    const finalPhoto = photoUrl || activePresets[0].url;
 
     setIsStampingReveal(true);
     playHeavyIronStamp();
 
     const newActor: ActorItem = {
-      id: `custom_vip_${Date.now()}`,
+      id: `custom_star_${Date.now()}`,
       name: starName.trim(),
       gender: starGender,
       age: starAge,
       tier: 'S',
-      image_url: finalPhoto,
+      image_url: previewPortraitUrl,
       base_salary: estimatedBaseSalary,
       archetype: `${archetypeTitle} · نجم الاستوديو الحصري`,
       isCustomStar: true,
@@ -383,20 +429,20 @@ export default function StarForgeModal() {
         className="fixed inset-0 z-[150] flex items-center justify-center p-2.5 sm:p-4 bg-[#1A2530]/88 backdrop-blur-md overflow-y-auto overscroll-contain touch-none select-none"
         dir="rtl"
       >
-        {/* Camera Flash Overlay when photo is dropped */}
+        {/* Camera Flash Overlay when photo is uploaded */}
         <AnimatePresence>
           {cameraFlashActive && (
             <motion.div
-              initial={{ opacity: 1 }}
+              initial={{ opacity: 0.9 }}
               animate={{ opacity: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.4 }}
+              transition={{ duration: 0.36 }}
               className="fixed inset-0 z-[200] bg-white pointer-events-none"
             />
           )}
         </AnimatePresence>
 
-        {/* STAGE A: THE VIP ENTRANCE (الملف السري الأحمر و5 أقفال ذهبية) */}
+        {/* STAGE A: TOP SECRET RED VELVET FOLDER (5 Golden Locks Entrance) */}
         {!allLocksOpened && !revealedStar && (
           <motion.div
             initial={{ scale: 0.94, opacity: 0 }}
@@ -415,22 +461,22 @@ export default function StarForgeModal() {
                   ))}
                 </div>
                 <span className="px-2.5 py-0.5 rounded-md bg-[#1A2530] border border-[#D4AF37] font-typewriter text-[11px] font-black text-[#D4AF37]">
-                  ملف سري للغاية · VIP
+                  ملف سري للغاية · خاص
                 </span>
               </div>
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-9 h-9 rounded-full bg-[#1A2530]/85 hover:bg-[#1A2530] text-[#F9F6F0] flex items-center justify-center border border-[#D4AF37]/50 cursor-pointer"
+                className="w-10 h-10 rounded-xl bg-[#1A2530]/85 hover:bg-[#1A2530] text-[#F9F6F0] flex items-center justify-center border border-[#D4AF37]/50 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="text-center mb-5">
-              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#1A2530]/85 border border-[#D4AF37] text-[#D4AF37] text-xs font-extrabold mb-2 shadow">
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-lg bg-[#1A2530]/85 border border-[#D4AF37] text-[#D4AF37] text-xs font-extrabold mb-2 shadow">
                 <Crown className="w-3.5 h-3.5" />
-                <span>خزينة كاستينج الأساطير الخاصة بمكتب الإمبراطور</span>
+                <span>خزينة كاستينج الأساطير بمكتب الإمبراطور</span>
               </div>
               <h2 className="font-display text-2xl sm:text-3xl text-[#F9F6F0] tracking-wide">
                 غرفة صناعة النجوم
@@ -491,65 +537,52 @@ export default function StarForgeModal() {
               })}
             </div>
 
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={handleWatchAdToUnlock}
-                disabled={watchingAdIndex !== null}
-                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-extrabold text-sm sm:text-base shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Film className="w-4 h-4" />
-                <span>
-                  {watchingAdIndex !== null
-                    ? 'جاري تشغيل بكرة العرض وفك القفل الذهبي...'
-                    : `مشاهدة إعلان لفك القفل (${starForgeLocksOpened}/5)`}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => buyVipGemPackage(10)}
-                className="w-full py-3 px-4 rounded-2xl bg-[#1A2530] hover:bg-[#1A2530]/90 text-[#D4AF37] border-2 border-[#D4AF37] font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>فتح الأقفال الـ 5 فوراً (باقة 10 ج.م VIP)</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleWatchAdToUnlock}
+              disabled={watchingAdIndex !== null}
+              className="w-full min-h-[48px] py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-extrabold text-sm sm:text-base shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Film className="w-4 h-4" />
+              <span>
+                {watchingAdIndex !== null
+                  ? 'جاري تشغيل بكرة العرض وفك القفل الذهبي...'
+                  : `مشاهدة إعلان لفك القفل (${starForgeLocksOpened}/5)`}
+              </span>
+            </button>
           </motion.div>
         )}
 
-        {/* STAGE B: LUXURY DRESSING ROOM WIZARD (خطوات مقسمة ومتجاوبة بسلاسة فائقة) */}
+        {/* STAGE B: LUXURY ROYAL CASTING STUDIO WIZARD */}
         {allLocksOpened && !revealedStar && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative w-full max-w-2xl rounded-[32px] bg-[#F9F6F0] text-[#1A2530] border-4 border-[#D4AF37] shadow-[0_32px_90px_rgba(0,0,0,0.75)] overflow-hidden my-auto max-h-[92dvh] flex flex-col touch-pan-y"
+            className="relative w-full max-w-2xl rounded-[30px] bg-[#F9F6F0] text-[#1A2530] border-4 border-[#D4AF37] shadow-[0_32px_90px_rgba(0,0,0,0.75)] overflow-hidden my-auto max-h-[92dvh] flex flex-col touch-pan-y"
           >
-            {/* Hollywood Vanity Mirror Header with Illuminated Golden Bulbs */}
+            {/* Hollywood Vanity Mirror Header */}
             <div className="bg-gradient-to-l from-[#1A2530] via-[#22313F] to-[#1A2530] px-4 sm:px-5 py-3.5 border-b-4 border-[#D4AF37] flex items-center justify-between gap-2 shrink-0">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {[0, 1, 2, 3].map((b) => (
-                    <span
-                      key={b}
-                      className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#FFF4CC] border border-[#D4AF37] vanity-bulb inline-block"
-                    />
-                  ))}
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#D4AF37] to-[#9E7818] text-[#1A2530] flex items-center justify-center shrink-0 shadow">
+                  <Clapperboard className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     <h2 className="font-display text-base sm:text-xl text-[#F9F6F0] truncate">
-                      كابينة صناعة النجوم الملكية
+                      غرفة صناعة النجوم الملكية
                     </h2>
                     <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#D91624] text-white text-[10px] font-black border border-[#D4AF37]">
-                      {starGender === 'female' ? 'نجمة شباك' : 'نجم شباك'} · {overallRating} OVR
+                      {overallRating} OVR
                     </span>
                   </div>
+                  <p className="text-[10px] sm:text-[11px] font-bold text-[#D4AF37] truncate">
+                    كابينة الكاستينج الحصرية · صمّم أسطورة شباك التذاكر القادمة
+                  </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                <div className="px-2.5 py-1 rounded-xl bg-[#F9F6F0]/10 border border-[#D4AF37]/40 text-[#F9F6F0] flex items-center gap-1 text-[11px]">
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="px-2.5 py-1.5 rounded-xl bg-[#F9F6F0]/10 border border-[#D4AF37]/45 text-[#F9F6F0] flex items-center gap-1.5 text-[11px]">
                   <Wallet className="w-3.5 h-3.5 text-[#D4AF37]" />
                   <span dir="ltr" className="font-typewriter font-black">
                     {formatMoney(cash)}
@@ -558,18 +591,9 @@ export default function StarForgeModal() {
 
                 <button
                   type="button"
-                  onClick={() => setShowPackagesDrawer((v) => !v)}
-                  className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#F3E5AB] text-[#1A2530] font-extrabold text-[11px] flex items-center gap-1 shadow cursor-pointer"
-                  title="شحن عملات VIP"
-                >
-                  <Coins className="w-3.5 h-3.5" />
-                  <span className="font-typewriter font-black">{vipCoins}</span>
-                </button>
-
-                <button
-                  type="button"
                   onClick={handleClose}
-                  className="w-8 h-8 rounded-xl bg-[#D91624] hover:brightness-110 text-white flex items-center justify-center border border-[#D4AF37] cursor-pointer"
+                  aria-label="إغلاق غرفة صناعة النجوم"
+                  className="w-9 h-9 rounded-xl bg-[#D91624] hover:brightness-110 text-white flex items-center justify-center border border-[#D4AF37] cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -577,11 +601,11 @@ export default function StarForgeModal() {
             </div>
 
             {/* 3-Step Visual Stepper Ribbon */}
-            <div className="grid grid-cols-3 bg-[#EFE9DC] border-b-2 border-[#D4AF37]/60 p-1.5 gap-1.5 shrink-0">
+            <div className="grid grid-cols-3 bg-[#EFE9DC] border-b-2 border-[#D4AF37]/50 p-1.5 gap-1.5 shrink-0">
               {[
-                { id: 1, title: '1. الهوية والبورتريه', sub: 'الاسم والصورة' },
-                { id: 2, title: '2. الرادار والطاقات', sub: 'توزيع الـ 6 مهارات' },
-                { id: 3, title: '3. الكارت الألماظ', sub: 'المعاينة والاعتماد' },
+                { id: 1, num: '1', title: 'الهوية والصورة', sub: 'بطاقة الكاستينج' },
+                { id: 2, num: '2', title: 'الرادار والطاقات', sub: '6 مهارات أساسية' },
+                { id: 3, num: '3', title: 'الكارت الألماظ', sub: 'الاعتماد والتوقيع' },
               ].map((s) => {
                 const active = castingStep === s.id;
                 const completed = castingStep > s.id;
@@ -590,7 +614,7 @@ export default function StarForgeModal() {
                     key={s.id}
                     type="button"
                     onClick={() => setCastingStep(s.id as 1 | 2 | 3)}
-                    className={`py-2 px-2 rounded-2xl transition cursor-pointer flex flex-col items-center justify-center border ${
+                    className={`min-h-[44px] py-2 px-2 rounded-2xl transition cursor-pointer flex items-center justify-center gap-1.5 border ${
                       active
                         ? 'bg-[#1A2530] text-[#F9F6F0] border-[#D4AF37] shadow-md'
                         : completed
@@ -598,124 +622,103 @@ export default function StarForgeModal() {
                         : 'bg-[#F9F6F0] text-[#1A2530]/75 border-[#1A2530]/15 hover:text-[#1A2530]'
                     }`}
                   >
-                    <span className="font-display text-xs sm:text-sm leading-tight">
-                      {s.title}
-                    </span>
                     <span
-                      className={`text-[10px] font-bold hidden sm:block ${
-                        active ? 'text-[#D4AF37]' : ' opacity-75'
+                      className={`w-5 h-5 rounded-full text-[11px] font-typewriter font-black flex items-center justify-center shrink-0 ${
+                        active
+                          ? 'bg-[#D4AF37] text-[#1A2530]'
+                          : completed
+                          ? 'bg-[#15803D] text-white'
+                          : 'bg-[#1A2530]/10 text-[#1A2530]'
                       }`}
                     >
-                      {s.sub}
+                      {completed ? '✓' : s.num}
                     </span>
+                    <div className="text-right min-w-0">
+                      <span className="font-display text-xs sm:text-sm leading-tight block truncate">
+                        {s.title}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold hidden sm:block truncate ${
+                          active ? 'text-[#D4AF37]' : 'opacity-70'
+                        }`}
+                      >
+                        {s.sub}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
             </div>
 
-            {/* Optional Inline VIP Packages Top-up Bar */}
-            <AnimatePresence>
-              {showPackagesDrawer && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="bg-[#1A2530] text-[#F9F6F0] px-4 py-3 border-b-2 border-[#D4AF37] overflow-hidden shrink-0"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-[#D4AF37]">
-                      شحن باقات عملات VIP للوصول لطاقة 99 الأسطورية:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowPackagesDrawer(false)}
-                      className="text-[11px] font-bold text-white/70 hover:text-white"
-                    >
-                      إغلاق ✕
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => buyVipGemPackage(10)}
-                      className="p-2 rounded-xl bg-[#F9F6F0] text-[#1A2530] font-extrabold text-[11px] cursor-pointer hover:scale-[1.02] transition"
-                    >
-                      باقة 10 ج.م (+150 VIP)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => buyVipGemPackage(30)}
-                      className="p-2 rounded-xl bg-[#D4AF37] text-[#1A2530] font-extrabold text-[11px] cursor-pointer hover:scale-[1.02] transition"
-                    >
-                      باقة 30 ج.م (+500 VIP)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => buyVipGemPackage(50)}
-                      className="p-2 rounded-xl bg-gradient-to-r from-[#38BDF8] to-[#D4AF37] text-[#1A2530] font-black text-[11px] cursor-pointer hover:scale-[1.02] transition"
-                    >
-                      باقة 50 ج.م (+1200 VIP)
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             {/* Wizard Step Body */}
-            <div className="p-3.5 sm:p-5 overflow-y-auto flex-1">
-              {/* STEP 1: هوية الممثل/الممثلة وبرواز البولارويد */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1">
+              {/* STEP 1: الهوية وصندوق رفع الصورة السينمائي */}
               {castingStep === 1 && (
                 <div className="space-y-4">
-                  {/* Gender Selector First so everything adapts to Actor vs Actress */}
+                  {/* Sleek Gender Switcher */}
                   <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
                       onClick={() => handleSwitchGender('male')}
-                      className={`py-2.5 px-3 rounded-2xl font-display text-sm sm:text-base border-2 transition cursor-pointer flex items-center justify-center gap-2 ${
+                      className={`min-h-[46px] py-2.5 px-3 rounded-2xl font-display text-sm sm:text-base border-2 transition cursor-pointer flex items-center justify-center gap-2 ${
                         starGender === 'male'
                           ? 'bg-[#1A2530] text-[#D4AF37] border-[#D4AF37] shadow-md'
-                          : 'bg-white text-[#1A2530] border-[#1A2530]/20 hover:border-[#1A2530]/45'
+                          : 'bg-white text-[#1A2530] border-[#1A2530]/15 hover:border-[#1A2530]/40'
                       }`}
                     >
-                      <Star className="w-4 h-4" />
-                      <span>صناعة نجم شباك (ممثل)</span>
+                      <Star className="w-4 h-4 shrink-0" />
+                      <span>نجم شباك (ممثل)</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSwitchGender('female')}
-                      className={`py-2.5 px-3 rounded-2xl font-display text-sm sm:text-base border-2 transition cursor-pointer flex items-center justify-center gap-2 ${
+                      className={`min-h-[46px] py-2.5 px-3 rounded-2xl font-display text-sm sm:text-base border-2 transition cursor-pointer flex items-center justify-center gap-2 ${
                         starGender === 'female'
                           ? 'bg-[#D91624] text-white border-[#D4AF37] shadow-md'
-                          : 'bg-white text-[#1A2530] border-[#1A2530]/20 hover:border-[#1A2530]/45'
+                          : 'bg-white text-[#1A2530] border-[#1A2530]/15 hover:border-[#1A2530]/40'
                       }`}
                     >
-                      <Sparkles className="w-4 h-4" />
-                      <span>صناعة نجمة شباك (ممثلة)</span>
+                      <Sparkles className="w-4 h-4 shrink-0" />
+                      <span>نجمة شباك (ممثلة)</span>
                     </button>
                   </div>
 
-                  {/* Balanced 2-Column Layout on Desktop, Crisp Stack on Mobile */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
-                    {/* Right Column: Vintage Polaroid Frame */}
-                    <div className="sm:col-span-5">
-                      <div className="bg-white p-3 pb-4 rounded-2xl border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530]">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-extrabold text-[#1A2530]/75">
-                            بورتريه الكاستينج الرسمي
+                  {/* Balanced 2-Column Layout */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-stretch">
+                    {/* Right Column: Elevated Studio Viewfinder Upload Box */}
+                    <div className="sm:col-span-5 flex flex-col">
+                      <div className="relative flex-1 flex flex-col rounded-3xl bg-[#1A2530] p-3 border-2 border-[#D4AF37] shadow-[0_14px_30px_rgba(26,37,48,0.22)]">
+                        {/* Viewfinder Top Telemetry Strip */}
+                        <div className="flex items-center justify-between mb-2 px-1">
+                          <span className="text-[10px] font-extrabold text-[#D4AF37] flex items-center gap-1">
+                            <Camera className="w-3.5 h-3.5" />
+                            <span>عدسة الكاستينج</span>
                           </span>
-                          <span className="px-2 py-0.5 rounded-md bg-[#D91624] text-white font-typewriter text-[11px] font-black">
+                          <span className="px-2 py-0.5 rounded bg-[#D91624] text-white font-typewriter text-[10px] font-black">
                             {overallRating} OVR
                           </span>
                         </div>
 
+                        {/* Interactive Upload Zone */}
                         <div
-                          onDragOver={(e) => e.preventDefault()}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsDraggingPhoto(true);
+                          }}
+                          onDragLeave={() => setIsDraggingPhoto(false)}
                           onDrop={(e) => {
                             e.preventDefault();
+                            setIsDraggingPhoto(false);
                             handleFileDropOrSelect(e.dataTransfer.files?.[0]);
                           }}
                           onClick={() => fileInputRef.current?.click()}
-                          className="relative w-full h-48 sm:h-52 rounded-xl bg-[#F3EFE6] border-2 border-dashed border-[#1A2530]/40 hover:border-[#D91624] transition overflow-hidden flex flex-col items-center justify-center cursor-pointer group"
+                          className={`relative flex-1 min-h-[215px] sm:min-h-[235px] rounded-2xl overflow-hidden flex flex-col items-center justify-center cursor-pointer transition-all group ${
+                            photoUrl
+                              ? 'border-2 border-[#D4AF37] bg-[#0F171E]'
+                              : isDraggingPhoto
+                              ? 'border-2 border-dashed border-[#FFF3B0] bg-[#253646]'
+                              : 'border-2 border-dashed border-[#D4AF37]/65 bg-gradient-to-b from-[#233240] via-[#1A2530] to-[#121B24] hover:border-[#FFF3B0] hover:from-[#2A3B4C]'
+                          }`}
                         >
                           <input
                             ref={fileInputRef}
@@ -727,69 +730,95 @@ export default function StarForgeModal() {
                             }
                           />
 
+                          {/* Gold Viewfinder Corner Brackets */}
+                          <span className="pointer-events-none absolute top-2.5 right-2.5 w-4 h-4 border-t-2 border-r-2 border-[#D4AF37]/80 rounded-tr-xs" />
+                          <span className="pointer-events-none absolute top-2.5 left-2.5 w-4 h-4 border-t-2 border-l-2 border-[#D4AF37]/80 rounded-tl-xs" />
+                          <span className="pointer-events-none absolute bottom-2.5 right-2.5 w-4 h-4 border-b-2 border-r-2 border-[#D4AF37]/80 rounded-br-xs" />
+                          <span className="pointer-events-none absolute bottom-2.5 left-2.5 w-4 h-4 border-b-2 border-l-2 border-[#D4AF37]/80 rounded-bl-xs" />
+
                           {photoUrl ? (
                             <>
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={photoUrl}
                                 alt={starName}
-                                className="w-full h-full object-cover sepia-[0.08] contrast-105 group-hover:scale-105 transition-transform duration-300"
+                                className="w-full h-full object-cover contrast-105 group-hover:scale-105 transition-transform duration-300"
                               />
-                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1A2530]/95 via-[#1A2530]/70 to-transparent p-2.5 flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-[#F9F6F0] flex items-center gap-1">
+                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#0F171E]/95 via-[#0F171E]/75 to-transparent p-2.5 flex items-center justify-between gap-2">
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#FFF3B0]">
                                   <Upload className="w-3.5 h-3.5 text-[#D4AF37]" />
-                                  اضغط لرفع صورة من جهازك
+                                  <span>تغيير الصورة</span>
                                 </span>
-                                <Camera className="w-4 h-4 text-[#D4AF37]" />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPhotoUrl('');
+                                    if (fileInputRef.current) {
+                                      fileInputRef.current.value = '';
+                                    }
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-[#D91624]/90 hover:bg-[#D91624] text-white text-[10px] font-black inline-flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>حذف</span>
+                                </button>
                               </div>
                             </>
                           ) : (
-                            <div className="text-center p-4">
-                              <Camera className="w-8 h-8 text-[#D91624] mx-auto mb-2" />
-                              <p className="font-ruqaa text-xl text-[#1A2530]">
-                                ارفع صورة{' '}
+                            <div className="text-center px-4 py-5 flex flex-col items-center">
+                              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] flex items-center justify-center shadow-[0_0_28px_rgba(212,175,55,0.35)] mb-3 group-hover:scale-105 transition-transform">
+                                <ImagePlus className="w-8 h-8" />
+                              </div>
+                              <p className="font-display text-base text-[#F9F6F0] leading-snug">
+                                اضغط لرفع صورة{' '}
                                 {starGender === 'female' ? 'النجمة' : 'النجم'}
                               </p>
+                              <p className="text-[11px] font-bold text-[#D4AF37]/90 mt-1">
+                                اختر صورة من الاستوديو أو اسحبها هنا
+                              </p>
+                              <span className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#D91624] text-white text-[11px] font-black border border-[#D4AF37]/70 shadow-sm group-hover:brightness-110 transition">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>رفع صورة من جهازك</span>
+                              </span>
                             </div>
                           )}
                         </div>
 
-                        {/* Polaroid Handwritten Caption Strip */}
-                        <div className="mt-2.5 pt-2 border-t border-[#1A2530]/15 flex items-center justify-between">
-                          <span className="text-[11px] font-extrabold text-[#1A2530]">
+                        {/* Signature Footer Strip */}
+                        <div className="mt-2.5 pt-2 border-t border-[#D4AF37]/30 flex items-center justify-between px-1">
+                          <span className="text-[11px] font-bold text-[#F9F6F0]/80 truncate">
                             {archetypeTitle}
                           </span>
-                          <span className="font-ruqaa text-xl text-[#D91624] -rotate-2">
+                          <span className="font-ruqaa text-lg text-[#D4AF37] -rotate-2 shrink-0">
                             {starName.trim() || 'توقيع النجم'}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Left Column: Name, Age, Genre Chips & Portrait Presets */}
-                    <div className="sm:col-span-7 space-y-3">
-                      <div className="bg-white p-3.5 rounded-2xl border-2 border-[#1A2530]/15 space-y-3 shadow-xs">
-                        <div className="grid grid-cols-3 gap-2.5">
-                          <div className="col-span-2">
-                            <label className="block text-[11px] font-extrabold text-[#1A2530]/80 mb-1">
-                              اسم{' '}
-                              {starGender === 'female'
-                                ? 'النجمة السينمائية'
-                                : 'النجم السينمائي'}
-                              :
+                    {/* Left Column: Clean Dossier Fields */}
+                    <div className="sm:col-span-7 flex flex-col justify-between gap-3">
+                      <div className="bg-white p-4 rounded-3xl border-2 border-[#1A2530]/15 space-y-4 shadow-xs flex-1">
+                        {/* Name & Age */}
+                        <div className="grid grid-cols-12 gap-2.5">
+                          <div className="col-span-8">
+                            <label className="block text-[11px] font-extrabold text-[#1A2530]/80 mb-1.5">
+                              الاسم الفني لـ
+                              {starGender === 'female' ? 'لنجمة' : 'لنجم'}
                             </label>
                             <input
                               type="text"
                               value={starName}
                               onChange={(e) => setStarName(e.target.value)}
                               placeholder="اكتب الاسم الفني..."
-                              className="w-full px-3 py-2 rounded-xl bg-[#F9F6F0] border-2 border-[#1A2530]/25 focus:border-[#D91624] outline-none font-extrabold text-sm text-[#1A2530]"
+                              className="w-full min-h-[44px] px-3.5 py-2 rounded-xl bg-[#F9F6F0] border-2 border-[#1A2530]/20 focus:border-[#D91624] outline-none font-extrabold text-sm text-[#1A2530]"
                             />
                           </div>
 
-                          <div>
-                            <label className="block text-[11px] font-extrabold text-[#1A2530]/80 mb-1">
-                              العمر (سنة):
+                          <div className="col-span-4">
+                            <label className="block text-[11px] font-extrabold text-[#1A2530]/80 mb-1.5">
+                              العمر (سنة)
                             </label>
                             <input
                               type="number"
@@ -804,17 +833,17 @@ export default function StarForgeModal() {
                                   )
                                 )
                               }
-                              className="w-full px-2 py-2 rounded-xl bg-[#F9F6F0] border-2 border-[#1A2530]/25 text-sm font-typewriter font-black text-center text-[#1A2530]"
+                              className="w-full min-h-[44px] px-2 py-2 rounded-xl bg-[#F9F6F0] border-2 border-[#1A2530]/20 focus:border-[#D91624] outline-none text-sm font-typewriter font-black text-center text-[#1A2530]"
                             />
                           </div>
                         </div>
 
                         {/* Interactive Specialty Genre Chips */}
                         <div>
-                          <label className="block text-[11px] font-extrabold text-[#1A2530]/80 mb-1.5">
-                            اللون الدرامي والتخصص الأساسي:
+                          <label className="block text-[11px] font-extrabold text-[#1A2530]/80 mb-2">
+                            التخصص الدرامي الأقوى في شباك التذاكر
                           </label>
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="grid grid-cols-2 gap-2">
                             {QUICK_GENRE_CHIPS.map((g) => {
                               const active = primaryGenre === g.id;
                               return (
@@ -822,51 +851,37 @@ export default function StarForgeModal() {
                                   key={g.id}
                                   type="button"
                                   onClick={() => handleSwitchGenre(g.id)}
-                                  className={`px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold border transition cursor-pointer ${
+                                  className={`min-h-[42px] px-3 py-2 rounded-xl text-xs font-extrabold border-2 transition cursor-pointer text-right flex items-center justify-between ${
                                     active
-                                      ? 'bg-[#1A2530] text-[#D4AF37] border-[#D4AF37] shadow-xs'
-                                      : 'bg-[#F9F6F0] text-[#1A2530] border-[#1A2530]/20 hover:border-[#1A2530]/45'
+                                      ? 'bg-[#1A2530] text-[#D4AF37] border-[#D4AF37] shadow-sm'
+                                      : 'bg-[#F9F6F0] text-[#1A2530] border-[#1A2530]/15 hover:border-[#D4AF37]'
                                   }`}
                                 >
-                                  {g.label}
+                                  <span>{g.label}</span>
+                                  {active && (
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+                                  )}
                                 </button>
                               );
                             })}
                           </div>
                         </div>
 
-                        {/* Gender-Matched Studio Portrait Presets */}
-                        <div>
-                          <p className="text-[11px] font-extrabold text-[#1A2530]/80 mb-1.5">
-                            أو اختر بورتريه كاستينج جاهز مناسب لـ{' '}
-                            {starGender === 'female' ? 'الممثلة' : 'الممثل'}:
-                          </p>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {activePresets.map((preset) => (
-                              <button
-                                key={preset.url}
-                                type="button"
-                                onClick={() => {
-                                  triggerPhotoFlash(preset.url);
-                                  handleSwitchGenre(preset.genre);
-                                }}
-                                className={`flex items-center gap-2 p-1.5 rounded-xl text-right border transition cursor-pointer ${
-                                  photoUrl === preset.url
-                                    ? 'bg-[#FFF9E6] text-[#1A2530] border-2 border-[#D91624] shadow-xs'
-                                    : 'bg-[#F9F6F0] text-[#1A2530] border-[#1A2530]/15 hover:border-[#D4AF37]'
-                                }`}
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={preset.url}
-                                  alt={preset.label}
-                                  className="w-8 h-8 rounded-lg object-cover shrink-0 border border-[#1A2530]/20"
-                                />
-                                <span className="text-[10px] font-extrabold leading-tight line-clamp-2">
-                                  {preset.label}
-                                </span>
-                              </button>
-                            ))}
+                        {/* Quick Market Summary Note */}
+                        <div className="rounded-2xl bg-[#FFF9E6] border border-[#D4AF37]/80 p-3 flex items-center justify-between gap-2">
+                          <div>
+                            <div className="text-[10px] font-bold text-[#1A2530]/70">
+                              القيمة التسويقية المتوقعة عند الاعتماد
+                            </div>
+                            <div className="text-xs font-black text-[#1A2530]">
+                              فئة S-TIER حصري للاستوديو
+                            </div>
+                          </div>
+                          <div
+                            dir="ltr"
+                            className="font-typewriter text-sm font-black text-[#15803D] bg-white px-3 py-1.5 rounded-xl border border-[#15803D]/25 shrink-0"
+                          >
+                            {formatMoney(estimatedBaseSalary)} ج.م
                           </div>
                         </div>
                       </div>
@@ -879,14 +894,14 @@ export default function StarForgeModal() {
               {castingStep === 2 && (
                 <div className="space-y-3.5">
                   {/* Compact Radar + Director's Sticky Note Row */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center bg-white p-3.5 rounded-2xl border-2 border-[#1A2530]/15 shadow-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center bg-white p-3.5 rounded-3xl border-2 border-[#1A2530]/15 shadow-xs">
                     <div className="sm:col-span-5 flex flex-col items-center justify-center">
                       <HexagonalRadarChartSvg
                         stats={radarStats}
-                        size={180}
+                        size={176}
                         isDiamond={overallRating >= 86}
                       />
-                      <span className="mt-1 px-3 py-0.5 rounded-full bg-[#1A2530] text-[#D4AF37] font-typewriter text-xs font-black">
+                      <span className="mt-1 px-3 py-0.5 rounded-lg bg-[#1A2530] text-[#D4AF37] font-typewriter text-xs font-black">
                         التقييم الإجمالي: {overallRating} / 99
                       </span>
                     </div>
@@ -895,12 +910,12 @@ export default function StarForgeModal() {
                       <div className="p-3.5 rounded-xl sticky-note-torn text-[#1A2530]">
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-extrabold text-xs text-[#D91624]">
-                            ملاحظة المخرج عن «
+                            تقييم المخرج لـ «
                             {
                               statMetaList.find((s) => s.key === hoveredStatKey)
                                 ?.label
                             }
-                            »:
+                            »
                           </span>
                           <span className="font-typewriter text-xs font-black bg-[#1A2530] text-[#D4AF37] px-2 py-0.5 rounded">
                             {radarStats[hoveredStatKey]}/99
@@ -916,12 +931,26 @@ export default function StarForgeModal() {
                         </p>
                       </div>
 
-                      <div className="rounded-xl bg-[#F9F6F0] border border-[#1A2530]/15 px-3 py-2 text-[11px] font-bold text-[#1A2530]/80 flex items-center justify-between">
-                        <span>من 60 إلى 80: بالسيولة النقدية (1.5M ج.م)</span>
+                      <div className="rounded-xl bg-[#F9F6F0] border border-[#1A2530]/15 px-3 py-2 text-[11px] font-bold text-[#1A2530]/85 flex flex-wrap items-center justify-between gap-1">
+                        <span>من 60 إلى 80: 1.5M ج.م</span>
                         <span className="text-[#D91624] font-extrabold">
-                          فوق 80 إلى 99: بعملات VIP (25 عملة)
+                          نخبة (80–99): 3.5M ج.م
                         </span>
                       </div>
+
+                      <button
+                        type="button"
+                        disabled={trainingAdLoading}
+                        onClick={handleAdTrainingCampBoost}
+                        className="w-full min-h-[42px] py-2 px-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-black text-xs border border-[#1A2530]/25 shadow-xs hover:brightness-105 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+                      >
+                        <Zap className="w-4 h-4 text-[#D91624]" />
+                        <span>
+                          {trainingAdLoading
+                            ? 'جاري تجهيز معسكر التدريب...'
+                            : 'معسكر تدريب مكثف (+4 نقاط عشوائية مجاناً — إعلان)'}
+                        </span>
+                      </button>
                     </div>
                   </div>
 
@@ -929,14 +958,14 @@ export default function StarForgeModal() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {statMetaList.map((item) => {
                       const val = radarStats[item.key];
-                      const isGoldNext = val >= 80;
+                      const isEliteNext = val >= 80;
                       const isFocused = hoveredStatKey === item.key;
                       return (
                         <div
                           key={item.key}
                           onMouseEnter={() => setHoveredStatKey(item.key)}
                           onClick={() => setHoveredStatKey(item.key)}
-                          className={`p-2.5 rounded-2xl bg-white border-2 transition cursor-pointer ${
+                          className={`p-3 rounded-2xl bg-white border-2 transition cursor-pointer ${
                             isFocused
                               ? 'border-[#D91624] shadow-sm'
                               : 'border-[#1A2530]/15 hover:border-[#D4AF37]'
@@ -950,9 +979,9 @@ export default function StarForgeModal() {
                               <span className="text-[10px] font-bold text-[#1A2530]/65">
                                 {val >= 99
                                   ? 'أسطورة خالدة (99 MAX)'
-                                  : isGoldNext
-                                  ? 'ترقية ذهبية (25 عملة VIP)'
-                                  : 'ترقية نقدية (1.5M ج.م)'}
+                                  : isEliteNext
+                                  ? 'تدريب نخبة (3.5M ج.م)'
+                                  : 'تطوير أساسي (1.5M ج.م)'}
                               </span>
                             </div>
 
@@ -967,7 +996,7 @@ export default function StarForgeModal() {
                               </div>
                               <ClapperChipButton
                                 direction="plus"
-                                isGoldGem={isGoldNext}
+                                isGoldGem={isEliteNext}
                                 disabled={val >= 99}
                                 onClick={() => handleIncrementStat(item.key)}
                               />
@@ -979,7 +1008,7 @@ export default function StarForgeModal() {
                             <div
                               className={`h-full rounded-full transition-all duration-300 ${
                                 val >= 85
-                                  ? 'bg-gradient-to-l from-[#38BDF8] via-[#D4AF37] to-[#D91624]'
+                                  ? 'bg-gradient-to-l from-[#D91624] via-[#D4AF37] to-[#1A2530]'
                                   : 'bg-gradient-to-l from-[#D4AF37] to-[#1A2530]'
                               }`}
                               style={{ width: `${val}%` }}
@@ -1010,9 +1039,9 @@ export default function StarForgeModal() {
                         <div className="relative w-full h-44 rounded-xl overflow-hidden border-2 border-[#D4AF37] mb-2.5 bg-[#1A2530]">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={photoUrl || activePresets[0].url}
+                            src={previewPortraitUrl}
                             alt={starName}
-                            className="w-full h-full object-cover sepia-[0.08] contrast-105"
+                            className="w-full h-full object-cover contrast-105"
                           />
                           <div className="absolute bottom-2 left-2.5 bg-[#1A2530]/90 px-3 py-0.5 rounded-lg border border-[#D4AF37]">
                             <span className="font-ruqaa text-lg text-[#D4AF37]">
@@ -1044,7 +1073,7 @@ export default function StarForgeModal() {
                           وثيقة اعتماد الكارت الألماظ
                         </span>
                         <span className="px-2.5 py-0.5 rounded-md bg-[#15803D] text-white text-[10px] font-black">
-                          فئة S-TIER VIP
+                          فئة S-TIER حصري
                         </span>
                       </div>
 
@@ -1073,7 +1102,7 @@ export default function StarForgeModal() {
                         <div className="flex items-center justify-between">
                           <span>الولاء للاستوديو:</span>
                           <span className="font-black text-[#1A2530]">
-                            أولوية تعاقد فورية لأفلامك ومسلسلاتك
+                            أولوية تعاقد فورية لأفلامك
                           </span>
                         </div>
                       </div>
@@ -1089,7 +1118,7 @@ export default function StarForgeModal() {
               )}
             </div>
 
-            {/* Bottom Wizard Navigation Footer (السابق / التالي / اعتماد النجم) */}
+            {/* Bottom Wizard Navigation Footer */}
             <div className="bg-[#1A2530] px-4 py-3 border-t-2 border-[#D4AF37] flex items-center justify-between gap-3 shrink-0">
               {castingStep > 1 ? (
                 <button
@@ -1097,14 +1126,14 @@ export default function StarForgeModal() {
                   onClick={() =>
                     setCastingStep((prev) => (prev === 3 ? 2 : 1))
                   }
-                  className="px-4 py-2.5 rounded-xl bg-[#F9F6F0]/15 hover:bg-[#F9F6F0]/25 text-[#F9F6F0] font-extrabold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F9F6F0]/15 hover:bg-[#F9F6F0]/25 text-[#F9F6F0] font-extrabold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer"
                 >
                   <ArrowRight className="w-4 h-4" />
                   <span>السابق</span>
                 </button>
               ) : (
                 <div className="text-xs font-bold text-[#D4AF37]">
-                  الخطوة 1 من 3: الهوية والبورتريه
+                  الخطوة 1 من 3: الهوية والصورة
                 </div>
               )}
 
@@ -1114,12 +1143,12 @@ export default function StarForgeModal() {
                   onClick={() =>
                     setCastingStep((prev) => (prev === 1 ? 2 : 3))
                   }
-                  className="px-6 py-2.5 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-sm sm:text-base border border-[#D4AF37] shadow flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[44px] px-5 sm:px-6 py-2 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-sm sm:text-base border border-[#D4AF37] shadow flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>
                     {castingStep === 1
                       ? 'التالي: الرادار والطاقات'
-                      : 'التالي: معاينة الكارت الألماظ'}
+                      : 'التالي: الكارت الألماظ'}
                   </span>
                   <ArrowLeft className="w-4 h-4" />
                 </button>
@@ -1128,7 +1157,7 @@ export default function StarForgeModal() {
                   type="button"
                   onClick={handleCertifyDiamondStar}
                   disabled={isStampingReveal}
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#D91624] to-[#B00E1A] hover:brightness-110 text-white font-display text-sm sm:text-base border-2 border-[#D4AF37] shadow-lg flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-5 sm:px-6 py-2 rounded-xl bg-gradient-to-r from-[#D91624] to-[#B00E1A] hover:brightness-110 text-white font-display text-sm sm:text-base border-2 border-[#D4AF37] shadow-lg flex items-center gap-2 cursor-pointer"
                 >
                   <Award className="w-4 h-4 text-[#D4AF37]" />
                   <span>
@@ -1136,7 +1165,7 @@ export default function StarForgeModal() {
                       ? 'جاري ختم الكارت الألماظ...'
                       : `اعتماد ${
                           starGender === 'female' ? 'النجمة' : 'النجم'
-                        } وإصدار الكارت الألماظ`}
+                        } وإصدار الكارت`}
                   </span>
                 </button>
               )}
@@ -1144,7 +1173,7 @@ export default function StarForgeModal() {
           </motion.div>
         )}
 
-        {/* STAGE C: THE GRAND REVEAL (الميلاد السينمائي وكارت الألماظ FUT 3D) */}
+        {/* STAGE C: THE GRAND REVEAL */}
         {revealedStar && (
           <motion.div
             initial={{ scale: 0.78, opacity: 0 }}
@@ -1177,7 +1206,7 @@ export default function StarForgeModal() {
                 <img
                   src={revealedStar.image_url}
                   alt={revealedStar.name}
-                  className="w-full h-full object-cover sepia-[0.12] contrast-110"
+                  className="w-full h-full object-cover contrast-105"
                 />
                 <div className="absolute bottom-2.5 left-3 bg-[#1A2530]/85 backdrop-blur-sm px-3.5 py-1 rounded-xl border border-[#D4AF37]">
                   <span className="font-ruqaa text-2xl text-[#D4AF37] -rotate-3 block">
@@ -1199,7 +1228,7 @@ export default function StarForgeModal() {
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-display text-base shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full min-h-[48px] py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-display text-base shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-5 h-5" />
                 <span>ضم للكاستينج والعودة للاستوديو</span>

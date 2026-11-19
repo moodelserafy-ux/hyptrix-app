@@ -43,12 +43,10 @@ import {
   FileText,
   Pin,
   Coins,
-  Clock,
 } from 'lucide-react';
 
 export function StudioHubView({
   onOpenSettings,
-  secondsLeft = 18,
 }: {
   onOpenSettings?: () => void;
   secondsLeft?: number;
@@ -64,7 +62,6 @@ export function StudioHubView({
     reputation,
     currentYear,
     gameDay,
-    vipCoins,
     draft,
     releasedProjects,
     worldHistory,
@@ -76,7 +73,8 @@ export function StudioHubView({
     setPrWarRoomOpen,
     setStarForgeOpen,
     starForgeLocksOpened,
-    buyVipGemPackage,
+    claimEmergencyInvestorBailoutWithAd,
+    bankruptcyDeadlineDay,
     ownedStudioAssets,
     purchaseStudioAsset,
     showToast,
@@ -206,15 +204,8 @@ export function StudioHubView({
                     <Crown className="w-3.5 h-3.5 text-[#D4AF37]" />
                     <span>{studioRankTitle}</span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-[#F9F6F0]/10 text-[#D4AF37] text-xs font-bold border border-[#D4AF37]/30">
-                    <span>{formatGameDate(gameDay, currentYear)}</span>
-                    <span
-                      dir="ltr"
-                      className="font-typewriter text-[11px] text-white bg-[#D91624] px-1.5 py-0.2 rounded flex items-center gap-0.5"
-                    >
-                      <Clock className="w-3 h-3" />
-                      {secondsLeft}s
-                    </span>
+                  <span className="text-xs font-bold text-[#D4AF37]">
+                    · {formatGameDate(gameDay, currentYear)}
                   </span>
                 </div>
 
@@ -287,6 +278,55 @@ export function StudioHubView({
           </div>
         </motion.div>
 
+        {/* EMERGENCY LIQUIDITY & BANKRUPTCY GRACE PERIOD BANNER (السيولة الطارئة ومهلة الإفلاس) */}
+        {(cash <= 10_000_000 || bankruptcyDeadlineDay !== null) && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`rounded-3xl border-4 p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+              cash <= 0
+                ? 'bg-[#D91624] text-[#F9F6F0] border-[#D4AF37]'
+                : 'bg-[#1A2530] text-[#F9F6F0] border-[#D91624]'
+            }`}
+          >
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-[#1A2530] text-[#D4AF37] text-xs font-extrabold border border-[#D4AF37]">
+                <Flame className="w-3.5 h-3.5 text-[#D91624]" />
+                <span>
+                  {cash <= 0 && bankruptcyDeadlineDay !== null
+                    ? `إنذار إفلاس رسمي · متبقي ${Math.max(1, bankruptcyDeadlineDay - gameDay)} يوم في المهلة قبل بيع وتصفية الشركة!`
+                    : 'تحذير سيولة حرجة · الخزينة تقترب من الصفر!'}
+                </span>
+              </div>
+              <h3 className="font-display text-lg sm:text-xl text-[#F9F6F0]">
+                {cash <= 0
+                  ? `عجز الخزينة الحالي (${formatMoney(cash)} ج.م) — أنقذ شركتك من التصفية الآن!`
+                  : 'احصل على تمويل إنقاذ عاجل من مستثمر سينمائي لتفادي الإفلاس'}
+              </h3>
+              <p className="text-xs font-bold text-[#F9F6F0]/85">
+                {cash <= 0
+                  ? 'إذا انتهت مهلة الـ 3 أشهر دون سداد المديونية ستُجبر على بيع الشركة للمستثمرين وتأسيس شركة جديدة في نفس العالم.'
+                  : 'بدلاً من تعريض الاستوديو للإفلاس، يمكنك تفعيل صفقة تمويل إنقاذ فوري مقابل إعلان ممول.'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => claimEmergencyInvestorBailoutWithAd()}
+              className="w-full sm:w-auto shrink-0 px-5 py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-black text-xs sm:text-sm shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Film className="w-4 h-4 shrink-0" />
+              <span>
+                تمويل إنقاذ من مستثمر (+
+                {formatMoney(
+                  cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
+                )}{' '}
+                ج.م) — مشاهدة إعلان
+              </span>
+            </button>
+          </motion.div>
+        )}
+
         {/* THE STUDIO WALL (الحائط الخلفي للمكتب: سبورة الفلين Corkboard + الخزنة الحديدية في الحائط) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* 1. سبورة الفلين (Corkboard) بصور الممثلين والدبابيس -> تفتح "طاقم العمل والمواهب" */}
@@ -313,7 +353,7 @@ export function StudioHubView({
                   title: 'نجوم الصف الأول',
                   sub: 'كروت ذهبية وألماظ FUT',
                   rot: '-rotate-2',
-                  badge: 'S-TIER & VIP',
+                  badge: 'S-TIER · نخبة',
                 },
                 {
                   title: 'المخرجين والكتاب',
@@ -359,7 +399,7 @@ export function StudioHubView({
             )}
           </motion.div>
 
-          {/* 2. الخزنة الحديدية في الحائط (Wall Safe) -> تفتح الميزانية والمشتريات وباقات 10/30/50 والأصول */}
+          {/* 2. الخزنة الحديدية في الحائط (Wall Safe) -> تفتح الميزانية والبلاتوهات والأصول الثابتة */}
           <motion.div
             whileHover={{ y: -4, scale: 1.01 }}
             onClick={() => openModalSheet('assets')}
@@ -385,10 +425,10 @@ export function StudioHubView({
 
               <div>
                 <h3 className="font-display text-xl text-[#F9F6F0]">
-                  الميزانية والبلاتوهات وباقات الـ VIP
+                  الميزانية والبلاتوهات والأصول الثابتة
                 </h3>
                 <p className="text-xs text-[#F9F6F0]/80 font-bold mt-1 leading-relaxed">
-                  شراء البلاتوهات الثابتة (خصم -{assetBenefits.totalDiscountPercent}%) وشحن باقات الـ 10 و30 و50 جنيه ({vipCoins} عملة VIP)
+                  شراء البلاتوهات الثابتة لتقليل تكاليف الإنتاج (خصم -{assetBenefits.totalDiscountPercent}%) والحماية من أزمات التصوير وتمويل الإنقاذ العاجل
                 </p>
               </div>
             </div>
@@ -473,7 +513,7 @@ export function StudioHubView({
               {/* Top Secret Stamp */}
               <div className="flex items-center justify-between mb-3">
                 <span className="px-2.5 py-0.5 rounded bg-[#1A2530] text-[#D4AF37] font-typewriter text-[11px] font-black border border-[#D4AF37]">
-                  ملف سري للغاية · VIP
+                  ملف سري للغاية · خاص
                 </span>
                 <span className="text-xs font-extrabold text-[#D4AF37]">
                   {starForgeLocksOpened >= 5
@@ -516,7 +556,7 @@ export function StudioHubView({
 
               <div className="mt-4 pt-3 border-t border-[#D4AF37]/40 flex items-center justify-between">
                 <span className="text-xs font-extrabold text-[#D4AF37]">
-                  كابينة الكاستينج الملكية · VIP
+                  كابينة الكاستينج الملكية
                 </span>
                 <span className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-[#1A2530] font-extrabold text-xs shadow">
                   فتح الملف السري ←
@@ -675,7 +715,7 @@ export function StudioHubView({
                     {activeSheet === 'history' && 'السجل التاريخي للاستوديو'}
                     {activeSheet === 'leaderboard' && 'الترتيب الرسمي لشركات الإنتاج'}
                     {activeSheet === 'assets' &&
-                      'خزنة الإمبراطور — البلاتوهات الثابتة وباقات الـ VIP'}
+                      'خزنة الإمبراطور — البلاتوهات الثابتة والسيولة'}
                   </h2>
                 </div>
                 <button
@@ -689,39 +729,40 @@ export function StudioHubView({
 
               {activeSheet === 'assets' && (
                 <div className="space-y-4">
-                  {/* VIP Packages Top-up Inside the Wall Safe (باقات الـ 10 و30 و50 جنيه) */}
+                  {/* Emergency Investor Liquidity Card Inside the Wall Safe */}
                   <div className="rounded-2xl bg-[#1A2530] text-[#F9F6F0] p-4 border-2 border-[#D4AF37]">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <h3 className="font-display text-lg text-[#D4AF37]">
-                          شحن سبائك وعملات الـ VIP (لفتح الأقفال وترقية النجوم لـ 99)
+                          خزينة السيولة والتمويل الطارئ
                         </h3>
-                        <p className="text-xs text-[#F9F6F0]/80">
-                          رصيدك الحالي: <strong className="font-typewriter text-[#D4AF37]">{vipCoins}</strong> عملة VIP ذهبية
+                        <p className="text-xs text-[#F9F6F0]/80 mt-0.5">
+                          السيولة المتاحة:{' '}
+                          <strong dir="ltr" className="font-typewriter text-[#D4AF37]">
+                            {formatMoney(cash)}
+                          </strong>{' '}
+                          ج.م · خصم الأصول الثابتة:{' '}
+                          <strong className="text-emerald-400">
+                            -{assetBenefits.totalDiscountPercent}%
+                          </strong>
                         </p>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+
                       <button
-                        onClick={() => buyVipGemPackage(10)}
-                        className="p-3 rounded-xl bg-[#F9F6F0] text-[#1A2530] hover:bg-[#D4AF37] font-extrabold text-xs transition cursor-pointer text-center"
+                        type="button"
+                        onClick={() => claimEmergencyInvestorBailoutWithAd()}
+                        className="shrink-0 px-4 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] hover:brightness-105 font-black text-xs transition cursor-pointer text-center shadow"
                       >
-                        <div className="font-display text-base text-[#D91624]">باقة 10 جنيه</div>
-                        <div>+150 عملة VIP + 12M ج.م</div>
-                      </button>
-                      <button
-                        onClick={() => buyVipGemPackage(30)}
-                        className="p-3 rounded-xl bg-[#D4AF37] text-[#1A2530] hover:brightness-110 font-extrabold text-xs transition cursor-pointer text-center"
-                      >
-                        <div className="font-display text-base">باقة 30 جنيه</div>
-                        <div>+500 عملة VIP + 40M ج.م</div>
-                      </button>
-                      <button
-                        onClick={() => buyVipGemPackage(50)}
-                        className="p-3 rounded-xl bg-gradient-to-r from-[#38BDF8] via-[#E0F2FE] to-[#D4AF37] text-[#1A2530] font-black text-xs shadow-lg transition cursor-pointer text-center"
-                      >
-                        <div className="font-display text-base">باقة الإمبراطور 50 جنيه</div>
-                        <div>+1200 عملة VIP + 90M ج.م</div>
+                        <div className="font-display text-sm text-[#1A2530]">
+                          تمويل إنقاذ من مستثمر (إعلان)
+                        </div>
+                        <div>
+                          +
+                          {formatMoney(
+                            cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
+                          )}{' '}
+                          ج.م سيولة فورية
+                        </div>
                       </button>
                     </div>
                   </div>

@@ -728,9 +728,14 @@ export interface ProjectSimulationInput {
   entropySeed?: number;
 }
 
+export type RevenueTrajectory = 'front_loaded' | 'steady' | 'sleeper';
+
 export interface ProjectFinancialResult {
   technicalQuality: number;
   commercialAppeal: number;
+  expectedCriticScore: number;
+  expectedAudienceScore: number;
+  trajectory: RevenueTrajectory;
   firstWeekRevenue: number;
   totalBoxOfficeRevenue: number;
   totalStreamingRevenue: number;
@@ -758,7 +763,30 @@ const GENRE_BUDGET_REQUIREMENTS: Record<
   biography: { sets: 8_000_000, costumes: 7_000_000, vfx: 3_500_000, extras: 5_000_000 },
   heist: { sets: 8_500_000, costumes: 4_500_000, vfx: 9_500_000, extras: 4_500_000 },
   fantasy: { sets: 11_000_000, costumes: 8_000_000, vfx: 15_000_000, extras: 6_500_000 },
-  superhero: { sets: 10_000_000, costumes: 7_500_000, vfx: 17_000_000, extras: 6_500_000 },
+  superhero: { sets: 10_000_000, costumes: 7_500_000, vfx: 17_000_000, extras: 6_000_000 },
+};
+
+// Decouples commercial crowd draw from critical prestige:
+// Popcorn genres draw bigger opening crowds even with moderate critic scores,
+// while prestige genres earn higher critic respect and rely on word-of-mouth/awards.
+const GENRE_MARKET_PROFILES: Record<
+  GenreId,
+  { commercialDraw: number; criticPrestigeBonus: number }
+> = {
+  action: { commercialDraw: 1.24, criticPrestigeBonus: -1.5 },
+  popular_drama: { commercialDraw: 1.18, criticPrestigeBonus: 2.0 },
+  comedy: { commercialDraw: 1.22, criticPrestigeBonus: -2.0 },
+  light_comedy: { commercialDraw: 1.12, criticPrestigeBonus: -1.5 },
+  psychological_horror: { commercialDraw: 0.88, criticPrestigeBonus: 4.5 },
+  supernatural_horror: { commercialDraw: 1.04, criticPrestigeBonus: 0.5 },
+  crime_mystery: { commercialDraw: 1.04, criticPrestigeBonus: 4.0 },
+  sci_fi: { commercialDraw: 1.08, criticPrestigeBonus: 2.0 },
+  romance: { commercialDraw: 1.05, criticPrestigeBonus: 1.0 },
+  historical: { commercialDraw: 0.90, criticPrestigeBonus: 5.5 },
+  biography: { commercialDraw: 0.86, criticPrestigeBonus: 6.0 },
+  heist: { commercialDraw: 1.14, criticPrestigeBonus: 1.5 },
+  fantasy: { commercialDraw: 1.08, criticPrestigeBonus: 1.0 },
+  superhero: { commercialDraw: 1.20, criticPrestigeBonus: -2.5 },
 };
 
 export function calculateFinancialsAndQuality(
@@ -784,7 +812,17 @@ export function calculateFinancialsAndQuality(
 
   const words = input.scriptWordCount ?? 20;
   const playerScriptCraft =
-    words >= 32 ? 92 : words >= 22 ? 86 : words >= 14 ? 80 : words >= 8 ? 72 : 62;
+    words >= 34
+      ? 94
+      : words >= 24
+      ? 88
+      : words >= 16
+      ? 81
+      : words >= 10
+      ? 72
+      : words >= 6
+      ? 56
+      : 40;
 
   const synergyReport = calculateGenreSynergy(
     input.primaryGenre,
@@ -806,16 +844,16 @@ export function calculateFinancialsAndQuality(
   const castActingAvg =
     mainCast.length > 0
       ? mainCast.reduce((s, a) => {
-          const mastery = a.genre_mastery[input.primaryGenre] || 72;
+          const mastery = a.genre_mastery[input.primaryGenre] || 70;
           const secondaryMastery = input.secondaryGenre
-            ? a.genre_mastery[input.secondaryGenre] || 70
+            ? a.genre_mastery[input.secondaryGenre] || 68
             : mastery;
           const blendedMastery = input.secondaryGenre
             ? mastery * 0.7 + secondaryMastery * 0.3
             : mastery;
-          return s + a.stats.acting * 0.52 + blendedMastery * 0.48;
+          return s + a.stats.acting * 0.54 + blendedMastery * 0.46;
         }, 0) / mainCast.length
-      : 68;
+      : 55;
 
   const castPullAvg =
     mainCast.length > 0
@@ -823,10 +861,15 @@ export function calculateFinancialsAndQuality(
           (s, a) => s + a.stats.box_office_pull * 0.65 + a.stats.charisma * 0.35,
           0
         ) / mainCast.length
-      : 65;
+      : 58;
+
+  const topLeadPull =
+    input.leads.length > 0
+      ? Math.max(...input.leads.map((a) => a.stats.box_office_pull))
+      : castPullAvg;
 
   const cameoBoost = input.cameos.reduce(
-    (s, c) => s + c.stats.charisma * 0.05,
+    (s, c) => s + c.stats.charisma * 0.055,
     0
   );
 
@@ -839,66 +882,74 @@ export function calculateFinancialsAndQuality(
   const reqs =
     GENRE_BUDGET_REQUIREMENTS[input.primaryGenre] ||
     GENRE_BUDGET_REQUIREMENTS.popular_drama;
-  const setsRatio = Math.min(1.35, input.budgetAllocation.setsAndLocations / reqs.sets);
-  const costumesRatio = Math.min(1.35, input.budgetAllocation.costumesAndMakeup / reqs.costumes);
-  const vfxRatio = Math.min(1.35, input.budgetAllocation.vfxAndStunts / reqs.vfx);
-  const extrasRatio = Math.min(1.35, input.budgetAllocation.extrasAndCrowds / reqs.extras);
+  const setsRatio = Math.min(1.4, input.budgetAllocation.setsAndLocations / reqs.sets);
+  const costumesRatio = Math.min(1.4, input.budgetAllocation.costumesAndMakeup / reqs.costumes);
+  const vfxRatio = Math.min(1.4, input.budgetAllocation.vfxAndStunts / reqs.vfx);
+  const extrasRatio = Math.min(1.4, input.budgetAllocation.extrasAndCrowds / reqs.extras);
 
   const avgDeptAdequacy = (setsRatio + costumesRatio + vfxRatio + extrasRatio) / 4;
   const departmentQualityDelta =
-    avgDeptAdequacy >= 1.1
-      ? 6
-      : avgDeptAdequacy >= 0.85
-      ? 2
-      : avgDeptAdequacy >= 0.65
-      ? -3
-      : -8;
+    avgDeptAdequacy >= 1.15
+      ? 7.5
+      : avgDeptAdequacy >= 0.9
+      ? 3.5
+      : avgDeptAdequacy >= 0.72
+      ? 0
+      : avgDeptAdequacy >= 0.5
+      ? -6
+      : -13;
 
   const productionQualityScore = Math.min(
-    96,
-    46 + (productionSpend / 52_000_000) * 48
+    98,
+    Math.max(24, 34 + avgDeptAdequacy * 44 + Math.min(16, (productionSpend / 55_000_000) * 16))
   );
 
   const directorGenreFit = input.director.best_genres.includes(
     input.primaryGenre
   )
-    ? 1.08
-    : 0.94;
+    ? 1.09
+    : 0.92;
 
   const crewTechBonus =
-    (input.dop ? (input.dop.stats.overall - 75) * 0.16 : -2) +
-    (input.composer ? (input.composer.stats.overall - 75) * 0.14 : -1.5) +
-    (input.vfx ? (input.vfx.stats.overall - 75) * 0.16 : -2);
+    (input.dop ? (input.dop.stats.overall - 75) * 0.2 : -3.5) +
+    (input.composer ? (input.composer.stats.overall - 75) * 0.16 : -2.5) +
+    (input.vfx ? (input.vfx.stats.overall - 75) * 0.2 : -3.0);
 
   const ensembleDepthBonus =
-    (input.antagonist ? 2.5 : 0) +
-    Math.min(3, input.supporting.length * 1.5);
+    (input.antagonist ? 2.8 : -1.5) +
+    Math.min(3.6, input.supporting.length * 1.6);
 
-  const scriptPenalty = words < 8 ? -9 : words < 14 ? -3 : words >= 24 ? 4 : 1;
+  const scriptDelta =
+    words < 6 ? -14 : words < 10 ? -7 : words < 16 ? -1 : words >= 26 ? 5.5 : 2.5;
   const onSetQualityMod = input.qualityModifier || 0;
+  const genreProfile =
+    GENRE_MARKET_PROFILES[input.primaryGenre] ||
+    GENRE_MARKET_PROFILES.popular_drama;
 
   let rawQuality =
-    (input.director.stats.overall * 0.27 * directorGenreFit +
-      playerScriptCraft * 0.16 +
-      castActingAvg * 0.35 +
-      productionQualityScore * 0.22 +
-      chemistryReport.synergyBonus * 0.4 +
+    (input.director.stats.overall * 0.26 * directorGenreFit +
+      playerScriptCraft * 0.2 +
+      castActingAvg * 0.34 +
+      productionQualityScore * 0.2 +
+      chemistryReport.synergyBonus * 0.45 +
       crewTechBonus +
       departmentQualityDelta +
       ensembleDepthBonus +
-      scriptPenalty +
+      scriptDelta +
+      genreProfile.criticPrestigeBonus +
       onSetQualityMod) *
     synergyReport.multiplier;
 
   if (input.founderPerk === 'visionary_director') {
-    rawQuality *= 1.08;
+    rawQuality += 5.5;
   }
 
   if (input.ageRating === '+18') {
-    rawQuality += 2.5;
+    rawQuality += 3.0;
   }
 
-  const technicalQuality = Math.min(96, Math.max(32, Math.round(rawQuality)));
+  // Genuine wide range: truly bad films drop to 26-50, masterpieces hit 86-97
+  const technicalQuality = Math.min(97, Math.max(24, Math.round(rawQuality)));
 
   // Genre repetition / freshness twists
   const simulationTwists: SimulationTwistItem[] = [];
@@ -912,35 +963,35 @@ export function calculateFinancialsAndQuality(
       simulationTwists.push({
         id: 'genre_fatigue',
         label: 'تشبع الجمهور من تكرار نفس التصنيف الدرامي على التوالي',
-        impactMultiplier: 0.85,
+        impactMultiplier: 0.84,
       });
-      twistMultiplier *= 0.85;
+      twistMultiplier *= 0.84;
     } else if (repeatedCount === 0) {
       simulationTwists.push({
         id: 'genre_fresh_wave',
         label: 'موجة انتعاش جماهيري لتقديم لون درامي متجدد',
-        impactMultiplier: 1.12,
+        impactMultiplier: 1.13,
       });
-      twistMultiplier *= 1.12;
+      twistMultiplier *= 1.13;
     }
   }
 
   const idealMarketingForScreens = input.screensCount * 85_000;
   const marketingEfficiency =
-    input.marketingBudget >= idealMarketingForScreens * 0.8
-      ? 1.06
+    input.marketingBudget >= idealMarketingForScreens * 0.85
+      ? 1.09
       : input.marketingBudget < idealMarketingForScreens * 0.4
-      ? 0.88
+      ? 0.86
       : 1.0;
 
-  const marketingBoost = 0.84 + (input.marketingBudget / 45_000_000) * 0.48;
+  const marketingBoost = 0.78 + (input.marketingBudget / 42_000_000) * 0.62;
   const screensBoost =
     input.format === 'film'
-      ? (0.68 + (input.screensCount / 220) * 0.56) * marketingEfficiency
+      ? (0.64 + (input.screensCount / 210) * 0.64) * marketingEfficiency
       : 1.0;
 
   const ageRatingCommercialMod =
-    input.ageRating === 'G' ? 1.12 : input.ageRating === '+18' ? 0.82 : 1.0;
+    input.ageRating === 'G' ? 1.16 : input.ageRating === '+18' ? 0.8 : 1.0;
 
   const filmSeason = input.filmSeason || 'eid_adha';
   const seriesSeason = input.seriesSeason || 'ramadan';
@@ -949,35 +1000,70 @@ export function calculateFinancialsAndQuality(
   const seasonMultiplier =
     input.format === 'film'
       ? filmSeason === 'eid_adha'
-        ? 1.25
+        ? 1.28
         : filmSeason === 'eid_fitr'
-        ? 1.18
+        ? 1.2
         : filmSeason === 'summer'
-        ? 1.1
-        : 0.94
+        ? 1.12
+        : 0.92
       : seriesSeason === 'ramadan'
-      ? 1.28
+      ? 1.3
       : 1.0;
 
+  // Commercial appeal is driven primarily by star power, hype, genre crowd draw, and age accessibility
+  // — deliberately decoupled from pure critic prestige so popcorn hits can top the box office!
   const commercialAppeal = Math.min(
-    98,
-    Math.round(
-      (castPullAvg * 0.52 +
-        input.hypeScore * 0.3 +
-        technicalQuality * 0.18 +
-        cameoBoost) *
-        ageRatingCommercialMod
+    99,
+    Math.max(
+      25,
+      Math.round(
+        (castPullAvg * 0.38 +
+          topLeadPull * 0.2 +
+          input.hypeScore * 0.3 +
+          technicalQuality * 0.12 +
+          cameoBoost) *
+          ageRatingCommercialMod *
+          Math.pow(genreProfile.commercialDraw, 0.55)
+      )
     )
   );
 
-  const qualityCurve = Math.pow(technicalQuality / 76, 1.48);
-  const appealCurve = Math.pow(commercialAppeal / 76, 1.32);
+  // Separate realistic critic score (2.4 - 9.7) and audience entertainment score (2.8 - 9.8)
+  const expectedCriticScore = Number(
+    Math.min(9.7, Math.max(2.4, technicalQuality / 10)).toFixed(1)
+  );
+  const entertainmentRaw =
+    (technicalQuality * 0.48 +
+      commercialAppeal * 0.38 +
+      Math.min(100, input.hypeScore) * 0.14) /
+    10;
+  const expectedAudienceScore = Number(
+    Math.min(9.8, Math.max(2.8, entertainmentRaw)).toFixed(1)
+  );
+
+  // Determine revenue run trajectory:
+  // - High commercial appeal + modest critic quality => front_loaded (huge opening, faster decay)
+  // - High critic quality + lower initial hype/commercial draw => sleeper (climbs dynamically via word-of-mouth!)
+  // - Otherwise => steady
+  const trajectory: RevenueTrajectory =
+    commercialAppeal >= technicalQuality + 9
+      ? 'front_loaded'
+      : technicalQuality >= commercialAppeal + 7 && technicalQuality >= 76
+      ? 'sleeper'
+      : 'steady';
+
+  // Decoupled revenue math:
+  // Opening week depends heavily on Commercial Appeal + Marketing + Screens + Genre Commercial Draw + Season,
+  // while Word-of-Mouth legs depend heavily on Audience + Critic reception!
+  const openingCommercialPower = Math.pow(commercialAppeal / 74, 1.52);
+  const openingQualityFloor = Math.pow(Math.max(42, technicalQuality) / 74, 0.55);
 
   const baseTicketRevenue =
     input.format === 'film'
-      ? 16_500_000 *
-        qualityCurve *
-        appealCurve *
+      ? 18_500_000 *
+        openingCommercialPower *
+        openingQualityFloor *
+        genreProfile.commercialDraw *
         marketingBoost *
         screensBoost *
         seasonMultiplier *
@@ -985,56 +1071,79 @@ export function calculateFinancialsAndQuality(
       : 0;
 
   const perkMarketingMod =
-    input.founderPerk === 'marketing_whale' ? 1.1 : 1.0;
+    input.founderPerk === 'marketing_whale' ? 1.12 : 1.0;
 
   const clampedAiMult = Math.min(
-    1.32,
-    Math.max(0.38, input.aiBoxOfficeMultiplier)
+    1.36,
+    Math.max(0.45, input.aiBoxOfficeMultiplier)
   );
 
-  const marketCapMult = Math.min(1.42, combinedRevenueMultiplier);
+  const marketCapMult = Math.min(1.5, combinedRevenueMultiplier);
+
+  const openingShare =
+    trajectory === 'front_loaded'
+      ? 0.42
+      : trajectory === 'sleeper'
+      ? 0.24
+      : 0.33;
 
   const firstWeekRevenue =
     input.format === 'film'
       ? Math.round(
           baseTicketRevenue *
-            0.33 *
+            openingShare *
             perkMarketingMod *
             clampedAiMult *
             marketCapMult
         )
       : 0;
 
+  // Word-of-mouth multiplier rewards beloved movies with long legs, while bad movies collapse fast
+  const audienceReceptionBlend =
+    expectedAudienceScore * 0.6 + expectedCriticScore * 0.4;
   const wordOfMouthLegs =
-    technicalQuality >= 86
-      ? 2.85
-      : technicalQuality >= 76
-      ? 2.35
-      : technicalQuality >= 65
-      ? 1.85
-      : 1.3;
+    audienceReceptionBlend >= 8.6
+      ? 3.15
+      : audienceReceptionBlend >= 7.8
+      ? 2.65
+      : audienceReceptionBlend >= 6.8
+      ? 2.15
+      : audienceReceptionBlend >= 5.6
+      ? 1.7
+      : 1.25;
+
+  const trajectoryLegAdjust =
+    trajectory === 'sleeper' ? 1.22 : trajectory === 'front_loaded' ? 0.88 : 1.0;
 
   const totalBoxOfficeRevenue =
     input.format === 'film'
-      ? Math.round(firstWeekRevenue * wordOfMouthLegs)
+      ? Math.round(firstWeekRevenue * wordOfMouthLegs * trajectoryLegAdjust)
       : 0;
 
   const episodeScale =
     input.format === 'series'
       ? episodes === 30
-        ? 1.28
+        ? 1.3
         : episodes === 15
-        ? 1.12
+        ? 1.14
         : episodes === 10
         ? 1.0
         : 0.86
       : 1.0;
 
+  const seriesReceptionCurve = Math.pow(
+    (expectedAudienceScore * 10 * 0.55 + technicalQuality * 0.45) / 74,
+    1.25
+  );
+
   const totalStreamingRevenue =
     input.format === 'series'
       ? Math.round(
-          (input.platformDealAmount * 0.92 +
-            14_500_000 * qualityCurve * appealCurve * seasonMultiplier) *
+          (input.platformDealAmount * 0.94 +
+            15_500_000 *
+              openingCommercialPower *
+              seriesReceptionCurve *
+              seasonMultiplier) *
             episodeScale *
             clampedAiMult *
             marketCapMult *
@@ -1043,7 +1152,11 @@ export function calculateFinancialsAndQuality(
       : Math.round(
           input.platformDealAmount *
             0.55 *
-            (technicalQuality >= 76 ? 1.08 : 0.78) *
+            (expectedCriticScore >= 8.0
+              ? 1.18
+              : expectedCriticScore >= 6.8
+              ? 1.02
+              : 0.78) *
             clampedAiMult
         );
 
@@ -1052,6 +1165,9 @@ export function calculateFinancialsAndQuality(
   return {
     technicalQuality,
     commercialAppeal,
+    expectedCriticScore,
+    expectedAudienceScore,
+    trajectory,
     firstWeekRevenue,
     totalBoxOfficeRevenue,
     totalStreamingRevenue,
@@ -1122,6 +1238,9 @@ export interface RivalRelease {
   targetBoxOfficeRevenue?: number;
   criticScore: number;
   audienceScore?: number;
+  trajectory?: RevenueTrajectory;
+  previousRank?: number;
+  lastDailyDelta?: number;
   format?: ProjectFormat;
   year?: number;
   status?: 'released' | 'delayed';
@@ -1168,13 +1287,13 @@ export function generateRivalReleases(
   const availableStars = allActors.filter(
     (a) =>
       !excludedActorIds.includes(a.id) &&
-      (a.tier === 'S' || a.tier === 'A') &&
+      (a.tier === 'S' || a.tier === 'A' || a.tier === 'B') &&
       a.status !== 'retired' &&
       a.status !== 'deceased'
   );
   const titles = format === 'series' ? RIVAL_SERIES_TITLES : RIVAL_FILM_TITLES;
 
-  const activeSeasonCount = (seedOffset % 2) + 2;
+  const activeSeasonCount = 4;
   const rotatedCompetitors = [...competitors].sort((a, b) => {
     const hashA = (a.name.charCodeAt(0) * 17 + seedOffset * 31) % 97;
     const hashB = (b.name.charCodeAt(0) * 17 + seedOffset * 31) % 97;
@@ -1183,14 +1302,22 @@ export function generateRivalReleases(
 
   const selectedStudios = rotatedCompetitors.slice(0, activeSeasonCount);
 
+  // Distinct realistic season archetypes:
+  // 0: Commercial Popcorn Hit (modest critics 5.8-6.9, strong box office, front_loaded)
+  // 1: Prestige / Sleeper Gem (great critics 8.4-9.2, slower opening, climbs dynamically!)
+  // 2: Balanced Blockbuster Contender (solid critics 7.4-8.4, strong steady legs)
+  // 3: Underperformer / Mid-Tier Mixed Release (weak/mixed critics 4.7-6.4, modest revenue)
+  const archetypeOrder = [0, 1, 2, 3].map((i) => (i + seedOffset) % 4);
+
   return selectedStudios.map((studio, idx) => {
     const star =
-      availableStars[(idx + seedOffset) % Math.max(1, availableStars.length)] ||
+      availableStars[(idx * 3 + seedOffset) % Math.max(1, availableStars.length)] ||
       allActors[0];
     const title = titles[(idx * 3 + seedOffset) % titles.length];
+    const arch = archetypeOrder[idx % archetypeOrder.length];
 
     const isRareDelay =
-      (seedOffset + idx * 7) % 11 === 0 && idx === selectedStudios.length - 1;
+      (seedOffset + idx * 7) % 13 === 0 && idx === selectedStudios.length - 1;
     if (isRareDelay) {
       return {
         studioName: studio.name,
@@ -1199,35 +1326,63 @@ export function generateRivalReleases(
         leadStarName: star?.name || 'نجم شباك',
         boxOfficeRevenue: 0,
         criticScore: 0,
+        audienceScore: 0,
+        trajectory: 'steady',
         format,
         status: 'delayed',
         delayReason: `قررت شركة «${studio.name}» تأجيل طرح «${title}» للموسم القادم لاستكمال مراحل المونتاج.`,
       };
     }
 
-    const powerFactor = Math.max(0.95, studio.market_power / 80);
-    const starPull = Math.max(0.95, (star?.stats.box_office_pull || 88) / 82);
-    const wave = idx === 0 ? 1.32 : idx === 1 ? 1.05 : 0.84;
-    const baseMarketAnchor = format === 'series' ? 88_000_000 : 76_000_000;
-    const baseRev =
-      baseMarketAnchor *
-      powerFactor *
-      starPull *
-      Math.max(1.0, Math.min(1.35, regionMultiplier)) *
-      wave;
+    const powerFactor = Math.max(0.82, Math.min(1.18, studio.market_power / 82));
+    const starPull = Math.max(0.84, Math.min(1.18, (star?.stats.box_office_pull || 82) / 84));
+    const regionMod = Math.max(0.95, Math.min(1.3, regionMultiplier));
+    const jitter = 0.88 + (((seedOffset * 19 + idx * 37) % 25) / 100);
+    const baseMarketAnchor = format === 'series' ? 74_000_000 : 66_000_000;
 
-    const criticBase =
-      7.1 +
-      ((studio.market_power - 72) / 25) * 1.35 +
-      (idx === 0 ? 0.65 : idx === 1 ? 0.25 : -0.15);
+    let revMult = 1.0;
+    let criticScore = 7.4;
+    let audienceScore = 7.5;
+    let trajectory: RevenueTrajectory = 'steady';
+
+    if (arch === 0) {
+      // Popcorn commercial juggernaut: mediocre critics, huge opening crowds, front-loaded decay
+      revMult = 1.48;
+      criticScore = 5.7 + ((seedOffset + idx) % 12) * 0.1;
+      audienceScore = 7.8 + ((seedOffset + idx) % 10) * 0.1;
+      trajectory = 'front_loaded';
+    } else if (arch === 1) {
+      // Prestige sleeper hit: acclaimed critics, modest opening, strong word-of-mouth climb
+      revMult = 1.02;
+      criticScore = 8.4 + ((seedOffset + idx) % 9) * 0.1;
+      audienceScore = 8.2 + ((seedOffset + idx) % 10) * 0.1;
+      trajectory = 'sleeper';
+    } else if (arch === 2) {
+      // Balanced contender
+      revMult = 1.24;
+      criticScore = 7.3 + ((seedOffset + idx) % 11) * 0.1;
+      audienceScore = 7.6 + ((seedOffset + idx) % 11) * 0.1;
+      trajectory = 'steady';
+    } else {
+      // Underperforming / mid-tier risk
+      revMult = 0.62;
+      criticScore = 4.6 + ((seedOffset + idx) % 16) * 0.1;
+      audienceScore = 5.0 + ((seedOffset + idx) % 15) * 0.1;
+      trajectory = 'front_loaded';
+    }
+
+    const baseRev =
+      baseMarketAnchor * powerFactor * starPull * regionMod * revMult * jitter;
 
     return {
       studioName: studio.name,
       title,
       genre: studio.preferred_genres[0] || 'action',
       leadStarName: star?.name || 'نجم شباك',
-      boxOfficeRevenue: Math.round(baseRev),
-      criticScore: Number(Math.min(9.3, Math.max(6.4, criticBase)).toFixed(1)),
+      boxOfficeRevenue: Math.round(Math.max(24_000_000, Math.min(175_000_000, baseRev))),
+      criticScore: Number(Math.min(9.4, Math.max(4.4, criticScore)).toFixed(1)),
+      audienceScore: Number(Math.min(9.5, Math.max(4.5, audienceScore)).toFixed(1)),
+      trajectory,
       format,
       status: 'released',
     };

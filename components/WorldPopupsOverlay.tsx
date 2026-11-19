@@ -28,8 +28,8 @@ import {
   Share2,
   Loader2,
   Smartphone,
-  Wifi,
-  BatteryCharging,
+  Target,
+  MessageSquare,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -54,6 +54,11 @@ export function WorldPopupsOverlay() {
     launchSocialPrCampaign,
     activeToast,
     dismissToast,
+    currentYear,
+    gameDay,
+    isBankruptLiquidated,
+    claimEmergencyInvestorBailoutWithAd,
+    liquidateAndStartNewStudioInSameWorld,
   } = useGameStore();
 
   const [launchingCampaignId, setLaunchingCampaignId] = useState<string | null>(
@@ -61,6 +66,9 @@ export function WorldPopupsOverlay() {
   );
   const [selectedRivalTarget, setSelectedRivalTarget] = useState<string>(
     'المتحدون ميديا جروب'
+  );
+  const [prActiveTab, setPrActiveTab] = useState<'campaigns' | 'feed'>(
+    'campaigns'
   );
 
   const rivalStudioOptions = Array.from(
@@ -137,12 +145,12 @@ export function WorldPopupsOverlay() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -16, scale: 0.94 }}
               transition={{ type: 'spring', stiffness: 430, damping: 28 }}
-              className={`pointer-events-auto relative flex w-full max-w-md items-start justify-between gap-3 overflow-hidden rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl ${
+              className={`pointer-events-auto relative flex w-full max-w-md items-start justify-between gap-3 overflow-hidden rounded-2xl border-2 px-4 py-3 shadow-2xl backdrop-blur-xl ${
                 activeToast.type === 'warning'
-                  ? 'border-amber-300/95 bg-white/95 text-slate-900 shadow-amber-500/15'
+                  ? 'border-[#D91624] bg-[#F9F6F0] text-[#1A2530]'
                   : activeToast.type === 'success'
-                  ? 'border-emerald-300/95 bg-white/95 text-slate-900 shadow-emerald-500/15'
-                  : 'border-violet-300/95 bg-white/95 text-slate-900 shadow-violet-500/20'
+                  ? 'border-[#15803D] bg-[#F9F6F0] text-[#1A2530]'
+                  : 'border-[#D4AF37] bg-[#F9F6F0] text-[#1A2530]'
               }`}
               dir="rtl"
             >
@@ -150,10 +158,10 @@ export function WorldPopupsOverlay() {
                 <div
                   className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-xs ${
                     activeToast.type === 'warning'
-                      ? 'bg-gradient-to-br from-amber-500 to-orange-500 text-white'
+                      ? 'bg-[#D91624] text-white'
                       : activeToast.type === 'success'
-                      ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white'
-                      : 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white'
+                      ? 'bg-[#15803D] text-white'
+                      : 'bg-[#1A2530] text-[#D4AF37] border border-[#D4AF37]'
                   }`}
                 >
                   {activeToast.type === 'warning' ? (
@@ -165,11 +173,11 @@ export function WorldPopupsOverlay() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-black leading-snug text-slate-950">
+                  <p className="text-xs font-black leading-snug text-[#1A2530]">
                     {activeToast.message}
                   </p>
                   {activeToast.subtext && (
-                    <p className="mt-0.5 text-[11px] font-bold leading-relaxed text-slate-600">
+                    <p className="mt-0.5 text-[11px] font-bold leading-relaxed text-[#1A2530]/75">
                       {activeToast.subtext}
                     </p>
                   )}
@@ -178,7 +186,7 @@ export function WorldPopupsOverlay() {
               <button
                 type="button"
                 onClick={dismissToast}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-800"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#1A2530]/10 text-[#1A2530] transition hover:bg-[#1A2530]/20"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -190,10 +198,10 @@ export function WorldPopupsOverlay() {
                 transition={{ duration: 5.2, ease: 'linear' }}
                 className={`absolute right-0 bottom-0 h-[3px] ${
                   activeToast.type === 'warning'
-                    ? 'bg-amber-500'
+                    ? 'bg-[#D91624]'
                     : activeToast.type === 'success'
-                    ? 'bg-emerald-500'
-                    : 'bg-violet-600'
+                    ? 'bg-[#15803D]'
+                    : 'bg-[#D4AF37]'
                 }`}
               />
             </motion.div>
@@ -201,9 +209,9 @@ export function WorldPopupsOverlay() {
         )}
       </AnimatePresence>
 
-      {/* MODAL OVERLAY FOR ANNUAL AWARDS GALA, EDITORIAL BREAKING NEWS, OR PR WAR ROOM */}
+      {/* MODAL OVERLAY FOR ANNUAL AWARDS GALA, EDITORIAL BREAKING NEWS, PR WAR ROOM, OR BANKRUPTCY LIQUIDATION */}
       <AnimatePresence>
-        {(currentFestival || currentNews || isPrWarRoomOpen) && (
+        {(isBankruptLiquidated || currentFestival || currentNews || isPrWarRoomOpen) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -212,8 +220,76 @@ export function WorldPopupsOverlay() {
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3.5 backdrop-blur-md overscroll-contain touch-none select-none"
             dir="rtl"
           >
+            {/* 0. MANDATORY BANKRUPTCY & STUDIO LIQUIDATION MODAL (بعد انتهاء مهلة الـ 3 أشهر بدون سداد) */}
+            {isBankruptLiquidated && (
+              <motion.div
+                key="bankruptcy_liquidation_modal"
+                initial={{ scale: 0.92, y: 24, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.92, y: 24, opacity: 0 }}
+                className="relative w-full max-w-lg rounded-3xl bg-[#F9F6F0] text-[#1A2530] border-4 border-[#D91624] shadow-[0_30px_90px_rgba(0,0,0,0.85)] overflow-hidden p-5 sm:p-6 space-y-4"
+              >
+                <div className="rounded-2xl bg-[#D91624] text-[#F9F6F0] p-4 border-2 border-[#D4AF37] text-center space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#1A2530] text-[#D4AF37] text-xs font-extrabold border border-[#D4AF37]">
+                    <AlertTriangle className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <span>انتهاء مهلة السداد القانونية (3 أشهر) · قرار الحراسة القضائية</span>
+                  </div>
+                  <h2 className="font-display text-2xl sm:text-3xl text-white">
+                    إعلان إفلاس وتصفية «{studioName}»!
+                  </h2>
+                  <p className="text-xs font-bold text-[#F9F6F0]/90">
+                    التاريخ الحالي: {formatGameDate(gameDay, currentYear)} · عجز الخزينة:{' '}
+                    <span dir="ltr" className="font-typewriter font-black text-[#FFF3B0]">
+                      {formatMoney(cash)} ج.م
+                    </span>
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white border-2 border-[#1A2530]/15 p-4 text-xs font-bold leading-relaxed text-[#1A2530] space-y-2">
+                  <p>
+                    انتهت مهلة الشهور الثلاثة الممنوحة لسداد ديون الخزينة دون تغطية العجز المالي، وأصدرت النقابة والبنوك الدائنة قراراً بالحجز على أصول شركة <strong>«{studioName}»</strong> وعرضها للبيع للمستثمرين.
+                  </p>
+                  <p className="text-[#D91624] font-extrabold">
+                    ماذا سيحدث إذا بعت الشركة الآن؟
+                  </p>
+                  <ul className="list-disc pr-5 space-y-1 text-[11px]">
+                    <li>ستضطر لترك <strong>«{studioName}»</strong> وبيعها لمجموعة استثمارية تديرها كمنافس في السوق.</li>
+                    <li>ستبدأ فوراً بتأسيس شركة إنتاج جديدة برأس مال جديد (75M ج.م) <strong>في نفس العالم ونفس الزمن ({formatGameDate(gameDay, currentYear)})</strong> مع استمرار نفس النجوم وتطورهم ونفس الشركات المنافسة!</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => claimEmergencyInvestorBailoutWithAd()}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-black text-xs sm:text-sm border-2 border-[#1A2530] shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 shrink-0" />
+                    <span>
+                      طوق نجاة اللحظة الأخيرة: تمويل إنقاذ مستثمر (+
+                      {formatMoney(
+                        cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
+                      )}{' '}
+                      ج.م) — مشاهدة إعلان
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={liquidateAndStartNewStudioInSameWorld}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-[#1A2530] hover:bg-[#D91624] text-[#F9F6F0] font-display text-sm sm:text-base border-2 border-[#D4AF37] shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Building2 className="w-4 h-4 text-[#D4AF37]" />
+                    <span>
+                      بيع وتصفية «{studioName}» وتأسيس شركة جديدة في نفس العالم ({currentYear})
+                    </span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             {/* 1. ANNUAL FESTIVAL & AWARDS CEREMONY MODAL */}
-            {currentFestival && (
+            {!isBankruptLiquidated && currentFestival && (
               <motion.div
                 key={currentFestival.id}
                 initial={{ scale: 0.93, y: 20, opacity: 0 }}
@@ -223,23 +299,23 @@ export function WorldPopupsOverlay() {
                 className="glass-modal relative max-h-[90vh] w-full max-w-xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl shadow-2xl"
               >
                 {/* Royal Gold & Velvet Header */}
-                <div className="relative overflow-hidden bg-gradient-to-l from-slate-950 via-indigo-950 to-slate-900 px-5 py-4 text-white">
-                  <div className="pointer-events-none absolute -top-12 -left-12 h-36 w-36 rounded-full bg-amber-400/20 blur-2xl" />
+                <div className="relative overflow-hidden border-b-2 border-[#D4AF37] bg-[#1A2530] px-5 py-4 text-[#F9F6F0]">
+                  <div className="pointer-events-none absolute -top-12 -left-12 h-36 w-36 rounded-full bg-[#D4AF37]/20 blur-2xl" />
                   <div className="relative flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-300/60 bg-gradient-to-br from-amber-400 to-yellow-600 text-slate-950 shadow-lg">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#F9F6F0]/30 bg-[#D4AF37] text-[#1A2530] shadow-lg">
                         <Trophy className="h-6 w-6" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/20 px-2.5 py-0.5 text-[10px] font-black text-amber-300">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/20 px-2.5 py-0.5 text-[10px] font-black text-[#D4AF37]">
                             <Sparkles className="h-3 w-3" />
                             <span>
                               البث الرسمي لحفل جوائز نهاية العام ({currentFestival.year})
                             </span>
                           </span>
                         </div>
-                        <h2 className="mt-1 font-display text-base font-black leading-snug text-white sm:text-lg">
+                        <h2 className="mt-1 font-display text-base font-black leading-snug text-[#F9F6F0] sm:text-lg">
                           {currentFestival.festivalName}
                         </h2>
                       </div>
@@ -249,7 +325,7 @@ export function WorldPopupsOverlay() {
                       <button
                         type="button"
                         onClick={revealAllCategories}
-                        className="shrink-0 rounded-xl border border-amber-400/50 bg-amber-400/15 px-3 py-1.5 text-[11px] font-black text-amber-200 transition hover:bg-amber-400/25"
+                        className="shrink-0 rounded-xl border border-[#D4AF37] bg-[#D91624] px-3 py-1.5 text-[11px] font-black text-white transition hover:brightness-110"
                       >
                         فتح كل المظاريف
                       </button>
@@ -257,25 +333,25 @@ export function WorldPopupsOverlay() {
                   </div>
                 </div>
 
-                <div className="space-y-3.5 p-4 sm:p-5">
+                <div className="space-y-3.5 bg-[#F9F6F0] p-4 sm:p-5">
                   {/* Jury Statement Banner */}
-                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/75 p-3.5">
+                  <div className="rounded-2xl border border-[#D4AF37]/60 bg-[#FFF9E6] p-3.5">
                     <div className="flex items-start gap-2.5">
-                      <Quote className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                      <Quote className="mt-0.5 h-4 w-4 shrink-0 text-[#D91624]" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold leading-relaxed text-slate-700">
+                        <p className="text-xs font-bold leading-relaxed text-[#1A2530]/85">
                           {currentFestival.juryStatement}
                         </p>
                         {allRevealed && (
-                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-indigo-200/60 pt-2">
-                            <span className="text-[11px] font-bold text-slate-500">
+                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[#D4AF37]/40 pt-2">
+                            <span className="text-[11px] font-bold text-[#1A2530]/65">
                               {currentFestival.festivalBuzz}
                             </span>
                             <span
                               className={`rounded-xl px-2.5 py-1 text-[11px] font-black ${
                                 playerWonCountInCurrentCeremony > 0
-                                  ? 'bg-emerald-100 text-emerald-900'
-                                  : 'bg-slate-200 text-slate-700'
+                                  ? 'bg-[#15803D] text-white'
+                                  : 'bg-[#1A2530]/10 text-[#1A2530]'
                               }`}
                             >
                               {playerWonCountInCurrentCeremony > 0
@@ -296,10 +372,10 @@ export function WorldPopupsOverlay() {
                       return (
                         <div
                           key={aw.category}
-                          className={`rounded-2xl border p-3.5 transition-all ${
+                          className={`rounded-2xl border-2 p-3.5 transition-all ${
                             isRevealed && aw.isPlayerWinner
-                              ? 'border-amber-400 bg-gradient-to-l from-amber-50/95 via-yellow-50/70 to-white shadow-md'
-                              : 'border-indigo-100/90 bg-white/90 shadow-2xs'
+                              ? 'border-[#D4AF37] bg-[#FFF9E6] shadow-md'
+                              : 'border-[#1A2530]/15 bg-white shadow-2xs'
                           }`}
                         >
                           <div className="mb-2.5 flex items-center justify-between gap-2">
@@ -350,18 +426,18 @@ export function WorldPopupsOverlay() {
                                   key={idx}
                                   className={`rounded-xl border p-2.5 transition-all ${
                                     isWinnerNominee
-                                      ? 'border-amber-500 bg-amber-100/90 shadow-xs'
+                                      ? 'border-[#D4AF37] bg-[#FFF9E6] shadow-xs'
                                       : isRevealed
-                                      ? 'border-slate-200/70 bg-slate-50/60 opacity-65'
-                                      : 'border-indigo-100 bg-indigo-50/40'
+                                      ? 'border-[#1A2530]/10 bg-[#F9F6F0]/60 opacity-65'
+                                      : 'border-[#1A2530]/15 bg-[#F9F6F0]'
                                   }`}
                                 >
                                   <div className="flex items-center justify-between gap-1">
-                                    <span className="text-xs font-black leading-snug text-slate-900">
+                                    <span className="text-xs font-black leading-snug text-[#1A2530]">
                                       {nomLabel}
                                     </span>
                                     {isWinnerNominee && (
-                                      <Trophy className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                                      <Trophy className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
                                     )}
                                   </div>
                                 </div>
@@ -371,11 +447,11 @@ export function WorldPopupsOverlay() {
 
                           {/* Revealed Winner Banner */}
                           {isRevealed && (
-                            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300/80 bg-amber-50/90 px-3 py-2">
-                              <span className="text-xs font-black text-amber-950">
+                            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D4AF37] bg-[#FFF9E6] px-3 py-2">
+                              <span className="text-xs font-black text-[#1A2530]">
                                 الفائز الرسمي: {aw.winner} — عن عمل «{aw.winningProjectTitle}»
                               </span>
-                              <span className="text-[11px] font-bold text-amber-800">
+                              <span className="text-[11px] font-bold text-[#D91624]">
                                 إنتاج: {aw.winningStudioName}
                               </span>
                             </div>
@@ -386,8 +462,8 @@ export function WorldPopupsOverlay() {
                   </div>
 
                   {/* Ceremony Footer Action */}
-                  <div className="flex items-center justify-between border-t border-indigo-100 pt-3">
-                    <span className="text-[11px] font-bold text-slate-500">
+                  <div className="flex items-center justify-between border-t border-[#1A2530]/15 pt-3">
+                    <span className="text-[11px] font-bold text-[#1A2530]/65">
                       {festivalModalQueue.length > 1
                         ? `متبقي ${festivalModalQueue.length - 1} مهرجان في ختام الموسم`
                         : 'اكتملت مراسم توزيع جوائز هذا العام'}
@@ -396,7 +472,7 @@ export function WorldPopupsOverlay() {
                       <button
                         type="button"
                         onClick={revealAllCategories}
-                        className="inline-flex min-h-[42px] items-center gap-1.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 px-5 py-2 text-xs font-black text-slate-950 shadow-md transition hover:brightness-105"
+                        className="inline-flex min-h-[42px] items-center gap-1.5 rounded-2xl border border-[#1A2530] bg-[#D4AF37] px-5 py-2 text-xs font-black text-[#1A2530] shadow-md transition hover:brightness-105"
                       >
                         <Sparkles className="h-4 w-4" />
                         <span>إعلان جميع الفائزين الآن</span>
@@ -405,7 +481,7 @@ export function WorldPopupsOverlay() {
                       <button
                         type="button"
                         onClick={dismissFestivalCeremonyModal}
-                        className="inline-flex min-h-[42px] items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-105"
+                        className="inline-flex min-h-[42px] items-center gap-1.5 rounded-2xl border-2 border-[#D4AF37] bg-[#D91624] px-6 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-110"
                       >
                         <Check className="h-4 w-4" />
                         <span>
@@ -421,7 +497,7 @@ export function WorldPopupsOverlay() {
             )}
 
             {/* 2. LUXURY EDITORIAL BREAKING NEWS CARD */}
-            {currentNews && (
+            {!isBankruptLiquidated && currentNews && (
               <motion.div
                 key={currentNews.id}
                 initial={{ scale: 0.92, y: 20, opacity: 0 }}
@@ -432,28 +508,28 @@ export function WorldPopupsOverlay() {
               >
                 {/* Editorial Magazine Header Ribbon */}
                 <div
-                  className={`relative overflow-hidden px-5 py-3.5 text-white ${
+                  className={`relative overflow-hidden border-b-2 border-[#D4AF37] px-5 py-3.5 text-[#F9F6F0] ${
                     currentNews.category === 'rising_talent'
-                      ? 'bg-gradient-to-l from-emerald-600 via-teal-600 to-emerald-700'
+                      ? 'bg-[#15803D]'
                       : currentNews.category === 'new_studio'
-                      ? 'bg-gradient-to-l from-indigo-700 via-violet-700 to-purple-800'
+                      ? 'bg-[#1A2530]'
                       : currentNews.category === 'actor_deceased' ||
                         currentNews.category === 'actor_retired'
-                      ? 'bg-gradient-to-l from-slate-800 via-slate-900 to-indigo-950'
-                      : 'bg-gradient-to-l from-violet-700 via-indigo-700 to-slate-900'
+                      ? 'bg-[#0F171E]'
+                      : 'bg-[#1A2530]'
                   }`}
                 >
-                  <div className="pointer-events-none absolute -top-10 -left-10 h-28 w-28 rounded-full bg-white/10 blur-xl" />
+                  <div className="pointer-events-none absolute -top-10 -left-10 h-28 w-28 rounded-full bg-[#D4AF37]/15 blur-xl" />
                   <div className="relative flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur-xs">
-                        <Radio className="h-4 w-4 animate-pulse text-amber-300" />
+                        <Radio className="h-4 w-4 animate-pulse text-[#D4AF37]" />
                       </span>
                       <div className="min-w-0">
-                        <span className="block text-xs font-black tracking-wide text-white">
+                        <span className="block text-xs font-black tracking-wide text-[#F9F6F0]">
                           {currentNews.badgeLabel}
                         </span>
-                        <span className="block text-[10px] font-bold text-white/80">
+                        <span className="block text-[10px] font-bold text-[#F9F6F0]/80">
                           {formatGameDate(currentNews.day, currentNews.year)}
                         </span>
                       </div>
@@ -481,25 +557,25 @@ export function WorldPopupsOverlay() {
                 </div>
 
                 {/* Editorial Body */}
-                <div className="space-y-4 p-5">
+                <div className="space-y-4 bg-[#F9F6F0] p-5">
                   {/* Featured Subject Pill */}
                   {currentNews.highlightName && (
-                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-indigo-100/90 bg-indigo-50/75 p-3">
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#D4AF37]/60 bg-white p-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <div
                           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm ${
                             currentNews.category === 'rising_talent'
-                              ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                              ? 'bg-[#15803D]'
                               : currentNews.category === 'new_studio'
-                              ? 'bg-gradient-to-br from-indigo-600 to-violet-700'
-                              : 'bg-gradient-to-br from-amber-500 to-orange-600'
+                              ? 'bg-[#1A2530] border border-[#D4AF37]'
+                              : 'bg-[#D91624]'
                           }`}
                         >
                           {currentNews.category === 'rising_talent' && (
-                            <Star className="h-5 w-5" />
+                            <Star className="h-5 w-5 text-[#D4AF37]" />
                           )}
                           {currentNews.category === 'new_studio' && (
-                            <Building2 className="h-5 w-5" />
+                            <Building2 className="h-5 w-5 text-[#D4AF37]" />
                           )}
                           {currentNews.category !== 'rising_talent' &&
                             currentNews.category !== 'new_studio' && (
@@ -507,17 +583,17 @@ export function WorldPopupsOverlay() {
                             )}
                         </div>
                         <div className="min-w-0">
-                          <span className="block text-[10px] font-bold text-slate-500">
+                          <span className="block text-[10px] font-bold text-[#1A2530]/60">
                             محور التغطية الصحفية
                           </span>
-                          <span className="block font-display text-sm font-black leading-snug text-slate-950">
+                          <span className="block font-display text-sm font-black leading-snug text-[#1A2530]">
                             {currentNews.highlightName}
                           </span>
                         </div>
                       </div>
 
                       {currentNews.extraStatBadge && (
-                        <span className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 font-mono text-[10px] font-black text-amber-900">
+                        <span className="shrink-0 rounded-xl border border-[#D4AF37] bg-[#FFF9E6] px-2.5 py-1 font-mono text-[10px] font-black text-[#1A2530]">
                           {currentNews.extraStatBadge}
                         </span>
                       )}
@@ -526,11 +602,11 @@ export function WorldPopupsOverlay() {
 
                   {/* Headline & Story Lead */}
                   <div className="space-y-2">
-                    <h3 className="font-display text-base font-black leading-snug text-slate-950 sm:text-lg">
+                    <h3 className="font-display text-base font-black leading-snug text-[#1A2530] sm:text-lg">
                       {currentNews.headline}
                     </h3>
-                    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3.5">
-                      <p className="text-xs font-bold leading-relaxed text-slate-700">
+                    <div className="rounded-2xl border border-[#1A2530]/15 bg-white p-3.5">
+                      <p className="text-xs font-bold leading-relaxed text-[#1A2530]/80">
                         {currentNews.detail}
                       </p>
                     </div>
@@ -538,8 +614,8 @@ export function WorldPopupsOverlay() {
 
                   {/* Market Impact Bar */}
                   {currentNews.gameImpactLabel && (
-                    <div className="flex items-center gap-2 rounded-2xl border border-violet-200/80 bg-violet-50/80 px-3.5 py-2.5 text-[11px] font-black text-violet-950">
-                      <TrendingUp className="h-4 w-4 shrink-0 text-violet-600" />
+                    <div className="flex items-center gap-2 rounded-2xl border border-[#D4AF37] bg-[#FFF9E6] px-3.5 py-2.5 text-[11px] font-black text-[#1A2530]">
+                      <TrendingUp className="h-4 w-4 shrink-0 text-[#D91624]" />
                       <span>{currentNews.gameImpactLabel}</span>
                     </div>
                   )}
@@ -644,245 +720,383 @@ export function WorldPopupsOverlay() {
               </motion.div>
             )}
 
-            {/* 3. SMARTPHONE SCREEN: ELECTRONIC COMMITTEES & TREND ENGINE (شاشة الموبايل للجان الإلكترونية والتريند) */}
-            {!currentFestival && !currentNews && isPrWarRoomOpen && (
-              <motion.div
-                key="pr_war_room_smartphone"
-                initial={{ scale: 0.9, y: 30, opacity: 0 }}
-                animate={{ scale: 1, y: 0, opacity: 1 }}
-                exit={{ scale: 0.9, y: 30, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-                className="relative w-full max-w-[430px] rounded-[46px] border-[10px] border-[#1A2530] bg-[#0F171E] p-3 shadow-[0_30px_90px_rgba(0,0,0,0.85)] ring-4 ring-[#D4AF37]"
-              >
-                {/* Smartphone Top Notch & Status Bar */}
-                <div className="flex items-center justify-between px-4 pt-1 pb-2 text-[11px] font-typewriter font-bold text-[#F9F6F0]/80">
-                  <span dir="ltr">9:41 AM</span>
-                  <div className="w-24 h-4 rounded-full bg-black border border-[#D4AF37]/30 flex items-center justify-center">
-                    <span className="w-2 h-2 rounded-full bg-[#15803D] animate-pulse" />
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[#D4AF37]">
-                    <Wifi className="w-3.5 h-3.5" />
-                    <BatteryCharging className="w-4 h-4" />
-                  </div>
-                </div>
+            {/* 3. ELECTRONIC COMMITTEES & TREND WAR ROOM (تصميم موبايل متناسق وأنيق للجان الإلكترونية والتريند) */}
+            {!isBankruptLiquidated &&
+              !currentFestival &&
+              !currentNews &&
+              isPrWarRoomOpen &&
+              (() => {
+                const combinedFeed = [
+                  ...(socialFeedLog || []),
+                  {
+                    id: 'default_chatter_1',
+                    platform: 'X' as const,
+                    authorName: 'ناقد سينمائي مستقل',
+                    handle: '@CinemaPulseEG',
+                    content: `الجمهور مترقب بشدة خطوة شركة «${studioName}» القادمة أمام أفلام «${selectedRivalTarget}» هذا الموسم!`,
+                    hashtag: '#سباق_الإيرادات',
+                    likes: '18.4K',
+                    shares: '4.2K',
+                    sentiment: 'viral_boost' as const,
+                    timestampLabel: 'منذ دقيقة',
+                  },
+                  {
+                    id: 'default_chatter_2',
+                    platform: 'TikTok' as const,
+                    authorName: 'تريندات الشارع',
+                    handle: '@StreetVoxEG',
+                    content:
+                      'منافسة تكسير عظام على شباك التذاكر.. يا ترى مين هيكسب الصدارة الأسبوع ده؟',
+                    hashtag: '#شباك_التذاكر',
+                    likes: '42.1K',
+                    shares: '9.8K',
+                    sentiment: 'rival_attack' as const,
+                    timestampLabel: 'منذ 3 دقائق',
+                  },
+                ];
 
-                {/* Inner Smartphone Screen */}
-                <div className="rounded-[32px] bg-[#F9F6F0] text-[#1A2530] overflow-hidden border-2 border-[#D4AF37]/60 flex flex-col max-h-[80vh]">
-                  {/* App Header inside Phone */}
-                  <div className="bg-[#1A2530] text-[#F9F6F0] px-4 py-3 border-b-2 border-[#D4AF37] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-9 h-9 rounded-xl bg-[#D91624] flex items-center justify-center border border-[#D4AF37]">
-                        <Smartphone className="w-5 h-5 text-[#D4AF37]" />
-                      </div>
-                      <div>
-                        <h2 className="font-display text-base text-[#F9F6F0] leading-tight">
-                          موبايل الإمبراطور — رادار اللجان والتريند
-                        </h2>
-                        <p className="text-[10px] font-bold text-[#D4AF37]">
-                          السيولة: {formatMoney(cash)} ج.م · الضجة: {draft.hypeScore}%
-                        </p>
-                      </div>
-                    </div>
+                const latestPost = combinedFeed[0];
+                const extraCampaigns = SOCIAL_PR_CAMPAIGNS.filter(
+                  (c: SocialPrCampaignItem) =>
+                    c.id !== 'support_film_trolls' &&
+                    c.id !== 'rival_rumor_trolls'
+                ).slice(0, 2);
 
-                    <button
-                      type="button"
-                      onClick={() => setPrWarRoomOpen(false)}
-                      className="w-8 h-8 rounded-full bg-[#F9F6F0]/15 hover:bg-[#D91624] text-white flex items-center justify-center transition cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
+                const runCampaignAndFocusFeed = async (
+                  campaignId: SocialPrCampaignItem['id'],
+                  targetStudio?: string
+                ) => {
+                  setLaunchingCampaignId(campaignId);
+                  playSocialNotifPop();
+                  const ok = await launchSocialPrCampaign(
+                    campaignId,
+                    targetStudio
+                  );
+                  if (ok) {
+                    playCashRegisterChaChing();
+                    setPrActiveTab('feed');
+                  }
+                  setLaunchingCampaignId(null);
+                };
 
-                  {/* Rival Studio Target Selector */}
-                  <div className="bg-[#EFE9DC] px-3.5 py-2 border-b border-[#1A2530]/15">
-                    <div className="text-[10px] font-extrabold text-[#1A2530]/75 mb-1">
-                      اختر الشركة المنافسة المستهدفة بالإشاعات:
-                    </div>
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                      {rivalStudioOptions.map((stName) => (
+                return (
+                  <motion.div
+                    key="pr_war_room_smartphone"
+                    initial={{ scale: 0.94, y: 24, opacity: 0 }}
+                    animate={{ scale: 1, y: 0, opacity: 1 }}
+                    exit={{ scale: 0.94, y: 24, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+                    className="relative w-full max-w-md rounded-[28px] sm:rounded-[34px] border-3 sm:border-4 border-[#D4AF37] bg-[#F9F6F0] text-[#1A2530] shadow-[0_28px_80px_rgba(0,0,0,0.75)] overflow-hidden flex flex-col max-h-[89dvh] touch-pan-y"
+                  >
+                    {/* Compact Luxury App Header */}
+                    <div className="bg-gradient-to-l from-[#1A2530] via-[#22313F] to-[#1A2530] text-[#F9F6F0] px-4 pt-3.5 pb-3 border-b-2 border-[#D4AF37] shrink-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-[#D91624] flex items-center justify-center border border-[#D4AF37] shrink-0 shadow">
+                            <Smartphone className="w-5 h-5 text-[#D4AF37]" />
+                          </div>
+                          <div className="min-w-0">
+                            <h2 className="font-display text-base sm:text-lg text-[#F9F6F0] leading-tight truncate">
+                              اللجان الإلكترونية والتريند
+                            </h2>
+                            <p className="text-[11px] font-bold text-[#D4AF37] truncate">
+                              موبايل الإمبراطور · غرفة إدارة الرأي العام
+                            </p>
+                          </div>
+                        </div>
+
                         <button
-                          key={stName}
                           type="button"
-                          onClick={() => setSelectedRivalTarget(stName)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold whitespace-nowrap transition cursor-pointer ${
-                            selectedRivalTarget === stName
-                              ? 'bg-[#D91624] text-white shadow'
-                              : 'bg-white text-[#1A2530] border border-[#1A2530]/20'
-                          }`}
+                          onClick={() => setPrWarRoomOpen(false)}
+                          aria-label="إغلاق غرفة اللجان"
+                          className="w-10 h-10 rounded-xl bg-[#F9F6F0]/10 hover:bg-[#D91624] text-white flex items-center justify-center border border-[#D4AF37]/40 transition cursor-pointer shrink-0"
                         >
-                          {stName}
+                          <X className="w-4 h-4" />
                         </button>
-                      ))}
-                    </div>
-                  </div>
+                      </div>
 
-                  {/* Live Animated Social Comments Stream */}
-                  <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 bg-[#1A2530]/95 text-[#F9F6F0] min-h-[230px] max-h-[300px]">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-[#D4AF37] pb-1 border-b border-white/10">
-                      <span>🔴 بث مباشر للتعليقات والهاشتاجات (X & TikTok)</span>
-                      <span>تحديث فوري</span>
-                    </div>
-
-                    {/* Show player campaign posts + live baseline chatter */}
-                    {[
-                      ...(socialFeedLog || []),
-                      {
-                        id: 'default_chatter_1',
-                        platform: 'X' as const,
-                        authorName: 'ناقد سينمائي مستقل',
-                        handle: '@CinemaPulseEG',
-                        content: `الجمهور مترقب بشدة خطوة شركة «${studioName}» القادمة أمام أفلام «${selectedRivalTarget}» هذا الموسم! 🍿👀`,
-                        hashtag: `#سباق_الإيرادات`,
-                        likes: '18.4K',
-                        shares: '4.2K',
-                        sentiment: 'viral_boost' as const,
-                        timestampLabel: 'منذ دقيقة',
-                      },
-                      {
-                        id: 'default_chatter_2',
-                        platform: 'TikTok' as const,
-                        authorName: 'تريندات الشارع',
-                        handle: '@StreetVoxEG',
-                        content: `منافسة تكسير عظام على شباك التذاكر.. يا ترى مين هيكسب الصدارة الأسبوع ده؟ 🔥🎬`,
-                        hashtag: `#شباك_التذاكر`,
-                        likes: '42.1K',
-                        shares: '9.8K',
-                        sentiment: 'rival_attack' as const,
-                        timestampLabel: 'منذ 3 دقائق',
-                      },
-                    ]
-                      .slice(0, 7)
-                      .map((post, idx) => (
-                        <motion.div
-                          key={post.id}
-                          initial={{ opacity: 0, x: 20, scale: 0.96 }}
-                          animate={{ opacity: 1, x: 0, scale: 1 }}
-                          transition={{ delay: idx * 0.05 }}
-                          className={`rounded-2xl p-3 border ${
-                            post.sentiment === 'viral_boost'
-                              ? 'bg-[#15803D]/20 border-[#15803D]'
-                              : 'bg-[#D91624]/20 border-[#D91624]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between text-[10px] mb-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.5 rounded bg-[#D4AF37] text-[#1A2530] font-typewriter font-black">
-                                {post.platform}
-                              </span>
-                              <span className="font-extrabold text-white">
-                                {post.authorName}
-                              </span>
-                              <span dir="ltr" className="text-white/60 font-typewriter">
-                                {post.handle}
-                              </span>
-                            </div>
-                            <span className="text-[#D4AF37] font-bold">
-                              {post.timestampLabel}
+                      {/* Clean 2-KPI Status Strip */}
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <div className="rounded-xl bg-[#0F171E]/60 border border-[#D4AF37]/35 px-3 py-2 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-[#F9F6F0]/75">
+                            السيولة المتاحة
+                          </span>
+                          <span
+                            dir="ltr"
+                            className="font-typewriter text-xs font-black text-[#D4AF37]"
+                          >
+                            {formatMoney(cash)}
+                          </span>
+                        </div>
+                        <div className="rounded-xl bg-[#0F171E]/60 border border-[#D4AF37]/35 px-3 py-2">
+                          <div className="flex items-center justify-between text-[10px] font-bold mb-1">
+                            <span className="text-[#F9F6F0]/75">ضجة العمل</span>
+                            <span className="font-typewriter font-black text-[#FFF3B0]">
+                              {draft.hypeScore}%
                             </span>
                           </div>
-
-                          <p className="text-xs font-bold leading-relaxed text-[#F9F6F0]">
-                            {post.content}
-                          </p>
-
-                          <div className="mt-1.5 flex items-center justify-between text-[10px] font-bold">
-                            <span className="text-[#D4AF37]">{post.hashtag}</span>
-                            <div className="flex items-center gap-3 font-typewriter text-white/80">
-                              <span className="inline-flex items-center gap-1">
-                                <Heart className="w-3 h-3 text-[#D91624]" />
-                                {post.likes}
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <Share2 className="w-3 h-3 text-[#D4AF37]" />
-                                {post.shares}
-                              </span>
-                            </div>
+                          <div className="h-1.5 w-full rounded-full bg-white/15 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-l from-[#D4AF37] to-[#D91624] transition-all duration-300"
+                              style={{
+                                width: `${Math.min(100, Math.max(4, draft.hypeScore))}%`,
+                              }}
+                            />
                           </div>
-                        </motion.div>
-                      ))}
-                  </div>
+                        </div>
+                      </div>
+                    </div>
 
-                  {/* Primary Bottom Smartphone Buttons: 2M Support & 5M Rival Rumor */}
-                  <div className="p-3.5 bg-[#F9F6F0] border-t-2 border-[#D4AF37] space-y-2">
-                    <button
-                      type="button"
-                      disabled={launchingCampaignId !== null}
-                      onClick={async () => {
-                        setLaunchingCampaignId('support_film_trolls');
-                        playSocialNotifPop();
-                        const ok = await launchSocialPrCampaign('support_film_trolls');
-                        if (ok) playCashRegisterChaChing();
-                        setLaunchingCampaignId(null);
-                      }}
-                      className="w-full py-3 px-4 rounded-2xl bg-[#15803D] hover:brightness-110 text-white font-display text-sm sm:text-base border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between cursor-pointer disabled:opacity-50"
-                    >
-                      <span>توجيه اللجان لدعم الفيلم (يكلف 2 مليون)</span>
-                      <span className="font-typewriter text-xs bg-black/25 px-2 py-0.5 rounded">
-                        2,000,000 ج.م
-                      </span>
-                    </button>
+                    {/* Segmented 2-Tab Navigation */}
+                    <div className="grid grid-cols-2 gap-1.5 bg-[#EFE9DC] p-2 border-b border-[#1A2530]/15 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPrActiveTab('campaigns')}
+                        className={`min-h-[44px] rounded-xl px-3 py-2 text-xs sm:text-sm font-display transition flex items-center justify-center gap-1.5 cursor-pointer border ${
+                          prActiveTab === 'campaigns'
+                            ? 'bg-[#1A2530] text-[#D4AF37] border-[#D4AF37] shadow-sm'
+                            : 'bg-white text-[#1A2530]/80 border-[#1A2530]/10 hover:text-[#1A2530]'
+                        }`}
+                      >
+                        <Megaphone className="w-4 h-4 shrink-0" />
+                        <span>إطلاق الحملات</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      disabled={launchingCampaignId !== null}
-                      onClick={async () => {
-                        setLaunchingCampaignId('rival_rumor_trolls');
-                        playSocialNotifPop();
-                        const ok = await launchSocialPrCampaign(
-                          'rival_rumor_trolls',
-                          selectedRivalTarget
-                        );
-                        if (ok) playCashRegisterChaChing();
-                        setLaunchingCampaignId(null);
-                      }}
-                      className="w-full py-3 px-4 rounded-2xl bg-[#D91624] hover:brightness-110 text-white font-display text-sm sm:text-base border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between cursor-pointer disabled:opacity-50"
-                    >
-                      <span>نشر إشاعة عن فيلم المنافس (يكلف 5 مليون)</span>
-                      <span className="font-typewriter text-xs bg-black/25 px-2 py-0.5 rounded">
-                        5,000,000 ج.م
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setPrActiveTab('feed')}
+                        className={`min-h-[44px] rounded-xl px-3 py-2 text-xs sm:text-sm font-display transition flex items-center justify-center gap-1.5 cursor-pointer border ${
+                          prActiveTab === 'feed'
+                            ? 'bg-[#1A2530] text-[#D4AF37] border-[#D4AF37] shadow-sm'
+                            : 'bg-white text-[#1A2530]/80 border-[#1A2530]/10 hover:text-[#1A2530]'
+                        }`}
+                      >
+                        <MessageSquare className="w-4 h-4 shrink-0" />
+                        <span>رادار التريند ({combinedFeed.length})</span>
+                      </button>
+                    </div>
 
-                    {/* Additional Viral Campaigns Row */}
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      {SOCIAL_PR_CAMPAIGNS.filter(
-                        (c) =>
-                          c.id !== 'support_film_trolls' &&
-                          c.id !== 'rival_rumor_trolls'
-                      )
-                        .slice(0, 2)
-                        .map((camp) => (
+                    {/* TAB 1: LAUNCH CAMPAIGNS & ELECTRONIC COMMITTEES */}
+                    {prActiveTab === 'campaigns' && (
+                      <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3.5">
+                        {/* Rival Studio Target Selector */}
+                        <div className="rounded-2xl bg-white border border-[#1A2530]/15 p-3">
+                          <div className="flex items-center gap-1.5 text-[11px] font-black text-[#1A2530] mb-2">
+                            <Target className="w-3.5 h-3.5 text-[#D91624]" />
+                            <span>الشركة المنافسة المستهدفة بالحملات المضادة:</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                            {rivalStudioOptions.map((stName) => {
+                              const selected = selectedRivalTarget === stName;
+                              return (
+                                <button
+                                  key={stName}
+                                  type="button"
+                                  onClick={() => setSelectedRivalTarget(stName)}
+                                  className={`min-h-[36px] px-3 py-1.5 rounded-xl text-[11px] font-extrabold whitespace-nowrap transition cursor-pointer border ${
+                                    selected
+                                      ? 'bg-[#D91624] text-white border-[#D4AF37] shadow-xs'
+                                      : 'bg-[#F9F6F0] text-[#1A2530] border-[#1A2530]/15 hover:border-[#D4AF37]'
+                                  }`}
+                                >
+                                  {stName}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Primary Two Hero Actions */}
+                        <div className="space-y-2.5">
                           <button
-                            key={camp.id}
                             type="button"
                             disabled={launchingCampaignId !== null}
-                            onClick={async () => {
-                              setLaunchingCampaignId(camp.id);
-                              playSocialNotifPop();
-                              await launchSocialPrCampaign(
-                                camp.id,
-                                camp.type === 'attack_rival'
-                                  ? selectedRivalTarget
-                                  : undefined
-                              );
-                              setLaunchingCampaignId(null);
-                            }}
-                            className="p-2 rounded-xl bg-[#1A2530] text-[#F9F6F0] hover:bg-[#1A2530]/90 border border-[#D4AF37] text-[11px] font-extrabold text-center cursor-pointer"
+                            onClick={() =>
+                              runCampaignAndFocusFeed('support_film_trolls')
+                            }
+                            className="w-full min-h-[58px] p-3.5 rounded-2xl bg-[#15803D] hover:brightness-110 text-white border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between gap-3 text-right cursor-pointer disabled:opacity-55"
                           >
-                            <div className="truncate">{camp.title}</div>
-                            <div className="font-typewriter text-[10px] text-[#D4AF37]">
-                              {formatMoney(camp.cost)} ج.م
+                            <div className="min-w-0">
+                              <div className="font-display text-sm sm:text-base flex items-center gap-1.5">
+                                {launchingCampaignId === 'support_film_trolls' ? (
+                                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                                ) : (
+                                  <TrendingUp className="w-4 h-4 text-[#FFF3B0] shrink-0" />
+                                )}
+                                <span>توجيه اللجان لدعم الفيلم</span>
+                              </div>
+                              <p className="text-[11px] font-bold text-white/85 mt-0.5">
+                                إشعال هاشتاجات الدعم ورفع الضجة الجماهيرية فوراً
+                              </p>
                             </div>
+                            <span
+                              dir="ltr"
+                              className="shrink-0 font-typewriter text-xs font-black bg-[#1A2530]/80 text-[#D4AF37] px-2.5 py-1.5 rounded-xl border border-[#D4AF37]/50"
+                            >
+                              2.0M ج.م
+                            </span>
                           </button>
-                        ))}
-                    </div>
-                  </div>
-                </div>
 
-                {/* Smartphone Home Bar */}
-                <div className="w-28 h-1.5 rounded-full bg-[#D4AF37]/50 mx-auto mt-2.5" />
-              </motion.div>
-            )}
+                          <button
+                            type="button"
+                            disabled={launchingCampaignId !== null}
+                            onClick={() =>
+                              runCampaignAndFocusFeed(
+                                'rival_rumor_trolls',
+                                selectedRivalTarget
+                              )
+                            }
+                            className="w-full min-h-[58px] p-3.5 rounded-2xl bg-[#D91624] hover:brightness-110 text-white border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between gap-3 text-right cursor-pointer disabled:opacity-55"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-display text-sm sm:text-base flex items-center gap-1.5">
+                                {launchingCampaignId === 'rival_rumor_trolls' ? (
+                                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                                ) : (
+                                  <Flame className="w-4 h-4 text-[#FFF3B0] shrink-0" />
+                                )}
+                                <span>نشر إشاعة عن فيلم المنافس</span>
+                              </div>
+                              <p className="text-[11px] font-bold text-white/85 mt-0.5 truncate">
+                                استهداف مباشر ضد «{selectedRivalTarget}» لتقليص إيراداته
+                              </p>
+                            </div>
+                            <span
+                              dir="ltr"
+                              className="shrink-0 font-typewriter text-xs font-black bg-[#1A2530]/85 text-[#D4AF37] px-2.5 py-1.5 rounded-xl border border-[#D4AF37]/50"
+                            >
+                              5.0M ج.م
+                            </span>
+                          </button>
+                        </div>
+
+                        {/* Additional Tactical Campaigns */}
+                        {extraCampaigns.length > 0 && (
+                          <div className="grid grid-cols-2 gap-2.5">
+                            {extraCampaigns.map((camp) => (
+                              <button
+                                key={camp.id}
+                                type="button"
+                                disabled={launchingCampaignId !== null}
+                                onClick={() =>
+                                  runCampaignAndFocusFeed(
+                                    camp.id,
+                                    camp.type === 'attack_rival'
+                                      ? selectedRivalTarget
+                                      : undefined
+                                  )
+                                }
+                                className="min-h-[68px] p-3 rounded-2xl bg-[#1A2530] text-[#F9F6F0] hover:bg-[#22313F] border border-[#D4AF37]/75 text-right flex flex-col justify-between gap-1.5 transition cursor-pointer disabled:opacity-55"
+                              >
+                                <div className="text-xs font-extrabold leading-snug line-clamp-2">
+                                  {launchingCampaignId === camp.id
+                                    ? 'جاري التنفيذ...'
+                                    : camp.title}
+                                </div>
+                                <div
+                                  dir="ltr"
+                                  className="font-typewriter text-[11px] font-black text-[#D4AF37]"
+                                >
+                                  {formatMoney(camp.cost)} ج.م
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Latest Trend Pulse Mini Preview */}
+                        {latestPost && (
+                          <button
+                            type="button"
+                            onClick={() => setPrActiveTab('feed')}
+                            className="w-full rounded-2xl bg-[#1A2530] text-[#F9F6F0] p-3 border border-[#D4AF37]/45 text-right hover:border-[#D4AF37] transition cursor-pointer"
+                          >
+                            <div className="flex items-center justify-between text-[10px] font-bold text-[#D4AF37] mb-1">
+                              <span>آخر منشور متداول الآن ({latestPost.platform})</span>
+                              <span>عرض كل التعليقات ←</span>
+                            </div>
+                            <p className="text-xs font-bold leading-relaxed text-[#F9F6F0]/90 line-clamp-2">
+                              «{latestPost.content}»
+                            </p>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TAB 2: LIVE X & TIKTOK TREND RADAR */}
+                    {prActiveTab === 'feed' && (
+                      <div className="flex-1 flex flex-col min-h-0 bg-[#141D26] text-[#F9F6F0]">
+                        <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5">
+                          {combinedFeed.slice(0, 10).map((post, idx) => (
+                            <motion.div
+                              key={post.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: Math.min(idx * 0.04, 0.25) }}
+                              className={`rounded-2xl p-3.5 border ${
+                                post.sentiment === 'viral_boost'
+                                  ? 'bg-[#15803D]/18 border-[#15803D]/70'
+                                  : 'bg-[#D91624]/18 border-[#D91624]/70'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2 text-[10px] mb-1.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="px-1.5 py-0.5 rounded bg-[#D4AF37] text-[#1A2530] font-typewriter font-black shrink-0">
+                                    {post.platform}
+                                  </span>
+                                  <span className="font-extrabold text-white truncate">
+                                    {post.authorName}
+                                  </span>
+                                  <span
+                                    dir="ltr"
+                                    className="text-white/55 font-typewriter truncate hidden sm:inline"
+                                  >
+                                    {post.handle}
+                                  </span>
+                                </div>
+                                <span className="text-[#D4AF37] font-bold shrink-0">
+                                  {post.timestampLabel}
+                                </span>
+                              </div>
+
+                              <p className="text-xs font-bold leading-relaxed text-[#F9F6F0]">
+                                {post.content}
+                              </p>
+
+                              <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between text-[10px] font-bold">
+                                <span className="text-[#D4AF37] truncate">
+                                  {post.hashtag}
+                                </span>
+                                <div className="flex items-center gap-3 font-typewriter text-white/80 shrink-0">
+                                  <span className="inline-flex items-center gap-1">
+                                    <Heart className="w-3 h-3 text-[#D91624]" />
+                                    {post.likes}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <Share2 className="w-3 h-3 text-[#D4AF37]" />
+                                    {post.shares}
+                                  </span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </div>
+
+                        <div className="p-3 bg-[#1A2530] border-t border-[#D4AF37]/40 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setPrActiveTab('campaigns')}
+                            className="w-full min-h-[44px] rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-display text-sm shadow flex items-center justify-center gap-2 cursor-pointer hover:brightness-105 transition"
+                          >
+                            <Megaphone className="w-4 h-4" />
+                            <span>إطلاق حملة تريند جديدة الآن</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })()}
           </motion.div>
         )}
       </AnimatePresence>

@@ -25,7 +25,7 @@ import {
   FilmReelSettingsIcon,
 } from '@/components/CustomCinemaIcons';
 import { Coins, Calendar, Clock } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 
 const DAY_DURATION_SECONDS = 18;
 
@@ -55,6 +55,7 @@ export default function HomePage() {
     isChildModalOpen,
     isPrWarRoomOpen,
     isStarForgeOpen,
+    isBankruptLiquidated,
     draft,
     groqApiKeyClient,
     preferredGroqModel,
@@ -63,15 +64,29 @@ export default function HomePage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(DAY_DURATION_SECONDS);
   const [isPageActive, setIsPageActive] = useState(true);
+  const [isClockDetached, setIsClockDetached] = useState(false);
   const isPageActiveRef = useRef(true);
   const secondsRef = useRef(DAY_DURATION_SECONDS);
   const aiTickBusyRef = useRef(false);
   const lastAiHandledDayRef = useRef(0);
 
+  // Track vertical scroll so the time capsule merges seamlessly inside the Navbar at the top,
+  // and detaches smoothly into a floating HUD pill the moment the Navbar begins scrolling away.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleScroll = () => {
+      setIsClockDetached(window.scrollY > 44);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const isTopOverlayOpen =
     settingsOpen ||
     isPrWarRoomOpen ||
     isStarForgeOpen ||
+    isBankruptLiquidated ||
     breakingNewsQueue.length > 0 ||
     festivalModalQueue.length > 0;
   const isAnyModalOpen = isTopOverlayOpen || isChildModalOpen;
@@ -371,107 +386,155 @@ export default function HomePage() {
     )
   );
 
-  return (
-    <div
-      className="relative min-h-screen w-full bg-[#F9F6F0] text-[#1A2530] pb-14"
-      dir="rtl"
+  const renderTimeClockCapsule = (detached: boolean) => (
+    <motion.div
+      layoutId="cinema-live-clock-dock"
+      transition={{
+        type: 'spring',
+        stiffness: 320,
+        damping: 26,
+        mass: 0.85,
+      }}
+      className={`relative overflow-hidden transition-shadow duration-300 ${
+        detached
+          ? 'rounded-2xl bg-[#1A2530]/95 text-[#F9F6F0] border-2 border-[#D4AF37] px-3 py-1.5 shadow-[0_14px_34px_rgba(26,37,48,0.45),0_0_20px_rgba(212,175,55,0.28)] backdrop-blur-md'
+          : 'rounded-xl bg-[#F9F6F0]/10 text-[#F9F6F0] border border-[#D4AF37]/50 px-2.5 py-1'
+      }`}
     >
-      {/* Global Clapperboard Transitions, Flying Cash Deltas & Crisis Red Alert */}
-      <GameFeelEffects />
-
-      {/* ALWAYS-VISIBLE FLOATING TIME & CALENDAR HUD WIDGET (ودجت التاريخ والوقت العائم في كل الصفحات) */}
-      {studioCreated && (
-        <div
-          className={`fixed top-2.5 left-2.5 sm:top-3.5 sm:left-4 z-40 transition-all duration-300 ${
-            isAnyModalOpen
-              ? 'pointer-events-none opacity-45 scale-95'
-              : 'opacity-100 scale-100'
+      <div className="flex items-center gap-2">
+        <span
+          className={`flex shrink-0 items-center justify-center rounded-lg bg-[#D91624] text-[#D4AF37] border border-[#D4AF37]/60 transition-all ${
+            detached ? 'h-6 w-6' : 'h-5 w-5'
           }`}
         >
-          <div className="relative overflow-hidden rounded-2xl bg-[#1A2530]/95 text-[#F9F6F0] border-2 border-[#D4AF37] px-3 py-1.5 shadow-[0_10px_28px_rgba(26,37,48,0.35)] backdrop-blur-md">
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#D91624] text-[#D4AF37] border border-[#D4AF37]/60">
-                <Calendar className="w-3.5 h-3.5" />
-              </span>
-              <div className="leading-tight">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] sm:text-xs font-extrabold tracking-tight text-[#F9F6F0] whitespace-nowrap">
-                    {formatGameDate(gameDay, currentYear)}
+          <Calendar className={detached ? 'w-3.5 h-3.5' : 'w-3 h-3'} />
+        </span>
+        <div className="leading-tight">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] sm:text-xs font-extrabold tracking-tight text-[#F9F6F0] whitespace-nowrap">
+              {formatGameDate(gameDay, currentYear)}
+            </span>
+            <span
+              dir="ltr"
+              className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-typewriter text-[10px] font-black tabular-nums ${
+                isAnyModalOpen || !isPageActive
+                  ? 'bg-[#D4AF37]/25 text-[#FFF3B0] border border-[#D4AF37]/40'
+                  : 'bg-[#15803D] text-white'
+              }`}
+            >
+              <Clock className="w-2.5 h-2.5" />
+              {isAnyModalOpen || !isPageActive ? 'مؤقت' : `${secondsLeft}s`}
+            </span>
+          </div>
+          {/* Animated Daily Progress Bar */}
+          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/15">
+            <div
+              className="h-full rounded-full bg-gradient-to-l from-[#D4AF37] to-[#D91624] transition-all duration-500"
+              style={{ width: `${dayProgressPercent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  return (
+    <LayoutGroup>
+      <div
+        className="relative min-h-screen w-full bg-[#F9F6F0] text-[#1A2530] pb-14"
+        dir="rtl"
+      >
+        {/* Global Clapperboard Transitions, Flying Cash Deltas & Crisis Red Alert */}
+        <GameFeelEffects />
+
+        {/* UNIFIED TOP STUDIO NAVBAR (Normal flow — scrolls out smoothly so the clock detaches cleanly!) */}
+        {studioCreated && (
+          <header
+            className={`relative z-30 bg-[#1A2530] text-[#F9F6F0] border-b-4 border-[#D4AF37] px-3 sm:px-6 py-2.5 shadow-lg transition-opacity ${
+              isAnyModalOpen ? 'pointer-events-none opacity-40' : ''
+            }`}
+          >
+            <div
+              className={`mx-auto flex items-center justify-between gap-2 ${
+                activeScreen === 'STUDIO_HUB' ? 'max-w-5xl' : 'max-w-4xl'
+              }`}
+            >
+              {/* Zone 1: Back to Emperor Desk or Studio Brand Mark */}
+              {isStepScreen ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveScreen('STUDIO_HUB')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-xs sm:text-sm border border-[#D4AF37] shadow cursor-pointer transition shrink-0 whitespace-nowrap"
+                >
+                  <DirectorChairIcon className="w-4 h-4 text-[#D4AF37]" />
+                  <span>مكتب الإمبراطور</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 shrink-0 min-w-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#D91624] border border-[#D4AF37] text-[#D4AF37] shadow">
+                    <DirectorChairIcon className="w-4 h-4" />
                   </span>
+                  <span className="font-display text-sm sm:text-base text-[#F9F6F0] truncate max-w-[140px] sm:max-w-[220px]">
+                    {studioName}
+                  </span>
+                </div>
+              )}
+
+              {/* Zone 2: Docked Time & Calendar Capsule (merges seamlessly inside Navbar at top) */}
+              <div className="flex items-center justify-center min-h-[36px]">
+                {!isClockDetached ? (
+                  renderTimeClockCapsule(false)
+                ) : (
+                  <div className="h-[34px] w-[140px] sm:w-[165px]" aria-hidden="true" />
+                )}
+              </div>
+
+              {/* Zone 3: Cash Plaque & Film Reel Settings */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="hidden xs:flex sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#F9F6F0]/10 border border-[#D4AF37]/45">
+                  <Coins className="w-3.5 h-3.5 text-[#D4AF37]" />
                   <span
                     dir="ltr"
-                    className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-typewriter text-[10px] font-black ${
-                      isAnyModalOpen || !isPageActive
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
-                        : 'bg-[#15803D] text-white'
-                    }`}
+                    className="font-typewriter text-xs font-black text-[#F9F6F0] tabular-nums"
                   >
-                    <Clock className="w-2.5 h-2.5" />
-                    {isAnyModalOpen || !isPageActive ? 'مؤقت' : `${secondsLeft}s`}
+                    {formatMoney(cash)}
                   </span>
+                  <span className="text-[10px] font-bold text-[#D4AF37]">ج.م</span>
                 </div>
-                {/* Animated Daily Progress Bar */}
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/15">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-l from-[#D4AF37] to-[#D91624] transition-all duration-500"
-                    style={{ width: `${dayProgressPercent}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Minimal Cinema Clapperboard Strip ONLY when inside sub-stages */}
-      {isStepScreen && (
-        <div
-          className={`sticky top-0 z-30 bg-[#1A2530] text-[#F9F6F0] border-b-4 border-[#D4AF37] px-3 sm:px-6 py-2.5 shadow-lg ${
-            isAnyModalOpen ? 'pointer-events-none opacity-40' : ''
-          }`}
-        >
-          <div className="mx-auto max-w-4xl flex items-center justify-between gap-2 pl-36 sm:pl-44">
-            <button
-              type="button"
-              onClick={() => setActiveScreen('STUDIO_HUB')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-xs sm:text-sm border border-[#D4AF37] shadow cursor-pointer transition shrink-0"
-            >
-              <DirectorChairIcon className="w-4 h-4 text-[#D4AF37]" />
-              <span>مكتب الإمبراطور</span>
-            </button>
-
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F9F6F0]/10 border border-[#D4AF37]/40">
-                <Coins className="w-3.5 h-3.5 text-[#D4AF37]" />
-                <span
-                  dir="ltr"
-                  className="font-typewriter text-xs font-black text-[#F9F6F0]"
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="p-1.5 rounded-xl bg-[#D4AF37] hover:brightness-110 text-[#1A2530] border border-[#F9F6F0]/70 shadow cursor-pointer"
+                  title="إعدادات الاستوديو"
                 >
-                  {formatMoney(cash)}
-                </span>
-                <span className="text-[10px] font-bold text-[#D4AF37]">ج.م</span>
+                  <FilmReelSettingsIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="p-1.5 rounded-lg bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 text-[#D4AF37] border border-[#D4AF37]/40 cursor-pointer"
-                title="إعدادات الاستوديو"
-              >
-                <FilmReelSettingsIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
             </div>
-          </div>
-        </div>
-      )}
+          </header>
+        )}
 
-      {/* Main Content Container */}
-      <main
-        aria-hidden={isTopOverlayOpen}
-        className={`mx-auto px-3 sm:px-5 pt-13 sm:pt-6 transition-opacity ${
-          activeScreen === 'STUDIO_HUB' ? 'max-w-5xl' : 'max-w-4xl'
-        } ${isTopOverlayOpen ? 'pointer-events-none select-none opacity-40' : ''}`}
-      >
+        {/* DETACHED FLOATING TIME & CALENDAR CAPSULE (Detaches magically when scrolling past Navbar!) */}
+        {studioCreated && isClockDetached && (
+          <div
+            className={`fixed top-3 left-3 sm:top-4 sm:left-4 z-40 transition-opacity duration-300 ${
+              isAnyModalOpen
+                ? 'pointer-events-none opacity-40'
+                : 'opacity-100'
+            }`}
+          >
+            {renderTimeClockCapsule(true)}
+          </div>
+        )}
+
+        {/* Main Content Container */}
+        <main
+          aria-hidden={isTopOverlayOpen}
+          className={`mx-auto px-3 sm:px-5 pt-4 sm:pt-6 transition-opacity ${
+            activeScreen === 'STUDIO_HUB' ? 'max-w-5xl' : 'max-w-4xl'
+          } ${isTopOverlayOpen ? 'pointer-events-none select-none opacity-40' : ''}`}
+        >
         <AnimatePresence mode="wait">
           {!studioCreated ? (
             <motion.div
@@ -514,6 +577,7 @@ export default function HomePage() {
       {/* Global Popups & Smartphone PR War Room */}
       <WorldPopupsOverlay />
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
-    </div>
+      </div>
+    </LayoutGroup>
   );
 }

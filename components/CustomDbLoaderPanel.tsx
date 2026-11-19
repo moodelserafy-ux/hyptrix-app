@@ -101,23 +101,23 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
   };
 
   return (
-    <div className="rounded-3xl border-2 border-indigo-100 bg-white p-4 text-right text-slate-900 shadow-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-3">
+    <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-4 text-right text-[#1A2530] shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1A2530]/15 pb-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D4AF37] bg-[#1A2530] text-[#D4AF37]">
             <Database className="h-5 w-5" />
           </div>
-          <h3 className="text-sm font-black text-slate-900">
+          <h3 className="text-sm font-black text-[#1A2530]">
             إدارة حزم الأسماء والشعارات المخصصة
           </h3>
         </div>
-        <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black text-indigo-700 tabular-nums">
+        <span className="rounded-full border border-[#D4AF37]/70 bg-[#FFF9E6] px-2.5 py-0.5 text-[10px] font-black text-[#1A2530] tabular-nums">
           {resolvedDb.meta.pack_name}
         </span>
       </div>
 
       {!compact && (
-        <p className="mt-2 text-xs leading-relaxed text-slate-600">
+        <p className="mt-2 text-xs leading-relaxed text-[#1A2530]/75">
           الصق رابط حزمة بيانات خارجية أو ارفع ملف الحزمة من جهازك لدمج
           الأسماء والصور وشعارات المنصات والقنوات تلقائياً.
         </p>
@@ -125,14 +125,14 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
-          <Link2 className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+          <Link2 className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-[#1A2530]/40" />
           <input
             type="url"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             placeholder="https://.../studio_pack"
             aria-label="رابط حزمة البيانات الخارجية"
-            className="w-full rounded-xl border-2 border-indigo-100 bg-[#F8FAFF] py-2 pr-9 pl-3 text-left text-xs font-medium text-slate-900 focus:border-violet-600 focus:outline-none"
+            className="w-full rounded-xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] py-2 pr-9 pl-3 text-left text-xs font-medium text-[#1A2530] focus:border-[#D4AF37] focus:bg-white focus:outline-none"
             dir="ltr"
           />
         </div>
@@ -140,7 +140,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
           type="button"
           onClick={handleFetchFromUrl}
           disabled={loading}
-          className="min-h-[40px] shrink-0 rounded-xl bg-violet-600 px-4 py-2 text-xs font-black text-white shadow-xs hover:bg-violet-700"
+          className="min-h-[40px] shrink-0 rounded-xl border border-[#D4AF37] bg-[#D91624] px-4 py-2 text-xs font-black text-white shadow-xs hover:brightness-110"
         >
           {loading ? 'جاري التحقق...' : 'تفعيل الرابط'}
         </button>
@@ -158,9 +158,9 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-indigo-200 bg-[#F8FAFF] px-3 py-1.5 text-xs font-black text-slate-700 hover:border-violet-400"
+          className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[#1A2530]/20 bg-[#F9F6F0] px-3 py-1.5 text-xs font-black text-[#1A2530] hover:border-[#D4AF37]"
         >
-          <Upload className="h-3.5 w-3.5 text-violet-600" />
+          <Upload className="h-3.5 w-3.5 text-[#D91624]" />
           رفع حزمة بيانات
         </button>
 
@@ -174,7 +174,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
                 text: 'تمت استعادة قاعدة البيانات الافتراضية.',
               });
             }}
-            className="flex min-h-[38px] items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700"
+            className="flex min-h-[38px] items-center gap-1 rounded-xl border border-[#D91624]/40 bg-[#D91624]/10 px-3 py-1.5 text-xs font-black text-[#D91624]"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             استعادة الافتراضي

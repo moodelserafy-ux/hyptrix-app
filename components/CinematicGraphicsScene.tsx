@@ -29,7 +29,7 @@ export function AnimatedStudioLotGraphic({
   isFilming?: boolean;
 }) {
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-b from-[#13112B] via-[#1E1B4B] to-[#312E81] shadow-lg">
+    <div className="relative w-full overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-gradient-to-b from-[#0F171E] via-[#1A2530] to-[#233242] shadow-lg">
       <svg
         viewBox="0 0 600 200"
         className="h-40 w-full sm:h-48"
@@ -154,7 +154,7 @@ export function AnimatedStudioLotGraphic({
         <line x1="0" y1="165" x2="600" y2="165" stroke="#818CF8" strokeWidth="1.5" />
       </svg>
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-300/30 bg-slate-950/80 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-md">
+      <div className="pointer-events-none absolute inset-x-3 bottom-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D4AF37]/40 bg-[#0F171E]/85 px-3 py-1.5 text-[11px] font-bold text-[#F9F6F0] backdrop-blur-md">
         <span className="leading-snug text-amber-300">
           {hasActiveProject
             ? `${studioName} · البلاتوه الرئيسي: «${activeProjectTitle}»`
@@ -364,30 +364,30 @@ export function AnimatedFilmingSetGraphic({
   isComplete?: boolean;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border-2 border-indigo-200/80 bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-950 text-white shadow-xl">
+    <div className="relative overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-gradient-to-br from-[#0F171E] via-[#1A2530] to-[#253545] text-[#F9F6F0] shadow-xl">
       <div className="flex flex-col items-center justify-center px-4 py-6 text-center">
         <motion.div
           animate={{ rotate: isComplete ? 0 : [-4, 4, -4] }}
           transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-          className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/40 bg-amber-500/20 text-amber-300 shadow-inner"
+          className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#D4AF37] bg-[#D91624]/25 text-[#D4AF37] shadow-inner"
         >
           <Clapperboard className="h-6 w-6" />
         </motion.div>
 
-        <div className="font-display mt-2.5 text-sm font-black text-amber-300 sm:text-base">
+        <div className="font-display mt-2.5 text-sm font-black text-[#D4AF37] sm:text-base">
           بلاتوه تصوير «{title}»
         </div>
-        <div className="mt-1 text-xs font-bold text-indigo-200">
+        <div className="mt-1 text-xs font-bold text-[#F9F6F0]/80">
           إخراج: {directorName} · البطولة: {leadName}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-indigo-500/30 bg-slate-900/90 px-3.5 py-2 text-[11px] font-bold">
-        <span className="text-amber-300">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#D4AF37]/30 bg-[#0F171E]/90 px-3.5 py-2 text-[11px] font-bold">
+        <span className="text-[#D4AF37]">
           مشهد اليوم {dayCurrent} من {dayTotal}{' '}
           {isComplete ? '(اكتمل التصوير ✓)' : '(REC ● جاري التصوير)'}
         </span>
-        <span className="text-cyan-300">كاميرات البلاتوه نشطة</span>
+        <span className="text-emerald-400">كاميرات البلاتوه نشطة</span>
       </div>
     </div>
   );
@@ -414,7 +414,7 @@ export function AnimatedCinemaPremiereGraphic({
   criticScore: number;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border-2 border-amber-400/50 bg-gradient-to-b from-slate-950 via-indigo-950 to-violet-950 p-5 text-center text-white shadow-xl">
+    <div className="relative overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-gradient-to-b from-[#0F171E] via-[#1A2530] to-[#2B171D] p-5 text-center text-[#F9F6F0] shadow-xl">
       <div className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-0.5 text-[10px] font-black text-amber-300">
         {isSeries ? <Tv className="h-3.5 w-3.5" /> : <Film className="h-3.5 w-3.5" />}
         <span>
@@ -454,7 +454,7 @@ export function AnimatedRedCarpetFestivalGraphic({
   wonCount: number;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border-2 border-amber-300/60 bg-gradient-to-br from-slate-950 via-indigo-950 to-amber-950 p-5 text-center text-white shadow-xl">
+    <div className="relative overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-gradient-to-br from-[#0F171E] via-[#1A2530] to-[#3B151A] p-5 text-center text-[#F9F6F0] shadow-xl">
       <motion.div
         animate={{ y: [0, -5, 0] }}
         transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}

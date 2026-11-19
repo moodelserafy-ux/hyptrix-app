@@ -316,10 +316,48 @@ export async function fetchGlobalLeaderboard(): Promise<GlobalStudioScore[]> {
         'studio_name, ceo_name, market_value, cash, reputation, released_count, total_awards, owned_assets_count, ledger_verified, updated_at'
       )
       .order('market_value', { ascending: false })
-      .limit(20);
+      .limit(15);
     if (error || !data) return [];
     return data as GlobalStudioScore[];
   } catch {
     return [];
   }
 }
+
+export interface RealPlayersLeaderboardResponse {
+  ok: boolean;
+  source: 'cloud' | 'server';
+  top15: GlobalStudioScore[];
+  totalPlayers: number;
+  currentPlayerRank: number | null;
+  currentPlayerEntry: GlobalStudioScore | null;
+  fifteenthMarketValue: number;
+}
+
+export async function syncAndFetchRealPlayersLeaderboard(payload: {
+  studioName: string;
+  ceoName: string;
+  marketValue: number;
+  cash: number;
+  reputation: number;
+  releasedCount: number;
+  totalAwards: number;
+}): Promise<RealPlayersLeaderboardResponse | null> {
+  try {
+    const studioInstanceId = getOrCreateStudioInstanceId();
+    const res = await fetch('/api/leaderboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({
+        studioInstanceId,
+        ...payload,
+      }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as RealPlayersLeaderboardResponse;
+  } catch {
+    return null;
+  }
+}
+

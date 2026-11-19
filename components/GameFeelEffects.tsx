@@ -14,7 +14,11 @@ interface FloatingMoneyItem {
   id: string;
   delta: number;
   xOffset: number;
+  createdAt: number;
 }
+
+const BUBBLE_LIFETIME_MS = 1650;
+const BUBBLE_SWEEP_MAX_AGE_MS = 1950;
 
 const SCREEN_TITLES: Record<string, string> = {
   STUDIO_CREATION: 'تأسيس الاستوديو',
@@ -27,12 +31,6 @@ const SCREEN_TITLES: Record<string, string> = {
 };
 
 export function GameFeelEffects() {
-  const { activeScreen, cash, draft } = useGameStore();
-
-  const prevScreenRef = useRef<string>(activeScreen);
-  const prevCashRef = useRef<number>(cash);
-  const prevCrisisCountRef = useRef<number>(draft.crises?.length || 0);
-
   const [clapperTransition, setClapperTransition] = useState<{
     active: boolean;
     sceneName: string;
@@ -41,50 +39,96 @@ export function GameFeelEffects() {
   const [floatingDeltas, setFloatingDeltas] = useState<FloatingMoneyItem[]>([]);
   const [crisisRedFlash, setCrisisRedFlash] = useState(false);
 
-  // 1. Clapperboard transition when switching screens
+  const bubbleTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
+  const clapperTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const crisisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Subscribe once to Zustand store changes so rapid sequential cash/screen updates
+  // never cancel earlier floating bubble removal timers.
   useEffect(() => {
-    if (prevScreenRef.current !== activeScreen) {
-      prevScreenRef.current = activeScreen;
-      playClapperboardSnap();
-      setClapperTransition({
-        active: true,
-        sceneName: SCREEN_TITLES[activeScreen] || 'مشهد جديد',
+    const timersMap = bubbleTimersRef.current;
+
+    const unsubscribe = useGameStore.subscribe((state, prevState) => {
+      // 1. Clapperboard transition when switching screens
+      if (state.activeScreen !== prevState.activeScreen) {
+        playClapperboardSnap();
+        setClapperTransition({
+          active: true,
+          sceneName: SCREEN_TITLES[state.activeScreen] || 'مشهد جديد',
+        });
+        if (clapperTimerRef.current) {
+          clearTimeout(clapperTimerRef.current);
+        }
+        clapperTimerRef.current = setTimeout(() => {
+          setClapperTransition((prev) => ({ ...prev, active: false }));
+          clapperTimerRef.current = null;
+        }, 620);
+      }
+
+      // 2. Floating Cash Deltas when cash changes
+      const diff = state.cash - prevState.cash;
+      if (Math.abs(diff) >= 50_000) {
+        const now = Date.now();
+        const id = `delta_${now}_${Math.random().toString(36).slice(2, 6)}`;
+        const xOffset = Math.round((Math.random() - 0.5) * 84);
+        playCashRegisterChaChing();
+
+        setFloatingDeltas((prev) => {
+          const fresh = prev.filter(
+            (item) => now - item.createdAt < BUBBLE_SWEEP_MAX_AGE_MS
+          );
+          return [...fresh.slice(-3), { id, delta: diff, xOffset, createdAt: now }];
+        });
+
+        const removalTimer = setTimeout(() => {
+          setFloatingDeltas((prev) => prev.filter((item) => item.id !== id));
+          timersMap.delete(id);
+        }, BUBBLE_LIFETIME_MS);
+
+        timersMap.set(id, removalTimer);
+      }
+
+      // 3. Red Flash + Alarm when new filming crises erupt
+      const nextCount =
+        state.draft.crises?.filter((c) => !c.resolved).length || 0;
+      const prevCount =
+        prevState.draft.crises?.filter((c) => !c.resolved).length || 0;
+      if (nextCount > prevCount && nextCount > 0) {
+        playCrisisRedAlert();
+        setCrisisRedFlash(true);
+        if (crisisTimerRef.current) {
+          clearTimeout(crisisTimerRef.current);
+        }
+        crisisTimerRef.current = setTimeout(() => {
+          setCrisisRedFlash(false);
+          crisisTimerRef.current = null;
+        }, 680);
+      }
+    });
+
+    // Safety sweeper guarantees no floating bubble can ever get stuck even if the tab is throttled
+    const sweepInterval = setInterval(() => {
+      const now = Date.now();
+      setFloatingDeltas((prev) => {
+        if (prev.length === 0) return prev;
+        const remaining = prev.filter(
+          (item) => now - item.createdAt < BUBBLE_SWEEP_MAX_AGE_MS
+        );
+        return remaining.length === prev.length ? prev : remaining;
       });
-      const timer = setTimeout(() => {
-        setClapperTransition((prev) => ({ ...prev, active: false }));
-      }, 620);
-      return () => clearTimeout(timer);
-    }
-  }, [activeScreen]);
+    }, 750);
 
-  // 2. Floating Cash Deltas when cash changes
-  useEffect(() => {
-    const diff = cash - prevCashRef.current;
-    prevCashRef.current = cash;
-    if (Math.abs(diff) >= 50_000) {
-      const id = `delta_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      const xOffset = (Math.random() - 0.5) * 90;
-      setFloatingDeltas((prev) => [...prev.slice(-4), { id, delta: diff, xOffset }]);
-      playCashRegisterChaChing();
-      const timer = setTimeout(() => {
-        setFloatingDeltas((prev) => prev.filter((item) => item.id !== id));
-      }, 1750);
-      return () => clearTimeout(timer);
-    }
-  }, [cash]);
-
-  // 3. Red Flash + Alarm when new filming crises erupt
-  useEffect(() => {
-    const count = draft.crises?.filter((c) => !c.resolved).length || 0;
-    if (count > prevCrisisCountRef.current && count > 0) {
-      playCrisisRedAlert();
-      setCrisisRedFlash(true);
-      const timer = setTimeout(() => setCrisisRedFlash(false), 680);
-      prevCrisisCountRef.current = count;
-      return () => clearTimeout(timer);
-    }
-    prevCrisisCountRef.current = count;
-  }, [draft.crises]);
+    return () => {
+      unsubscribe();
+      clearInterval(sweepInterval);
+      timersMap.forEach((t) => clearTimeout(t));
+      timersMap.clear();
+      if (clapperTimerRef.current) clearTimeout(clapperTimerRef.current);
+      if (crisisTimerRef.current) clearTimeout(crisisTimerRef.current);
+    };
+  }, []);
 
   return (
     <>
@@ -96,10 +140,19 @@ export function GameFeelEffects() {
             return (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, y: 18, x: item.xOffset, scale: 0.85 }}
-                animate={{ opacity: 1, y: -42, x: item.xOffset, scale: 1.08 }}
-                exit={{ opacity: 0, y: -78, scale: 0.92 }}
-                transition={{ duration: 1.4, ease: 'easeOut' }}
+                initial={{ opacity: 0, y: 16, x: item.xOffset, scale: 0.86 }}
+                animate={{
+                  opacity: [0, 1, 1, 0],
+                  y: [16, -12, -40, -68],
+                  x: item.xOffset,
+                  scale: [0.86, 1.05, 1, 0.92],
+                }}
+                exit={{ opacity: 0, y: -76, scale: 0.9 }}
+                transition={{
+                  duration: 1.55,
+                  times: [0, 0.16, 0.72, 1],
+                  ease: 'easeOut',
+                }}
                 dir="ltr"
                 className={`absolute rounded-2xl border-2 px-3.5 py-1.5 font-typewriter text-sm font-black shadow-xl ${
                   isNegative
@@ -108,7 +161,7 @@ export function GameFeelEffects() {
                 }`}
               >
                 {isNegative ? '' : '+'}
-                {formatMoney(item.delta)} EGP
+                {formatMoney(item.delta)} ج.م
               </motion.div>
             );
           })}
@@ -164,7 +217,7 @@ export function GameFeelEffects() {
                   SCENE TAKE · DAYLIGHT STUDIO
                 </div>
                 <div className="font-display mt-1 text-lg font-black text-white">
-                  🎬 {clapperTransition.sceneName}
+                  {clapperTransition.sceneName}
                 </div>
               </div>
             </motion.div>

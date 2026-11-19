@@ -117,6 +117,9 @@ export function Stage3CrewCastCards() {
     groqApiKeyClient,
     preferredGroqModel,
     ownedStudioAssets,
+    talentRejectionCounts,
+    syndicateMediationUnlocked,
+    unlockSyndicateMediationWithAd,
   } = useGameStore();
 
   const studioAssetBenefits = useMemo(
@@ -376,29 +379,40 @@ export function Stage3CrewCastCards() {
         : 'lead'
       : ((item as CrewItem).role as OfferRoleSlot);
 
-    // 1. Run deep multi-factor baseline evaluation
+    const hasSyndicateMediation = Boolean(
+      (syndicateMediationUnlocked || {})[item.id]
+    );
+
+    // 1. Run deep multi-factor baseline evaluation (with +25% boost if Syndicate Mediation is active)
     const deepEval = evaluateTalentOfferDeep({
       talentName: item.name,
       isActor,
       starTier,
       overall: item.stats.overall,
-      ego,
+      ego: hasSyndicateMediation ? Math.max(40, ego - 22) : ego,
       baseSalary: item.base_salary,
-      offeredSalary,
+      offeredSalary: hasSyndicateMediation
+        ? Math.round(offeredSalary * 1.25)
+        : offeredSalary,
       backendPoints,
-      vipDinner,
+      vipDinner: vipDinner || hasSyndicateMediation,
       roleBillingSize,
       customRoleDescription: customRoleName,
       projectTitle: draft.title,
       scriptSynopsis: draft.scriptSynopsis,
       genreName: primaryGenreObj?.name || 'دراما',
       genreMasteryScore,
-      studioReputation: reputation,
+      studioReputation: hasSyndicateMediation
+        ? Math.min(100, reputation + 15)
+        : reputation,
       directorOverall: selectedDirector?.stats.overall || null,
       directorName: selectedDirector?.name || null,
     });
 
-    let willAccept = deepEval.willAccept;
+    let willAccept =
+      hasSyndicateMediation && offeredSalary >= item.base_salary * 0.85
+        ? true
+        : deepEval.willAccept;
     let reason = deepEval.detailedReason;
     let waitDays = starTier === 'S' || ego >= 85 ? 3 : 2;
 
@@ -458,6 +472,10 @@ export function Stage3CrewCastCards() {
       // Fallback to deepEval values
     } finally {
       setIsEvaluatingOffer(false);
+    }
+
+    if (hasSyndicateMediation && offeredSalary >= item.base_salary * 0.85) {
+      willAccept = true;
     }
 
     const responseDueDay = gameDay + waitDays;
@@ -634,7 +652,7 @@ export function Stage3CrewCastCards() {
           </p>
           <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-amber-200/80">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-amber-500 to-violet-600 transition-all duration-500"
+              className="h-full rounded-full bg-gradient-to-r from-[#D4AF37] to-[#D91624] transition-all duration-500"
               style={{ width: `${progressPct}%` }}
             />
           </div>
@@ -668,18 +686,18 @@ export function Stage3CrewCastCards() {
       (offer.status === 'accepted' && !isSigned)
     ) {
       return (
-        <div className="mt-2.5 rounded-2xl border border-violet-300/90 bg-violet-50/90 p-3 backdrop-blur-xs">
+        <div className="mt-2.5 rounded-2xl border-2 border-[#D4AF37] bg-[#FFF9E6] p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-xs font-black text-violet-950">
-              <Check className="h-4 w-4 text-violet-600" />
+            <span className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+              <Check className="h-4 w-4 text-[#D91624]" />
               <span>وافق على العرض — بانتظار اختيارك النهائي ضمن العدد المسموح</span>
             </span>
-            <span className="font-mono text-[11px] font-black text-violet-800 tabular-nums">
+            <span className="font-mono text-[11px] font-black text-[#1A2530] tabular-nums">
               {formatMoney(offer.offeredSalary)} ج.م
             </span>
           </div>
           {offer.aiReason && (
-            <p className="mt-1 text-[11px] font-bold leading-relaxed text-violet-900">
+            <p className="mt-1 text-[11px] font-bold leading-relaxed text-[#1A2530]/80">
               &ldquo;{offer.aiReason}&rdquo;
             </p>
           )}
@@ -688,12 +706,22 @@ export function Stage3CrewCastCards() {
     }
 
     if (offer.status === 'rejected') {
+      const rejCount = (talentRejectionCounts || {})[offer.talentId] || 1;
+      const isMediationUnlocked = Boolean(
+        (syndicateMediationUnlocked || {})[offer.talentId]
+      );
       return (
         <div className="mt-2.5 rounded-2xl border border-rose-300/90 bg-rose-50/90 p-3 backdrop-blur-xs">
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-black text-rose-950">
               <AlertCircle className="h-4 w-4 text-rose-600" />
-              <span>اعتذر عن قبول العرض السابق</span>
+              <span>
+                {rejCount >= 2 && !isMediationUnlocked
+                  ? `رفض العرض مرتين (${rejCount}/2) وأغلق باب التفاوض نهائياً`
+                  : isMediationUnlocked
+                  ? 'تم فتح جولة مفاوضات أخيرة بوساطة النقابة (+25% فرصة قبول)'
+                  : 'اعتذر عن قبول العرض السابق'}
+              </span>
             </span>
           </div>
           {offer.aiReason && (
@@ -750,11 +778,11 @@ export function Stage3CrewCastCards() {
             : 'space-y-3.5'
         }
       >
-      {/* Clean Single-Line Current Activity Header (No Step Numbers or Future Step List) */}
-      <div className="glass-panel rounded-3xl px-4 py-3.5">
+      {/* Unified Royal Cinema Header */}
+      <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] px-4 py-3.5 text-[#F9F6F0] shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#D4AF37] bg-[#D91624] text-white shadow-sm">
               {wizardStep === 1 && <Clapperboard className="h-5 w-5" />}
               {wizardStep === 2 && <Camera className="h-5 w-5" />}
               {wizardStep === 3 && <Music className="h-5 w-5" />}
@@ -763,11 +791,14 @@ export function Stage3CrewCastCards() {
               {wizardStep === 6 && <Sparkles className="h-5 w-5" />}
             </div>
             <div>
-              <h2 className="font-display text-sm font-black text-slate-900 sm:text-base">
+              <span className="text-[10px] font-black text-[#D4AF37]">
+                غرفة التعاقدات والكاستينج
+              </span>
+              <h2 className="font-display text-sm font-black text-[#F9F6F0] sm:text-base">
                 {currentStepMeta.currentActionLabel}
               </h2>
               {wizardStep === 1 && approvedDirectorIds.length > 0 && (
-                <p className="text-[11px] font-bold text-emerald-700">
+                <p className="text-[11px] font-bold text-emerald-400">
                   المخرجون المعتمدون ({approvedDirectorIds.length}/2):{' '}
                   {selectedDirectors.map((d) => d.name).join(' و')}
                 </p>
@@ -776,8 +807,8 @@ export function Stage3CrewCastCards() {
           </div>
 
           {pendingOffersList.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-xl bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-900">
-              <Clock className="h-3 w-3 text-amber-600 animate-spin" />
+            <span className="inline-flex items-center gap-1 rounded-xl border border-[#D4AF37]/60 bg-[#D4AF37]/20 px-2.5 py-1 text-[10px] font-black text-[#D4AF37]">
+              <Clock className="h-3 w-3 text-[#D4AF37] animate-spin" />
               <span>{pendingOffersList.length} عروض قيد الدراسة</span>
             </span>
           )}
@@ -786,15 +817,15 @@ export function Stage3CrewCastCards() {
 
       {/* Multi-Accepted Choice Banner when 3+ Directors (or 2+ DOP/Composer/VFX) Accepted */}
       {wizardStep <= 4 && currentCrewRole && hasExcessAcceptedCrewOffers && (
-        <div className="rounded-3xl border-2 border-violet-400 bg-violet-50/95 p-4 shadow-md space-y-3">
+        <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#FFF9E6] p-4 shadow-md space-y-3">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h3 className="font-display text-xs font-black text-violet-950 sm:text-sm">
+              <h3 className="font-display text-xs font-black text-[#1A2530] sm:text-sm">
                 {currentCrewRole === 'director'
                   ? `وافق ${acceptedOffersForCurrentCrewStep.length} مخرجين على عرضك! اختر مخرجاً واحداً أو مخرجين اثنين كحد أقصى (1–2):`
                   : `وافق ${acceptedOffersForCurrentCrewStep.length} مرشحين على العرض! اختر مرشحاً واحداً لاعتماده رسمياً:`}
               </h3>
-              <p className="mt-0.5 text-[11px] font-bold text-violet-800">
+              <p className="mt-0.5 text-[11px] font-bold text-[#1A2530]/75">
                 اضغط لتحديد من تريد اعتماده في الفريق النهائي ثم اضغط «تأكيد الاختيار النهائي» لإغلاق باقي العروض.
               </p>
             </div>
@@ -812,8 +843,8 @@ export function Stage3CrewCastCards() {
                   }
                   className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-xs font-black transition ${
                     isChosen
-                      ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
-                      : 'border-violet-200 bg-white text-slate-800 hover:border-violet-400'
+                      ? 'border-[#15803D] bg-[#15803D] text-white shadow-xs'
+                      : 'border-[#1A2530]/20 bg-white text-[#1A2530] hover:border-[#D4AF37]'
                   }`}
                 >
                   {isChosen && <Check className="h-3.5 w-3.5" />}
@@ -833,7 +864,7 @@ export function Stage3CrewCastCards() {
                   currentSignedIdsForCrewStep
                 )
               }
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2 text-xs font-black text-white shadow-sm disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#D4AF37] bg-[#D91624] px-4 py-2 text-xs font-black text-white shadow-sm disabled:opacity-50"
             >
               <Check className="h-4 w-4" />
               <span>
@@ -847,7 +878,7 @@ export function Stage3CrewCastCards() {
 
       {/* FLOATING STICKY SEARCH & FILTER BAR FOR STEPS 1..5 */}
       {wizardStep <= 5 && (
-        <div className="glass-nav sticky top-14 z-30 rounded-2xl p-3">
+        <div className="sticky top-14 z-30 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 p-3 shadow-lg backdrop-blur-md">
           <div className="flex flex-col gap-2.5">
             {wizardStep === 5 && (
               <div className="flex flex-wrap items-center gap-1.5">
@@ -866,8 +897,8 @@ export function Stage3CrewCastCards() {
                     onClick={() => setSelectedTier(tab.id as any)}
                     className={`rounded-xl px-2.5 py-1.5 text-[11px] font-black transition whitespace-nowrap ${
                       selectedTier === tab.id
-                        ? 'bg-violet-600 text-white shadow-sm'
-                        : 'border border-indigo-100 bg-white/80 text-slate-700 hover:bg-indigo-50'
+                        ? 'border border-[#D4AF37] bg-[#D91624] text-white shadow-sm'
+                        : 'border border-white/15 bg-white/10 text-[#F9F6F0] hover:bg-white/20'
                     }`}
                   >
                     {tab.label}
@@ -886,8 +917,8 @@ export function Stage3CrewCastCards() {
                       onClick={() => setGenderFilter(g.id as any)}
                       className={`rounded-lg px-2 py-1 text-[10px] font-black transition ${
                         genderFilter === g.id
-                          ? 'bg-amber-500 text-slate-950'
-                          : 'bg-indigo-50/80 text-slate-600 hover:bg-indigo-100'
+                          ? 'bg-[#D4AF37] text-[#1A2530]'
+                          : 'bg-white/10 text-[#F9F6F0]/80 hover:bg-white/20'
                       }`}
                     >
                       {g.label}
@@ -899,7 +930,7 @@ export function Stage3CrewCastCards() {
 
             {/* Search Input */}
             <div className="relative">
-              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#1A2530]/45" />
               <input
                 type="text"
                 value={searchQuery}
@@ -915,7 +946,7 @@ export function Stage3CrewCastCards() {
                     ? 'ابحث عن مهندس مونتاج ومؤثرات بصرية...'
                     : `ابحث في قائمة الـ ${activeActorsPool.length} ممثل وممثلة بالاسم أو اللون الفني...`
                 }
-                className="w-full rounded-xl border border-indigo-200/80 bg-white/85 py-2.5 pr-9 pl-3 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:border-violet-500 focus:bg-white focus:outline-none"
+                className="w-full rounded-xl border border-[#D4AF37]/60 bg-[#F9F6F0] py-2.5 pr-9 pl-3 text-xs font-bold text-[#1A2530] placeholder:text-[#1A2530]/45 focus:border-[#D4AF37] focus:bg-white focus:outline-none"
               />
             </div>
           </div>
@@ -959,19 +990,19 @@ export function Stage3CrewCastCards() {
               return (
                 <div
                   key={crewMember.id}
-                  className={`glass-card rounded-3xl p-4 transition-all ${
+                  className={`rounded-3xl border-2 p-4 shadow-sm transition-all ${
                     isSigned
-                      ? 'border-2 border-emerald-500 bg-emerald-50/75 shadow-md'
+                      ? 'border-[#15803D] bg-emerald-50/80 shadow-md'
                       : isAwaitingChoice
-                      ? 'border-2 border-violet-400 bg-violet-50/60 shadow-md'
+                      ? 'border-[#D4AF37] bg-[#FFF9E6] shadow-md'
                       : isPending
-                      ? 'border-2 border-amber-400 bg-amber-50/60 shadow-md'
-                      : 'hover:border-violet-300'
+                      ? 'border-[#D4AF37] bg-[#FFF9E6]/70 shadow-md'
+                      : 'border-[#1A2530]/20 bg-white hover:border-[#D4AF37]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-indigo-200/80 shadow-xs">
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37] shadow-xs">
                         <TalentCharacterPortraitSvg
                           name={crewMember.name}
                           role={crewMember.role}
@@ -980,15 +1011,15 @@ export function Stage3CrewCastCards() {
                         />
                       </div>
                       <div>
-                        <h3 className="font-display text-sm font-black text-slate-900">
+                        <h3 className="font-display text-sm font-black text-[#1A2530]">
                           {crewMember.name}
                         </h3>
-                        <p className="mt-0.5 text-xs font-bold text-slate-600">
+                        <p className="mt-0.5 text-xs font-bold text-[#1A2530]/75">
                           {crewMember.specialty}
                         </p>
-                        <div className="mt-1 text-[11px] font-bold text-slate-500">
+                        <div className="mt-1 text-[11px] font-bold text-[#1A2530]/60">
                           {masteryGenre ? (
-                            <span className="text-emerald-700 font-black">
+                            <span className="text-[#15803D] font-black">
                               متخصص بارع في {primaryGenreObj?.name} ★
                             </span>
                           ) : (
@@ -998,36 +1029,36 @@ export function Stage3CrewCastCards() {
                       </div>
                     </div>
 
-                    <div className="shrink-0 rounded-2xl border border-indigo-200/70 bg-indigo-50/80 px-3 py-1.5 text-center">
-                      <div className="text-[10px] font-bold text-slate-500">التقييم</div>
-                      <div className="font-mono text-sm font-black text-violet-800 tabular-nums">
+                    <div className="shrink-0 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530] px-3 py-1.5 text-center">
+                      <div className="text-[10px] font-bold text-[#D4AF37]">التقييم</div>
+                      <div className="font-mono text-sm font-black text-[#F9F6F0] tabular-nums">
                         {crewMember.stats.overall}
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-2">
-                      <span className="block text-[10px] font-bold text-slate-500">
+                    <div className="rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-2">
+                      <span className="block text-[10px] font-bold text-[#1A2530]/65">
                         الأجر المتوقع
                       </span>
-                      <span className="font-mono text-xs font-black text-emerald-700 tabular-nums">
+                      <span className="font-mono text-xs font-black text-[#15803D] tabular-nums">
                         {formatMoney(crewMember.base_salary)} ج.م
                       </span>
                     </div>
-                    <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-2">
-                      <span className="block text-[10px] font-bold text-slate-500">
+                    <div className="rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-2">
+                      <span className="block text-[10px] font-bold text-[#1A2530]/65">
                         الرؤية البصرية
                       </span>
-                      <span className="font-mono text-xs font-black text-slate-900 tabular-nums">
+                      <span className="font-mono text-xs font-black text-[#1A2530] tabular-nums">
                         {crewMember.stats.vision}/100
                       </span>
                     </div>
-                    <div className="rounded-2xl border border-indigo-100/80 bg-white/75 p-2">
-                      <span className="block text-[10px] font-bold text-slate-500">
+                    <div className="rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-2">
+                      <span className="block text-[10px] font-bold text-[#1A2530]/65">
                         ضبط الإيقاع
                       </span>
-                      <span className="font-mono text-xs font-black text-indigo-700 tabular-nums">
+                      <span className="font-mono text-xs font-black text-[#D91624] tabular-nums">
                         {crewMember.stats.pacing}/100
                       </span>
                     </div>
@@ -1036,12 +1067,12 @@ export function Stage3CrewCastCards() {
                   {/* Offer Status Banner */}
                   {renderOfferStatusBanner(offer, isSigned)}
 
-                  <div className="mt-3 flex items-center gap-2 border-t border-indigo-100/80 pt-2.5">
+                  <div className="mt-3 flex items-center gap-2 border-t border-[#1A2530]/15 pt-2.5">
                     {isSigned ? (
                       <button
                         type="button"
                         onClick={() => removeTalentFromDraft(crewMember.id)}
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 py-2.5 text-xs font-black text-white shadow-sm"
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#15803D] py-2.5 text-xs font-black text-white shadow-sm"
                       >
                         <Check className="h-4 w-4" />
                         <span>
@@ -1059,7 +1090,7 @@ export function Stage3CrewCastCards() {
                             crewMember.id
                           )
                         }
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-violet-600 py-2.5 text-xs font-black text-white shadow-sm hover:bg-violet-500"
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-[#D4AF37] bg-[#1A2530] py-2.5 text-xs font-black text-[#D4AF37] shadow-sm hover:brightness-110"
                       >
                         <Check className="h-4 w-4" />
                         <span>اعتماد في الفريق النهائي</span>
@@ -1068,16 +1099,16 @@ export function Stage3CrewCastCards() {
                       <button
                         type="button"
                         onClick={() => removeTalentFromDraft(crewMember.id)}
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-amber-300 bg-amber-100/90 py-2.5 text-xs font-black text-amber-950"
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-[#1A2530] bg-[#FFF6B3] py-2.5 text-xs font-black text-[#1A2530]"
                       >
-                        <Clock className="h-4 w-4 text-amber-700" />
+                        <Clock className="h-4 w-4 text-[#D91624]" />
                         <span>بانتظار الرد الرسمي (سحب العرض)</span>
                       </button>
                     ) : isCurrentCrewSlotFullAndLocked ? (
                       <button
                         type="button"
                         disabled
-                        className="flex min-h-[44px] flex-1 cursor-not-allowed items-center justify-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-100 py-2.5 text-xs font-black text-slate-400"
+                        className="flex min-h-[44px] flex-1 cursor-not-allowed items-center justify-center gap-1.5 rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] py-2.5 text-xs font-black text-[#1A2530]/40"
                       >
                         <Check className="h-4 w-4" />
                         <span>
@@ -1086,15 +1117,32 @@ export function Stage3CrewCastCards() {
                             : `تم اعتماد ${roleBadge} للعمل (1/1)`}
                         </span>
                       </button>
+                    ) : ((talentRejectionCounts || {})[crewMember.id] || 0) >= 2 &&
+                      !(syndicateMediationUnlocked || {})[crewMember.id] ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          unlockSyndicateMediationWithAd(
+                            crewMember.id,
+                            crewMember.name
+                          )
+                        }
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3 py-2.5 text-xs font-black text-[#1A2530] border-2 border-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
+                      >
+                        <Film className="h-4 w-4 shrink-0" />
+                        <span>وساطة نقابة المهن التمثيلية (إعلان)</span>
+                      </button>
                     ) : (
                       <button
                         type="button"
                         onClick={() => openNegotiation({ kind: 'crew', item: crewMember })}
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2.5 text-xs font-black text-white shadow-md hover:brightness-105"
+                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-[#D4AF37] bg-[#D91624] py-2.5 text-xs font-black text-white shadow-md hover:brightness-110"
                       >
-                        <MessageSquare className="h-3.5 w-3.5" />
+                        <MessageSquare className="h-3.5 w-3.5 text-[#D4AF37]" />
                         <span>
-                          {offer?.status === 'rejected'
+                          {(syndicateMediationUnlocked || {})[crewMember.id]
+                            ? 'جولة الفرصة الأخيرة (وساطة النقابة مفعلة ★)'
+                            : offer?.status === 'rejected'
                             ? 'تعديل الشروط وإرسال عرض جديد'
                             : 'تفاوض وإرسال عرض تعاقد'}
                         </span>
@@ -1345,6 +1393,18 @@ export function Stage3CrewCastCards() {
                           <Clock className="h-4 w-4 text-[#D91624]" />
                           <span>بانتظار الرد الرسمي (سحب العرض)</span>
                         </button>
+                      ) : ((talentRejectionCounts || {})[actor.id] || 0) >= 2 &&
+                        !(syndicateMediationUnlocked || {})[actor.id] ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            unlockSyndicateMediationWithAd(actor.id, actor.name)
+                          }
+                          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3 py-2 text-xs font-black text-[#1A2530] border-2 border-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
+                        >
+                          <Film className="h-4 w-4 shrink-0" />
+                          <span>وساطة نقابة المهن التمثيلية (إعلان)</span>
+                        </button>
                       ) : (
                         <button
                           type="button"
@@ -1353,7 +1413,9 @@ export function Stage3CrewCastCards() {
                         >
                           <MessageSquare className="h-3.5 w-3.5 text-[#D4AF37]" />
                           <span>
-                            {offer?.status === 'rejected'
+                            {(syndicateMediationUnlocked || {})[actor.id]
+                              ? 'جولة الفرصة الأخيرة (وساطة النقابة مفعلة ★)'
+                              : offer?.status === 'rejected'
                               ? 'تعديل الشروط وإرسال عرض جديد'
                               : 'عرض دور وتفاوض'}
                           </span>
@@ -1418,13 +1480,13 @@ export function Stage3CrewCastCards() {
                     key={slotInfo.slotLabel}
                     type="button"
                     onClick={() => setWizardStep(slotInfo.stepToGo)}
-                    className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-white/80 p-3 text-right transition hover:border-indigo-300"
+                    className="flex items-center justify-between rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 text-right transition hover:border-[#D4AF37]"
                   >
                     <div>
-                      <div className="text-[10px] font-bold text-slate-500">
+                      <div className="text-[10px] font-bold text-[#1A2530]/60">
                         {slotInfo.slotLabel}
                       </div>
-                      <div className="text-xs font-black text-slate-900">
+                      <div className="text-xs font-black text-[#1A2530]">
                         {slotInfo.signedName
                           ? `✓ ${slotInfo.signedName}`
                           : slotInfo.pendingOffer
@@ -1442,17 +1504,17 @@ export function Stage3CrewCastCards() {
 
             {/* Cast Chemistry & Genre Synergy Reports */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="glass-panel rounded-3xl p-4">
+              <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-black text-violet-900">
-                    <Flame className="h-4 w-4 text-amber-500" />
+                  <span className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                    <Flame className="h-4 w-4 text-[#D91624]" />
                     تقرير كيمياء الأبطال والبلاتوه
                   </span>
                   <span
                     className={`text-xs font-black ${
                       castChemistryReport.hasSevereClash
-                        ? 'text-rose-700'
-                        : 'text-emerald-700'
+                        ? 'text-[#D91624]'
+                        : 'text-[#15803D]'
                     }`}
                   >
                     {castChemistryReport.hasSevereClash
@@ -1460,31 +1522,31 @@ export function Stage3CrewCastCards() {
                       : `تناغم +${castChemistryReport.synergyBonus}`}
                   </span>
                 </div>
-                <p className="mt-2 text-xs font-bold text-slate-600">
+                <p className="mt-2 text-xs font-bold text-[#1A2530]/75">
                   {castChemistryReport.warningMessage ||
                     'تناغم ممتاز بين أبطال العمل والمخرج يمنح المشاهد الدرامية مصداقية عالية.'}
                 </p>
               </div>
 
-              <div className="glass-panel rounded-3xl p-4">
+              <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-black text-violet-900">
-                    <Zap className="h-4 w-4 text-indigo-600" />
+                  <span className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                    <Zap className="h-4 w-4 text-[#D4AF37]" />
                     توليفة التصنيف الدرامي
                   </span>
-                  <span className="font-mono text-xs font-black text-indigo-900 tabular-nums">
+                  <span className="font-mono text-xs font-black text-[#D91624] tabular-nums">
                     x{genreSynergyReport.multiplier.toFixed(2)}
                   </span>
                 </div>
-                <p className="mt-2 text-xs font-bold text-slate-600">
+                <p className="mt-2 text-xs font-bold text-[#1A2530]/75">
                   {genreSynergyReport.label}
                 </p>
               </div>
             </div>
 
             {/* Department Budgets */}
-            <div className="glass-panel rounded-3xl p-4 space-y-4">
-              <h3 className="font-display text-sm font-black text-slate-900">
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-4 shadow-sm space-y-4">
+              <h3 className="font-display text-sm font-black text-[#1A2530]">
                 تخصيص ميزانية الأقسام الإنتاجية
               </h3>
 
@@ -1518,11 +1580,11 @@ export function Stage3CrewCastCards() {
                 return (
                   <div
                     key={dept.field}
-                    className="rounded-2xl border border-indigo-100/80 bg-white/80 p-3"
+                    className="rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3"
                   >
                     <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-xs font-black text-slate-800">{dept.label}</span>
-                      <span className="font-mono text-xs font-black text-violet-700 tabular-nums">
+                      <span className="text-xs font-black text-[#1A2530]">{dept.label}</span>
+                      <span className="font-mono text-xs font-black text-[#D91624] tabular-nums">
                         {formatMoney(val)} ج.م
                       </span>
                     </div>
@@ -1540,26 +1602,26 @@ export function Stage3CrewCastCards() {
                           },
                         })
                       }
-                      className="w-full accent-violet-600 cursor-pointer"
+                      className="w-full accent-[#D91624] cursor-pointer"
                     />
                   </div>
                 );
               })}
 
-              <div className="flex items-center justify-between rounded-2xl border border-indigo-200/80 bg-indigo-50/85 p-3.5">
+              <div className="flex items-center justify-between rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530] p-3.5 text-[#F9F6F0]">
                 <div>
-                  <span className="block text-[11px] font-bold text-slate-600">
+                  <span className="block text-[11px] font-bold text-[#F9F6F0]/75">
                     إجمالي تكلفة العقود والإنتاج
                   </span>
-                  <span className="font-mono text-lg font-black text-emerald-700 tabular-nums">
+                  <span className="font-mono text-lg font-black text-[#D4AF37] tabular-nums">
                     {formatMoney(calculateTotalEstimatedBudget())} ج.م
                   </span>
                 </div>
                 <div className="text-left">
-                  <span className="block text-[11px] font-bold text-slate-600">
+                  <span className="block text-[11px] font-bold text-[#F9F6F0]/75">
                     السيولة المتاحة بالخزينة
                   </span>
-                  <span className="font-mono text-base font-black text-slate-900 tabular-nums">
+                  <span className="font-mono text-base font-black text-emerald-400 tabular-nums">
                     {formatMoney(cash)} ج.م
                   </span>
                 </div>
@@ -1570,7 +1632,7 @@ export function Stage3CrewCastCards() {
       </AnimatePresence>
       </div>
 
-      {/* NEGOTIATION MODAL (Sends Offer for 2–3 Days AI Evaluation!) */}
+      {/* NEGOTIATION MODAL (Sends Offer for 2–3 Days Evaluation!) */}
       <AnimatePresence>
         {negotiatingTarget && (
           <motion.div
@@ -1578,18 +1640,18 @@ export function Stage3CrewCastCards() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md overscroll-contain touch-none select-none"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F171E]/80 p-4 backdrop-blur-md overscroll-contain touch-none select-none"
           >
             <motion.div
               initial={{ scale: 0.94, y: 18, opacity: 0 }}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.94, y: 18, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="glass-modal max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain touch-pan-y rounded-3xl p-5 space-y-4"
+              className="max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain touch-pan-y rounded-3xl border-2 border-[#D4AF37] bg-[#F9F6F0] p-5 shadow-2xl space-y-4"
             >
-              <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
+              <div className="flex items-center justify-between border-b border-[#1A2530]/15 pb-3">
                 <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-indigo-200">
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37]">
                     <TalentCharacterPortraitSvg
                       name={negotiatingTarget.item.name}
                       role={
@@ -1605,10 +1667,10 @@ export function Stage3CrewCastCards() {
                     />
                   </div>
                   <div>
-                    <h3 className="font-display text-sm font-black text-slate-900">
+                    <h3 className="font-display text-sm font-black text-[#1A2530]">
                       مفاوضات التعاقد: {negotiatingTarget.item.name}
                     </h3>
-                    <p className="text-xs font-bold text-emerald-700">
+                    <p className="text-xs font-bold text-[#15803D]">
                       الأجر المعتاد في السوق: {formatMoney(negotiatingTarget.item.base_salary)} ج.م
                     </p>
                   </div>
@@ -1616,7 +1678,7 @@ export function Stage3CrewCastCards() {
                 <button
                   type="button"
                   onClick={() => setNegotiatingTarget(null)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1A2530]/10 text-[#1A2530] hover:bg-[#1A2530]/20"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1625,13 +1687,13 @@ export function Stage3CrewCastCards() {
               {/* Actor Role Billing Size Selection */}
               {negotiatingTarget.kind === 'actor' && (
                 <div>
-                  <label className="mb-1.5 block text-xs font-black text-slate-800">
+                  <label className="mb-1.5 block text-xs font-black text-[#1A2530]">
                     حجم الدور وترتيب الأفيش المعروض
                   </label>
                   <select
                     value={roleBillingSize}
                     onChange={(e) => setRoleBillingSize(e.target.value as RoleBillingSize)}
-                    className="w-full rounded-2xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 text-xs font-black text-slate-900 focus:border-violet-600 focus:outline-none"
+                    className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-white px-3 py-2.5 text-xs font-black text-[#1A2530] focus:border-[#D4AF37] focus:outline-none"
                   >
                     {Object.values(ROLE_BILLING_META).map((meta) => (
                       <option key={meta.id} value={meta.id}>
@@ -1644,10 +1706,10 @@ export function Stage3CrewCastCards() {
 
               {/* Financial Offer Sliders */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+                <div className="rounded-2xl border border-[#1A2530]/15 bg-white p-3">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-600">الأجر المعروض</span>
-                    <span className="font-mono text-xs font-black text-emerald-700 tabular-nums">
+                    <span className="text-xs font-bold text-[#1A2530]/70">الأجر المعروض</span>
+                    <span className="font-mono text-xs font-black text-[#15803D] tabular-nums">
                       {formatMoney(offeredSalary)} ج.م
                     </span>
                   </div>
@@ -1658,14 +1720,14 @@ export function Stage3CrewCastCards() {
                     step={250_000}
                     value={offeredSalary}
                     onChange={(e) => setOfferedSalary(Number(e.target.value))}
-                    className="w-full accent-violet-600 cursor-pointer"
+                    className="w-full accent-[#D91624] cursor-pointer"
                   />
                 </div>
 
-                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+                <div className="rounded-2xl border border-[#1A2530]/15 bg-white p-3">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-600">نسبة من أرباح الشباك</span>
-                    <span className="font-mono text-xs font-black text-violet-700 tabular-nums">
+                    <span className="text-xs font-bold text-[#1A2530]/70">نسبة من أرباح الشباك</span>
+                    <span className="font-mono text-xs font-black text-[#D91624] tabular-nums">
                       {backendPoints}%
                     </span>
                   </div>
@@ -1676,7 +1738,7 @@ export function Stage3CrewCastCards() {
                     step={1}
                     value={backendPoints}
                     onChange={(e) => setBackendPoints(Number(e.target.value))}
-                    className="w-full accent-violet-600 cursor-pointer"
+                    className="w-full accent-[#D4AF37] cursor-pointer"
                   />
                 </div>
               </div>
@@ -1687,22 +1749,22 @@ export function Stage3CrewCastCards() {
                 onClick={() => setVipDinner(!vipDinner)}
                 className={`flex w-full items-center justify-between rounded-2xl border-2 p-3 text-right transition ${
                   vipDinner
-                    ? 'border-amber-500 bg-amber-50 text-amber-950'
-                    : 'border-indigo-100 bg-slate-50 text-slate-700 hover:border-indigo-200'
+                    ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
+                    : 'border-[#1A2530]/15 bg-white text-[#1A2530] hover:border-[#D4AF37]'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Utensils className="h-4 w-4 text-amber-600" />
+                  <Utensils className="h-4 w-4 text-[#D91624]" />
                   <div>
                     <div className="text-xs font-black">
                       دعوة عشاء عمل خاص وقراءة سيناريو VIP
                     </div>
-                    <div className="text-[10px] font-bold text-slate-500">
+                    <div className="text-[10px] font-bold text-[#1A2530]/65">
                       يرفع حماس الفنان ويزيد فرص قبول العرض عند دراسة السيناريو
                     </div>
                   </div>
                 </div>
-                <span className="font-mono text-xs font-black text-amber-800 tabular-nums">
+                <span className="font-mono text-xs font-black text-[#B8860B] tabular-nums">
                   {formatMoney(VIP_DINNER_COST)} ج.م
                 </span>
               </button>
@@ -1710,7 +1772,7 @@ export function Stage3CrewCastCards() {
               {/* Character Role Description (Written by User) */}
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <label className="text-xs font-black text-slate-800">
+                  <label className="text-xs font-black text-[#1A2530]">
                     {negotiatingTarget.kind === 'actor'
                       ? `اكتب اسم وتفاصيل الدور والشخصية في «${draft.title}»`
                       : `مهام التعاقد في «${draft.title}»`}
@@ -1725,15 +1787,15 @@ export function Stage3CrewCastCards() {
                       ? 'اكتب اسم الشخصية وملامح الدور بنفسك لإقناع الممثل...'
                       : 'تفاصيل المهام الفنية...'
                   }
-                  className="w-full rounded-2xl border border-indigo-200 bg-indigo-50/50 px-3 py-2.5 text-xs font-bold text-slate-900 focus:border-violet-600 focus:bg-white focus:outline-none"
+                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-white px-3 py-2.5 text-xs font-bold text-[#1A2530] focus:border-[#D4AF37] focus:outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 border-t border-indigo-100 pt-3">
+              <div className="flex items-center justify-end gap-2 border-t border-[#1A2530]/15 pt-3">
                 <button
                   type="button"
                   onClick={() => setNegotiatingTarget(null)}
-                  className="min-h-[44px] rounded-2xl bg-slate-100 px-4 py-2 text-xs font-black text-slate-700"
+                  className="min-h-[44px] rounded-2xl border border-[#1A2530]/20 bg-white px-4 py-2 text-xs font-black text-[#1A2530]"
                 >
                   إلغاء
                 </button>
@@ -1741,7 +1803,7 @@ export function Stage3CrewCastCards() {
                   type="button"
                   onClick={handleSendOffer}
                   disabled={isEvaluatingOffer}
-                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-2.5 text-xs font-black text-white shadow-md hover:brightness-105 disabled:opacity-50"
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-2xl border-2 border-[#D4AF37] bg-[#D91624] px-5 py-2.5 text-xs font-black text-white shadow-md hover:brightness-110 disabled:opacity-50"
                 >
                   {isEvaluatingOffer ? (
                     <>
@@ -1750,7 +1812,7 @@ export function Stage3CrewCastCards() {
                     </>
                   ) : (
                     <>
-                      <Sparkles className="h-4 w-4" />
+                      <Sparkles className="h-4 w-4 text-[#D4AF37]" />
                       <span>إرسال العرض الرسمي (الرد خلال 2–3 أيام)</span>
                     </>
                   )}
@@ -1761,27 +1823,27 @@ export function Stage3CrewCastCards() {
         )}
       </AnimatePresence>
 
-      {/* FLOATING STICKY BOTTOM NAVIGATION BOX */}
+      {/* FLOATING STICKY BOTTOM NAVIGATION BOX — Royal Cinema Theme */}
       <div
         className={`pointer-events-none fixed right-0 bottom-3 left-0 z-40 px-3 ${
           negotiatingTarget ? 'opacity-25' : ''
         }`}
       >
         <div
-          className={`glass-nav mx-auto flex max-w-xl items-center justify-between rounded-2xl px-4 py-3 ${
+          className={`mx-auto flex max-w-xl items-center justify-between rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 px-4 py-3 shadow-2xl backdrop-blur-md ${
             negotiatingTarget ? 'pointer-events-none select-none' : 'pointer-events-auto'
           }`}
         >
           <button
             type="button"
             onClick={handlePrevStep}
-            className="min-h-[42px] rounded-xl border border-indigo-200/80 bg-indigo-50/90 px-5 py-2 text-xs font-black text-slate-700 transition hover:bg-indigo-100"
+            className="min-h-[42px] rounded-xl border border-white/20 bg-white/10 px-5 py-2 text-xs font-black text-[#F9F6F0] transition hover:bg-white/20"
           >
             السابق
           </button>
 
           <div className="text-center">
-            <span className="font-mono text-xs font-black text-violet-800 tabular-nums">
+            <span className="font-mono text-xs font-black text-[#D4AF37] tabular-nums">
               التكلفة: {formatMoney(calculateTotalEstimatedBudget())} ج.م
             </span>
           </div>
@@ -1789,7 +1851,7 @@ export function Stage3CrewCastCards() {
           <button
             type="button"
             onClick={handleNextStep}
-            className="min-h-[42px] rounded-xl border-b-2 border-amber-700 bg-gradient-to-r from-amber-500 to-amber-400 px-5 py-2 text-xs font-black text-slate-950 shadow-md transition hover:from-amber-400 hover:to-amber-300"
+            className="min-h-[42px] rounded-xl border-2 border-[#D4AF37] bg-[#D91624] px-5 py-2 text-xs font-black text-white shadow-md transition hover:brightness-110"
           >
             {wizardStep === 6 ? 'اعتماد الميزانية وبدء التصوير' : 'التالي'}
           </button>

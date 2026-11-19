@@ -260,18 +260,23 @@ export function Stage2ProjectSetup() {
   const secondaryGenreObj = GENRES.find((g) => g.id === draft.secondaryGenre);
 
   return (
-    <div className="mx-auto max-w-xl space-y-3 pb-24" dir="rtl">
-      {/* Clean Current-Activity Header (No Step Numbers or Future Step Dots) */}
-      <div className="glass-panel rounded-3xl px-4 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm">
+    <div className="mx-auto max-w-xl space-y-3.5 pb-28" dir="rtl">
+      {/* Unified Royal Cinema Header */}
+      <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] px-4 py-3.5 text-[#F9F6F0] shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#D4AF37] bg-[#D91624] text-white shadow-sm">
             <Sparkles className="h-5 w-5" />
           </div>
-          <h1 className="font-display text-sm font-black text-slate-900 sm:text-base">
-            {step === 1 && 'تحديد نوع العمل، الموسم، والتصنيف العمري'}
-            {step === 2 && 'اختيار التصنيف الدرامي للعمل'}
-            {step === 3 && 'كتابة عنوان العمل والسيناريو'}
-          </h1>
+          <div>
+            <span className="text-[10px] font-black text-[#D4AF37]">
+              غرفة تطوير المشاريع السينمائية
+            </span>
+            <h1 className="font-display text-sm font-black text-[#F9F6F0] sm:text-base">
+              {step === 1 && 'تحديد نوع العمل، الموسم، والتصنيف العمري'}
+              {step === 2 && 'اختيار التصنيف الدرامي للعمل'}
+              {step === 3 && 'كتابة عنوان العمل والسيناريو'}
+            </h1>
+          </div>
         </div>
       </div>
 
@@ -286,8 +291,8 @@ export function Stage2ProjectSetup() {
             className="space-y-3"
           >
             {/* Format Selection: Film vs Series */}
-            <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm space-y-3">
-              <h2 className="font-display text-sm font-black text-slate-900">
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 shadow-sm space-y-3">
+              <h2 className="font-display text-sm font-black text-[#1A2530]">
                 نوع العمل الفني
               </h2>
               <div className="grid grid-cols-2 gap-2.5">
@@ -296,27 +301,29 @@ export function Stage2ProjectSetup() {
                   onClick={() => updateDraft({ format: 'film' })}
                   className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-right transition-all ${
                     !isSeries
-                      ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/80 shadow-xs'
-                      : 'border-indigo-100 bg-[#F8FAFF] hover:border-indigo-200'
+                      ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6] shadow-xs'
+                      : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
                   }`}
                 >
                   <div className="flex w-full items-center justify-between">
                     <div
                       className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                        !isSeries ? 'bg-violet-600 text-white' : 'bg-indigo-100 text-indigo-700'
+                        !isSeries
+                          ? 'border border-[#D4AF37] bg-[#D91624] text-white'
+                          : 'bg-[#1A2530]/10 text-[#1A2530]'
                       }`}
                     >
                       <Clapperboard className="h-5 w-5" />
                     </div>
                     {!isSeries && (
-                      <span className="rounded-lg bg-violet-600 px-2 py-0.5 text-[9px] font-black text-white">
+                      <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[9px] font-black text-white">
                         مختار ✓
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-black text-slate-900">فيلم سينمائي</p>
-                  <p className="text-[10px] leading-relaxed font-bold text-slate-600">
-                    يقاس بـ <strong className="text-violet-700">إيرادات شباك التذاكر (ج.م)</strong> وعدد شاشات السينما
+                  <p className="text-xs font-black text-[#1A2530]">فيلم سينمائي</p>
+                  <p className="text-[10px] leading-relaxed font-bold text-[#1A2530]/75">
+                    يقاس بـ <strong className="text-[#D91624]">إيرادات شباك التذاكر (ج.م)</strong> وعدد شاشات السينما
                   </p>
                 </button>
 
@@ -325,34 +332,36 @@ export function Stage2ProjectSetup() {
                   onClick={() => updateDraft({ format: 'series' })}
                   className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-right transition-all ${
                     isSeries
-                      ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/80 shadow-xs'
-                      : 'border-indigo-100 bg-[#F8FAFF] hover:border-indigo-200'
+                      ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6] shadow-xs'
+                      : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
                   }`}
                 >
                   <div className="flex w-full items-center justify-between">
                     <div
                       className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                        isSeries ? 'bg-violet-600 text-white' : 'bg-indigo-100 text-indigo-700'
+                        isSeries
+                          ? 'border border-[#D4AF37] bg-[#D91624] text-white'
+                          : 'bg-[#1A2530]/10 text-[#1A2530]'
                       }`}
                     >
                       <Tv className="h-5 w-5" />
                     </div>
                     {isSeries && (
-                      <span className="rounded-lg bg-violet-600 px-2 py-0.5 text-[9px] font-black text-white">
+                      <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[9px] font-black text-white">
                         مختار ✓
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-black text-slate-900">مسلسل درامي</p>
-                  <p className="text-[10px] leading-relaxed font-bold text-slate-600">
-                    يقاس بـ <strong className="text-violet-700">عدد المشاهدات بالمليون</strong> وعقود المنصات والقنوات
+                  <p className="text-xs font-black text-[#1A2530]">مسلسل درامي</p>
+                  <p className="text-[10px] leading-relaxed font-bold text-[#1A2530]/75">
+                    يقاس بـ <strong className="text-[#D91624]">عدد المشاهدات بالمليون</strong> وعقود المنصات والقنوات
                   </p>
                 </button>
               </div>
 
               {isSeries && (
-                <div className="pt-2 border-t border-indigo-100 space-y-2">
-                  <p className="text-xs font-black text-slate-700">
+                <div className="pt-2 border-t border-[#D4AF37]/30 space-y-2">
+                  <p className="text-xs font-black text-[#1A2530]">
                     عدد حلقات المسلسل:
                   </p>
                   <div className="grid grid-cols-2 gap-2">
@@ -363,12 +372,18 @@ export function Stage2ProjectSetup() {
                         onClick={() => updateDraft({ episodes: ep.count })}
                         className={`rounded-xl border-2 p-2.5 text-right transition ${
                           draft.episodes === ep.count
-                            ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50 text-violet-950'
-                            : 'border-indigo-100 bg-[#F8FAFF] text-slate-700'
+                            ? 'border-[#D4AF37] border-b-4 border-b-[#A6841D] bg-[#1A2530] text-[#F9F6F0]'
+                            : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
                         }`}
                       >
                         <p className="text-xs font-black">{ep.label}</p>
-                        <p className="mt-0.5 text-[10px] text-slate-500">{ep.desc}</p>
+                        <p
+                          className={`mt-0.5 text-[10px] ${
+                            draft.episodes === ep.count ? 'text-[#F9F6F0]/75' : 'text-[#1A2530]/65'
+                          }`}
+                        >
+                          {ep.desc}
+                        </p>
                       </button>
                     ))}
                   </div>
@@ -377,10 +392,10 @@ export function Stage2ProjectSetup() {
             </div>
 
             {/* Season Selection */}
-            <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm space-y-2.5">
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 shadow-sm space-y-2.5">
               <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-violet-600" />
-                <h2 className="font-display text-sm font-black text-slate-900">
+                <Calendar className="h-4 w-4 text-[#D91624]" />
+                <h2 className="font-display text-sm font-black text-[#1A2530]">
                   {isSeries ? 'موسم البث التلفزيوني والرقمي' : 'موسم الطرح في شباك التذاكر'}
                 </h2>
               </div>
@@ -394,12 +409,12 @@ export function Stage2ProjectSetup() {
                         onClick={() => updateDraft({ filmSeason: s.id })}
                         className={`rounded-2xl border-2 p-3 text-right transition ${
                           draft.filmSeason === s.id
-                            ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/70'
-                            : 'border-indigo-100 bg-[#F8FAFF]'
+                            ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6]'
+                            : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
                         }`}
                       >
-                        <p className="text-xs font-black text-slate-900">{s.label}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-600">{s.desc}</p>
+                        <p className="text-xs font-black text-[#1A2530]">{s.label}</p>
+                        <p className="mt-0.5 text-[11px] text-[#1A2530]/70">{s.desc}</p>
                       </button>
                     ))
                   : SERIES_SEASONS.map((s) => (
@@ -409,22 +424,22 @@ export function Stage2ProjectSetup() {
                         onClick={() => updateDraft({ seriesSeason: s.id })}
                         className={`rounded-2xl border-2 p-3 text-right transition ${
                           draft.seriesSeason === s.id
-                            ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/70'
-                            : 'border-indigo-100 bg-[#F8FAFF]'
+                            ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6]'
+                            : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
                         }`}
                       >
-                        <p className="text-xs font-black text-slate-900">{s.label}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-600">{s.desc}</p>
+                        <p className="text-xs font-black text-[#1A2530]">{s.label}</p>
+                        <p className="mt-0.5 text-[11px] text-[#1A2530]/70">{s.desc}</p>
                       </button>
                     ))}
               </div>
             </div>
 
             {/* Age Rating */}
-            <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm space-y-2.5">
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 shadow-sm space-y-2.5">
               <div className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-amber-600" />
-                <h2 className="font-display text-sm font-black text-slate-900">
+                <ShieldAlert className="h-4 w-4 text-[#D4AF37]" />
+                <h2 className="font-display text-sm font-black text-[#1A2530]">
                   التصنيف الرقابي والعمري
                 </h2>
               </div>
@@ -436,12 +451,12 @@ export function Stage2ProjectSetup() {
                     onClick={() => updateDraft({ ageRating: ar.id })}
                     className={`rounded-2xl border-2 p-3 text-right transition ${
                       draft.ageRating === ar.id
-                        ? 'border-violet-600 border-b-4 border-b-violet-700 bg-violet-50/70'
-                        : 'border-indigo-100 bg-[#F8FAFF]'
+                        ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6]'
+                        : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
                     }`}
                   >
-                    <p className="text-xs font-black text-slate-900">{ar.label}</p>
-                    <p className="mt-0.5 text-[10px] text-slate-600">{ar.desc}</p>
+                    <p className="text-xs font-black text-[#1A2530]">{ar.label}</p>
+                    <p className="mt-0.5 text-[10px] text-[#1A2530]/70">{ar.desc}</p>
                   </button>
                 ))}
               </div>
@@ -459,21 +474,25 @@ export function Stage2ProjectSetup() {
             className="space-y-3"
           >
             {/* Floating Sticky Primary & Secondary Genre Switcher */}
-            <div className="sticky top-14 z-30 rounded-2xl border-2 border-indigo-200/90 bg-white/95 p-2.5 shadow-md backdrop-blur-md">
+            <div className="sticky top-14 z-30 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 p-2.5 shadow-lg backdrop-blur-md">
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setGenrePickMode('primary')}
                   className={`rounded-xl border-2 p-2.5 text-right transition ${
                     genrePickMode === 'primary'
-                      ? 'border-violet-600 bg-violet-50/90'
-                      : 'border-indigo-100 bg-[#F8FAFF]'
+                      ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
+                      : 'border-white/15 bg-white/10 text-[#F9F6F0]'
                   }`}
                 >
-                  <span className="text-[10px] font-bold text-slate-500">
+                  <span
+                    className={`text-[10px] font-bold ${
+                      genrePickMode === 'primary' ? 'text-[#1A2530]/65' : 'text-[#F9F6F0]/70'
+                    }`}
+                  >
                     التصنيف الأساسي (إلزامي)
                   </span>
-                  <p className="mt-0.5 text-xs font-black text-violet-950">
+                  <p className="mt-0.5 text-xs font-black">
                     {primaryGenreObj ? primaryGenreObj.name : 'اختر الآن'}
                   </p>
                 </button>
@@ -483,12 +502,16 @@ export function Stage2ProjectSetup() {
                   onClick={() => setGenrePickMode('secondary')}
                   className={`rounded-xl border-2 p-2.5 text-right transition ${
                     genrePickMode === 'secondary'
-                      ? 'border-violet-600 bg-violet-50/90'
-                      : 'border-indigo-100 bg-[#F8FAFF]'
+                      ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
+                      : 'border-white/15 bg-white/10 text-[#F9F6F0]'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500">
+                    <span
+                      className={`text-[10px] font-bold ${
+                        genrePickMode === 'secondary' ? 'text-[#1A2530]/65' : 'text-[#F9F6F0]/70'
+                      }`}
+                    >
                       التصنيف الفرعي (اختياري)
                     </span>
                     {draft.secondaryGenre && (
@@ -497,13 +520,13 @@ export function Stage2ProjectSetup() {
                           e.stopPropagation();
                           updateDraft({ secondaryGenre: null });
                         }}
-                        className="cursor-pointer text-[10px] font-black text-rose-600 hover:underline"
+                        className="cursor-pointer text-[10px] font-black text-[#D91624] hover:underline"
                       >
                         إلغاء
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs font-black text-indigo-950">
+                  <p className="mt-0.5 text-xs font-black">
                     {secondaryGenreObj ? secondaryGenreObj.name : 'بدون تصنيف فرعي'}
                   </p>
                 </button>
@@ -511,7 +534,7 @@ export function Stage2ProjectSetup() {
             </div>
 
             {/* Genres Grid with Proper Lucide Icons */}
-            <div className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm">
+            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 shadow-sm">
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 {GENRES.map((g) => {
                   const isPrimary = draft.primaryGenre === g.id;
@@ -524,31 +547,31 @@ export function Stage2ProjectSetup() {
                       onClick={() => handleSelectGenre(g.id as GenreId)}
                       className={`flex flex-col items-start justify-between rounded-2xl border-2 p-3 text-right transition-all ${
                         isPrimary
-                          ? 'border-violet-700 border-b-4 border-b-violet-900 bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-md'
+                          ? 'border-[#D4AF37] border-b-4 border-b-[#9A7A16] bg-[#1A2530] text-[#F9F6F0] shadow-md'
                           : isSecondary
-                          ? 'border-cyan-500 border-b-4 border-b-cyan-600 bg-cyan-50 text-cyan-950'
-                          : 'border-indigo-100 bg-[#F8FAFF] text-slate-800 hover:border-indigo-200'
+                          ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6] text-[#1A2530]'
+                          : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
                       }`}
                     >
                       <div className="flex w-full items-center justify-between">
                         <div
                           className={`flex h-9 w-9 items-center justify-center rounded-xl ${
                             isPrimary
-                              ? 'bg-white/20 text-white'
+                              ? 'bg-[#D4AF37] text-[#1A2530]'
                               : isSecondary
-                              ? 'bg-cyan-600 text-white'
-                              : 'bg-indigo-100 text-violet-700'
+                              ? 'bg-[#D91624] text-white'
+                              : 'bg-[#1A2530]/10 text-[#1A2530]'
                           }`}
                         >
                           <IconComp className="h-4 w-4" />
                         </div>
                         {isPrimary && (
-                          <span className="rounded-lg bg-white/25 px-2 py-0.5 text-[9px] font-black text-white">
+                          <span className="rounded-lg bg-[#D4AF37] px-2 py-0.5 text-[9px] font-black text-[#1A2530]">
                             أساسي ✓
                           </span>
                         )}
                         {isSecondary && (
-                          <span className="rounded-lg bg-cyan-600 px-2 py-0.5 text-[9px] font-black text-white">
+                          <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[9px] font-black text-white">
                             فرعي ✓
                           </span>
                         )}
@@ -557,7 +580,7 @@ export function Stage2ProjectSetup() {
                         <p className="text-xs font-black">{g.name}</p>
                         <p
                           className={`mt-0.5 text-[10px] leading-relaxed ${
-                            isPrimary ? 'text-indigo-100' : 'text-slate-500'
+                            isPrimary ? 'text-[#F9F6F0]/75' : 'text-[#1A2530]/65'
                           }`}
                         >
                           {g.description}
@@ -571,37 +594,37 @@ export function Stage2ProjectSetup() {
           </motion.div>
         )}
 
-        {/* Step 3: Custom Script Writing & AI Script Idea Generator */}
+        {/* Step 3: Custom Script Writing & Idea Generator */}
         {step === 3 && (
           <motion.div
             key="setup-step-3"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="rounded-3xl border-2 border-indigo-100 border-b-4 border-b-indigo-200/90 bg-white p-4 shadow-sm space-y-4 sm:p-5"
+            className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 shadow-sm space-y-4 sm:p-5"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-sm font-black text-slate-900">
+              <h2 className="font-display text-sm font-black text-[#1A2530]">
                 عنوان {isSeries ? 'المسلسل' : 'الفيلم'} وملخص السيناريو
               </h2>
               <button
                 type="button"
                 disabled={aiGeneratingIdea}
                 onClick={handleGenerateAiScriptIdea}
-                className="flex items-center gap-1.5 rounded-xl border-2 border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-700 shadow-2xs transition hover:bg-violet-100 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-xl border-2 border-[#D4AF37] bg-[#FFF9E6] px-3 py-2 text-xs font-black text-[#1A2530] shadow-2xs transition hover:bg-[#FFF3B0] disabled:opacity-50"
               >
                 {aiGeneratingIdea ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[#D91624]" />
                 ) : (
-                  <Wand2 className="h-3.5 w-3.5" />
+                  <Wand2 className="h-3.5 w-3.5 text-[#D91624]" />
                 )}
-                <span>ابتكار فكرة وسيناريو درامي ✨</span>
+                <span>ابتكار فكرة وسيناريو درامي</span>
               </button>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="mb-1.5 block text-xs font-black text-slate-700">
+                <label className="mb-1.5 block text-xs font-black text-[#1A2530]">
                   عنوان {isSeries ? 'المسلسل الدرامي' : 'الفيلم السينمائي'}
                 </label>
                 <input
@@ -613,12 +636,12 @@ export function Stage2ProjectSetup() {
                       ? 'مثال: العهد السري / ليالي المحروسة'
                       : 'مثال: شفرة باب الخلق / ليلة سقوط القناع'
                   }
-                  className="w-full rounded-2xl border-2 border-indigo-100 bg-[#F4F7FF] px-4 py-3 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:border-violet-600 focus:bg-white focus:outline-hidden"
+                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] px-4 py-3 text-sm font-bold text-[#1A2530] placeholder:text-[#1A2530]/40 focus:border-[#D4AF37] focus:bg-white focus:outline-hidden"
                 />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-black text-slate-700">
+                <label className="mb-1.5 block text-xs font-black text-[#1A2530]">
                   ملخص القصة والصراع الدرامي والنهاية
                 </label>
                 <textarea
@@ -626,7 +649,7 @@ export function Stage2ProjectSetup() {
                   value={draft.scriptSynopsis}
                   onChange={(e) => updateDraft({ scriptSynopsis: e.target.value })}
                   placeholder="اكتب بداية الأحداث، الصراع الرئيسي الذي يواجه البطل، والمفاجأة الدرامية في النهاية..."
-                  className="w-full rounded-2xl border-2 border-indigo-100 bg-[#F4F7FF] p-3.5 text-xs leading-relaxed font-bold text-slate-900 placeholder:text-slate-400 focus:border-violet-600 focus:bg-white focus:outline-hidden"
+                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] p-3.5 text-xs leading-relaxed font-bold text-[#1A2530] placeholder:text-[#1A2530]/40 focus:border-[#D4AF37] focus:bg-white focus:outline-hidden"
                 />
               </div>
             </div>
@@ -634,13 +657,13 @@ export function Stage2ProjectSetup() {
         )}
       </AnimatePresence>
 
-      {/* Floating Bottom Navigation Box */}
+      {/* Floating Bottom Navigation Box — Royal Cinema Theme */}
       <div className="fixed bottom-3 right-0 left-0 z-30 mx-auto max-w-xl px-3">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border-2 border-indigo-200/90 bg-white/95 p-3 shadow-xl backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 p-3 shadow-xl backdrop-blur-md">
           <button
             type="button"
             onClick={handlePrevStep}
-            className="flex min-h-[44px] items-center justify-center rounded-xl border-2 border-indigo-100 bg-[#F4F7FF] px-5 py-2.5 text-xs font-black text-slate-700 transition hover:bg-indigo-50"
+            className="flex min-h-[44px] items-center justify-center rounded-xl border border-white/20 bg-white/10 px-5 py-2.5 text-xs font-black text-[#F9F6F0] transition hover:bg-white/20"
           >
             <span>{step === 1 ? 'عودة للمقر' : 'السابق'}</span>
           </button>
@@ -648,7 +671,7 @@ export function Stage2ProjectSetup() {
           <button
             type="button"
             onClick={handleNextStep}
-            className="flex min-h-[44px] items-center gap-2 rounded-xl border-b-4 border-indigo-950/40 bg-gradient-to-l from-violet-600 to-indigo-600 px-6 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-105 active:border-b-0 active:translate-y-0.5"
+            className="flex min-h-[44px] items-center gap-2 rounded-xl border-2 border-[#D4AF37] bg-[#D91624] px-6 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-110 active:translate-y-0.5"
           >
             {step === 3 && <Check className="h-4 w-4" />}
             <span>{step < 3 ? 'التالي' : 'الانتقال لغرفة التعاقدات'}</span>
