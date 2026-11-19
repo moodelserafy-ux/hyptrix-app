@@ -1,4 +1,6 @@
 import defaultDbJson from '@/data/default_db.json';
+import saudiDbJson from '@/data/saudi_db.json';
+import type { WorldMarketId } from './market-profiles';
 
 export type GenreId =
   | 'action'
@@ -142,6 +144,7 @@ export interface MasterDatabase {
   meta: {
     pack_name: string;
     version: string;
+    targetMarket?: WorldMarketId;
   };
   actors: ActorItem[];
   crew: CrewItem[];
@@ -669,6 +672,10 @@ const EXTRA_TV_CHANNELS: StreamingPlatform[] = [
 
 const EXPANDED_DEFAULT_DB: MasterDatabase = {
   ...rawDefaultDb,
+  meta: {
+    ...rawDefaultDb.meta,
+    targetMarket: 'egypt',
+  },
   actors: buildExpanded160ActorRoster(rawDefaultDb.actors),
   crew: buildExpandedCrewRoster(rawDefaultDb.crew),
   streaming_platforms: [
@@ -681,6 +688,8 @@ const EXPANDED_DEFAULT_DB: MasterDatabase = {
     ...EXTRA_TV_CHANNELS,
   ],
 };
+
+const SAUDI_DEFAULT_DB: MasterDatabase = saudiDbJson as unknown as MasterDatabase;
 
 export const CUSTOM_DB_STORAGE_KEY = 'hyptrix_custom_db_patch_v1';
 
@@ -718,6 +727,7 @@ export function mergeDatabases(
     meta: {
       pack_name: custom.meta?.pack_name || base.meta.pack_name,
       version: custom.meta?.version || base.meta.version,
+      targetMarket: custom.meta?.targetMarket || base.meta.targetMarket,
     },
     actors: mergeById(base.actors, custom.actors),
     crew: mergeById(base.crew, custom.crew),
@@ -733,7 +743,10 @@ export function mergeDatabases(
   };
 }
 
-export function validateCustomDatabase(data: unknown): {
+export function validateCustomDatabase(
+  data: unknown,
+  expectedMarket?: WorldMarketId
+): {
   valid: boolean;
   error?: string;
   data?: Partial<MasterDatabase>;
@@ -759,11 +772,39 @@ export function validateCustomDatabase(data: unknown): {
     };
   }
 
+  const metaObj = obj.meta as { targetMarket?: WorldMarketId } | undefined;
+  if (
+    expectedMarket &&
+    metaObj?.targetMarket &&
+    metaObj.targetMarket !== expectedMarket
+  ) {
+    const marketNames: Record<string, string> = {
+      egypt: 'السوق المصري',
+      saudi: 'السوق السعودي والخليجي',
+      turkey: 'السوق التركي',
+      korea: 'السوق الكوري',
+      usa: 'السوق الأمريكي',
+    };
+    return {
+      valid: false,
+      error: `هذه الحزمة مخصصة لـ «${marketNames[metaObj.targetMarket] || metaObj.targetMarket}» ولا يمكن دمجها مع عالم «${marketNames[expectedMarket] || expectedMarket}».`,
+    };
+  }
+
   return { valid: true, data: obj as Partial<MasterDatabase> };
 }
 
 export function getResolvedDatabase(
-  customPatch?: Partial<MasterDatabase> | null
+  customPatch?: Partial<MasterDatabase> | null,
+  worldMarket: WorldMarketId = 'egypt'
 ): MasterDatabase {
-  return mergeDatabases(EXPANDED_DEFAULT_DB, customPatch);
+  const baseDb =
+    worldMarket === 'saudi' ? SAUDI_DEFAULT_DB : EXPANDED_DEFAULT_DB;
+  if (
+    customPatch?.meta?.targetMarket &&
+    customPatch.meta.targetMarket !== worldMarket
+  ) {
+    return baseDb;
+  }
+  return mergeDatabases(baseDb, customPatch);
 }

@@ -4,8 +4,29 @@ import {
   RoleBillingSize,
   ROLE_BILLING_META,
 } from '@/lib/game-engine';
+import {
+  getMarketAiContext,
+  getMarketProfile,
+  getLanguageDisplayName,
+  WorldMarketId,
+  UiLanguageId,
+} from '@/lib/market-profiles';
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+
+function resolveMarketContext(payload: Record<string, unknown>) {
+  const worldMarket = (
+    typeof payload?.worldMarket === 'string' ? payload.worldMarket : 'egypt'
+  ) as WorldMarketId;
+  const uiLanguage = (
+    typeof payload?.uiLanguage === 'string' ? payload.uiLanguage : 'ar'
+  ) as UiLanguageId;
+  const profile = getMarketProfile(worldMarket);
+  const ctx = getMarketAiContext(worldMarket);
+  const langName = getLanguageDisplayName(uiLanguage);
+  const directive = `توجيه اللغة والثقافة والسوق الإلزامي: لغة الإخراج المطلوبة هي ${langName} (اكتب كافة القيم النصية في الـ JSON بهذه اللغة). عالم وأجواء وثقافة السوق هي: ${ctx.industryLabel} (${ctx.citiesAndLandmarks})، العملة المعتمدة: ${ctx.currencyLabel} (${profile.currencyFullName})، الأسلوب: ${ctx.dialectStyle}، وطبيعة شباك التذاكر والموسم: ${ctx.boxOfficeVibe}.`;
+  return { worldMarket, uiLanguage, profile, ctx, langName, directive };
+}
 
 export type GroqTaskModel =
   | 'openai/gpt-oss-20b'
@@ -57,7 +78,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { mode, payload, groqKeyOverride, preferredModel } = body;
-    const p = (payload || body || {}) as Record<string, unknown>;
+    const rawPayload = (payload || body || {}) as Record<string, unknown>;
+    const p: Record<string, unknown> = {
+      ...rawPayload,
+      worldMarket: rawPayload.worldMarket ?? body.worldMarket ?? 'egypt',
+      uiLanguage: rawPayload.uiLanguage ?? body.uiLanguage ?? 'ar',
+    };
     const taskTag = String(mode || 'evaluate_release');
 
     if (mode === 'generate_script_idea') {
@@ -115,7 +141,7 @@ export async function POST(req: NextRequest) {
     return await handleEvaluateRelease(p, groqKeyOverride, taskTag);
   } catch (err) {
     console.error('Narrative Engine Error:', err);
-    return NextResponse.json(buildGroundedEgyptianReleaseEvaluation({}), { status: 200 });
+    return NextResponse.json(buildGroundedReleaseEvaluation({}), { status: 200 });
   }
 }
 
@@ -246,21 +272,23 @@ async function handleGenerateScriptIdea(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { ctx, directive } = resolveMarketContext(payload);
   const format = String(payload.format || 'film');
   const primaryGenre = String(payload.primaryGenreName || payload.primaryGenre || 'أكشن');
   const secondaryGenre = String(payload.secondaryGenreName || payload.secondaryGenre || '');
   const ageRating = String(payload.ageRating || '+12');
   const seedTitle = String(payload.currentTitle || '').trim();
 
-  const systemPrompt = `أنت سيناريست ومؤلف سينمائي ودرامي مصري محترف.
-المطلوب منك تأليف فكرة وسيناريو جذاب جداً ومبتكر لـ ${format === 'film' ? 'فيلم سينمائي' : 'مسلسل درامي'} مصري:
+  const systemPrompt = `${directive}
+أنت سيناريست ومؤلف سينمائي ودرامي محترف في عالم ${ctx.industryLabel}.
+المطلوب منك تأليف فكرة وسيناريو جذاب جداً ومبتكر لـ ${format === 'film' ? 'فيلم سينمائي' : 'مسلسل درامي'} يناسب أجواء ${ctx.countryLabel} (${ctx.citiesAndLandmarks}):
 - التصنيف الأساسي: ${primaryGenre} ${secondaryGenre ? `مع تصنيف فرعي: ${secondaryGenre}` : ''}
 - التصنيف العمري: ${ageRating}
 ${seedTitle ? `- عنوان مقترح من المنتج لبناء القصة عليه: "${seedTitle}"` : ''}
 
-اكتب بأسلوب سينمائي مصري سلس وطبيعي ومشوق (من 3 إلى 4 جمل تصف البطل، الصراع الرئيسي، والمفاجأة الدرامية في النهاية) بدون أي مبالغة أو ألفاظ سوقية.
+اكتب بـ ${ctx.dialectStyle} (من 3 إلى 4 جمل تصف البطل، الصراع الرئيسي، والمفاجأة الدرامية في النهاية) بدون أي مبالغة أو ألفاظ سوقية.
 أرجع كائن JSON فقط يحتوي على:
-- title: اسم الفيلم أو المسلسل (عنوان سينمائي مصري جذاب)
+- title: اسم الفيلم أو المسلسل (عنوان سينمائي جذاب مناسب لـ ${ctx.industryLabel})
 - synopsis: ملخص القصة والحبكة والصراع والنهاية المفاجئة`;
 
   const userPrompt = `ولّد عنوان وسيناريو جديد ومميز الآن بصيغة JSON.`;
@@ -274,32 +302,15 @@ ${seedTitle ? `- عنوان مقترح من المنتج لبناء القصة �
     });
   }
 
-  const ideas = [
-    {
-      title: seedTitle || 'شفرة باب الخلق',
-      synopsis: `خبير فك شفرات يعثر على خريطة سرية داخل ساعة أثرية في خان الخليلي، فيدخل في مطاردة خطيرة عبر شوارع القاهرة مع شبكة دولية، قبل أن يكتشف في المشهد الأخير أن شريكه المقرب هو العقل المدبر للعملية.`,
-    },
-    {
-      title: seedTitle || 'العقد الأخير في الزمالك',
-      synopsis: `محامٍ شهير يتولى الدفاع في قضية ميراث غامضة داخل قصر قديم بالزمالك، ومع كل جلسة تتكشف أسرار عائلية تقلب الرأي العام، حتى يفجر مفاجأة غير متوقعة أمام المحكمة في المشهد الختامي.`,
-    },
-    {
-      title: seedTitle || 'ليلة سقوط الكينج',
-      synopsis: `ضابط عمليات خاصة متقاعد يضطر للعودة في مهمة سرية لمدة 48 ساعة لإحباط صفقة تهريب كبرى في الميناء، ليجد نفسه في مواجهة مباشرة مع خصمه القديم في معركة حاسمة تحبس الأنفاس.`,
-    },
-    {
-      title: seedTitle || 'المسار المفقود',
-      synopsis: `طبيبة نفسية تحقق في اختفاء غامض لركاب قطار ليلي متجه إلى أسوان، وتكتشف أن كل راكب يخفي سراً يربطه بحادث قديم وقع قبل عشر سنوات، وتنتهي القصة بمواجهة كاشفة فوق السد العالي.`,
-    },
-    {
-      title: seedTitle || 'مزاد منتصف الليل',
-      synopsis: `تاجر تحف شاب يدخل مزاداً سرياً لبيع لوحة نادرة، ليكتشف أن اللوحة تحتوي على ميكروفيلم يفضح شبكة فساد كبرى، فيخوض سباقاً مع الزمن للنجاة بحياته وكشف الحقيقة.`,
-    },
-  ];
-  const chosen = ideas[Math.floor(Math.random() * ideas.length)];
+  const ideas = ctx.fallbackIdeas;
+  const picked = ideas[Math.floor(Math.random() * ideas.length)] || {
+    title: 'المسار المفقود',
+    synopsis: 'قصة إثارة ودراما مشوقة تكشف أسراراً غير متوقعة في سباق مع الزمن.',
+  };
   return NextResponse.json({
     source: 'ورشة تطوير السيناريو',
-    ...chosen,
+    title: seedTitle || picked.title,
+    synopsis: picked.synopsis,
   });
 }
 
@@ -311,18 +322,20 @@ async function handleAnalyzeScriptSynopsis(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
-  const title = String(payload.title || 'الفرعون الأخير');
+  const { ctx, directive } = resolveMarketContext(payload);
+  const title = String(payload.title || 'العمل الفني الجديد');
   const synopsis = String(payload.synopsis || '');
   const primaryGenre = String(payload.primaryGenreName || payload.primaryGenre || 'دراما');
   const format = String(payload.format || 'film');
 
   const { openingClause, conflictClause, wordCount } = extractSynopsisHighlights(synopsis, title);
 
-  const systemPrompt = `أنت مستشار سيناريو وناقد درامي مصري محترف.
+  const systemPrompt = `${directive}
+أنت مستشار سيناريو وناقد درامي محترف في ${ctx.industryLabel}.
 المنتج كتب سيناريو ${format === 'film' ? 'فيلم' : 'مسلسل'} بعنوان "${title}" (النوع: ${primaryGenre}):
 "${synopsis}"
 
-قيّم السيناريو بصدق وموضوعية وبأسلوب مصري احترافي طبيعي (بدون مبالغة في العامية وبدون فصحى جامدة):
+قيّم السيناريو بصدق وموضوعية بـ ${ctx.dialectStyle}:
 - لو السيناريو قصير أو سطحي، اعطِه تقييماً متوسطاً (55 إلى 70) ووضح بهدوء ما يحتاجه.
 - لو السيناريو فيه حبكة وصراع واضح ونهاية مشوقة، اعطِه تقييماً قوياً (75 إلى 92).
 
@@ -371,17 +384,19 @@ async function handleGenerateCharacterRole(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { ctx, directive } = resolveMarketContext(payload);
   const talentName = String(payload.talentName || 'النجم');
   const archetype = String(payload.archetype || '');
   const roleBillingSize = (payload.roleBillingSize as RoleBillingSize) || 'lead_star';
-  const title = String(payload.projectTitle || payload.title || 'الفرعون الأخير');
+  const title = String(payload.projectTitle || payload.title || 'العمل الفني الجديد');
   const synopsis = String(payload.synopsis || '');
   const primaryGenre = String(payload.primaryGenre || 'دراما');
 
   const billingLabel = ROLE_BILLING_META[roleBillingSize]?.label || 'بطولة';
   const { openingClause, conflictClause } = extractSynopsisHighlights(synopsis, title);
 
-  const systemPrompt = `أنت مؤلف وسيناريست مصري محترف.
+  const systemPrompt = `${directive}
+أنت مؤلف وسيناريست محترف في ${ctx.industryLabel}.
 المطلوب ابتكار اسم ووصف شخصية درامية عميقة ومغرية للفنان "${talentName}" (${archetype}) ليؤديها بحجم دور (${billingLabel}) في عمل "${title}" (النوع: ${primaryGenre}) والذي تدور قصته حول: "${synopsis}".
 اجعل وصف الشخصية من جملة واحدة مركزة وقوية (10 إلى 18 كلمة) مترابطة مباشرة مع أحداث القصة.
 أرجع JSON فقط يحتوي على:
@@ -426,6 +441,7 @@ async function handleEvaluateTalentOffer(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { ctx, directive } = resolveMarketContext(payload);
   const talentName = String(payload.talentName || 'النجم');
   const isActor = payload.isActor !== false;
   const starTier = (payload.starTier as 'S' | 'A' | 'B' | 'C') || 'B';
@@ -439,7 +455,7 @@ async function handleEvaluateTalentOffer(
   const offeredSalary = Number(payload.offeredSalary || baseSalary);
   const backendPoints = Number(payload.backendPoints || 0);
   const vipDinner = Boolean(payload.vipDinner);
-  const title = String(payload.projectTitle || payload.title || 'الفرعون الأخير');
+  const title = String(payload.projectTitle || payload.title || 'العمل الفني الجديد');
   const synopsis = String(payload.scriptSynopsis || payload.synopsis || '');
   const genreName = String(payload.primaryGenre || payload.genreName || 'دراما');
   const genreMasteryScore = Number(payload.genreMasteryScore || 75);
@@ -472,6 +488,7 @@ async function handleEvaluateTalentOffer(
     studioReputation,
     directorName,
     directorOverall,
+    currencyLabel: ctx.currencyLabel,
   });
 
   const billingArabic = isActor
@@ -484,20 +501,21 @@ async function handleEvaluateTalentOffer(
       ? `\nسجل ذاكرة الصناعة وتاريخ الاستوديو ("${studioName}"):\n- ${aiMemoryLog.join('\n- ')}`
       : '';
 
-  const systemPrompt = `أنت الفنان/المخرج المصري "${talentName}" (الفئة: ${starTier}، التقييم العام: ${overall}/100، الغرور الفني: ${ego}/100).
+  const systemPrompt = `${directive}
+أنت الفنان/المخرج "${talentName}" في عالم ${ctx.industryLabel} (الفئة: ${starTier}، التقييم العام: ${overall}/100، الغرور الفني: ${ego}/100).
 تلقيت عرضاً رسمياً من شركة "${studioName}" للمشاركة في عمل فني عنوانه "${title}" (التصنيف: ${genreName}).
 عوامل تقييم العرض بالكامل:
 1. حجم الدور ومكانته مقارنة بحجم نجوميتك: ${billingArabic} — (${deepEval.roleFitVerdict} · درجة الملاءمة: ${deepEval.roleFitScore}/100)
 2. وصف الشخصية والدور: "${roleLabel}"
 3. ملخص السيناريو والقصة: "${synopsis}"
-4. العرض المالي ونسبة الأرباح: معروض عليك ${(offeredSalary / 1_000_000).toFixed(1)} مليون ج.م (مقابل أجرك المتوقع ${(deepEval.expectedMinimumSalary / 1_000_000).toFixed(1)} مليون ج.م) + نسبة أرباح من الشباك ${backendPoints}% ${vipDinner ? '+ دعوة عشاء عمل خاص وقراءة سيناريو VIP' : ''}.
+4. العرض المالي ونسبة الأرباح: معروض عليك ${(offeredSalary / 1_000_000).toFixed(1)} مليون ${ctx.currencyLabel} (مقابل أجرك المتوقع ${(deepEval.expectedMinimumSalary / 1_000_000).toFixed(1)} مليون ${ctx.currencyLabel}) + نسبة أرباح من الشباك ${backendPoints}% ${vipDinner ? '+ دعوة عشاء عمل خاص وقراءة سيناريو VIP' : ''}.
 5. إتقانك للتصنيف (${genreName}): ${genreMasteryScore}/100، وسمعة الاستوديو: ${studioReputation}/100${directorName ? `، والمخرج المتعاقد: ${directorName}` : ''}.${memoryBlock}
 
 قرار التقييم الفني والمالي النهائي: ${deepEval.willAccept ? 'الموافقة على العرض (accepted: true)' : `الاعتذار ورفض العرض (accepted: false) بسبب: ${deepEval.rejectionCategory}`}.
 
 المطلوب:
 - حدد عدد الأيام التي ستستغرقها لدراسة السيناريو والعقد مع وكيل أعمالك قبل إعلان قرارك الرسمي: waitDays (إما 2 أو 3 أيام).
-- اكتب ردك الرسمي المعمق (reason) في جملتين أو ثلاث جمل طبيعية توضح بدقة لماذا قبلت أو رفضت بناءً على حجم الدور مقارنة بمكانتك، وقوة القصة ("${openingClause}" / "${conflictClause}")، والراتب ونسبة الأرباح، وتاريخ الاستوديو.
+- اكتب ردك الرسمي المعمق (reason) في جملتين أو ثلاث جمل طبيعية بـ ${ctx.dialectStyle} توضح بدقة لماذا قبلت أو رفضت بناءً على حجم الدور مقارنة بمكانتك، وقوة القصة ("${openingClause}" / "${conflictClause}")، والراتب ونسبة الأرباح، وتاريخ الاستوديو.
 
 أرجع JSON فقط يحتوي على:
 - accepted: بوليان (${deepEval.willAccept})
@@ -540,9 +558,10 @@ async function handleEvaluateSeriesEpisode(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { ctx, directive } = resolveMarketContext(payload);
   const episodeNumber = Number(payload.episodeNumber || 1);
   const totalEpisodes = Number(payload.totalEpisodes || 15);
-  const title = String(payload.projectTitle || payload.title || 'الفرعون الأخير');
+  const title = String(payload.projectTitle || payload.title || 'العمل الدرامي الجديد');
   const synopsis = String(payload.synopsis || '');
   const leadName = String(payload.leadName || 'بطل المسلسل');
   const antagonistName = String(payload.antagonistName || 'الخصم الدرامي');
@@ -565,14 +584,15 @@ async function handleEvaluateSeriesEpisode(
     ? `ذروة المواجهة الدرامية وانكشاف الأسرار الكبرى في "${conflictClause}"`
     : `تصاعد الصراع وتشابك الخطوط الدرامية حول "${conflictClause}"`;
 
-  const systemPrompt = `أنت ناقد درامي ومحرر متابعة مسلسلات في لعبة Hyptrix.
+  const systemPrompt = `${directive}
+أنت ناقد درامي ومحرر متابعة مسلسلات في عالم ${ctx.industryLabel}.
 تم الآن عرض الحلقة رقم ${episodeNumber} من أصل ${totalEpisodes} حلقة من مسلسل "${title}".
 قصة المسلسل: "${synopsis}".
 البطل: "${leadName}"، الخصم: "${antagonistName}"، المخرج: "${directorName}".
 تركيز الحلقة الحالية: ${arcFocus}.
-إجمالي عوائد العرض والإعلانات حتى هذه الحلقة: ${currentRevenueMillions} مليون ج.م.
+إجمالي عوائد العرض والإعلانات حتى هذه الحلقة: ${currentRevenueMillions} مليون ${ctx.currencyLabel}.
 
-اكتب تقريراً موجزاً ومميزاً وغير مكرر بلغة مصرية طبيعية واحترافية يصف ما حدث في الحلقة ${episodeNumber} وكيف تفاعل الجمهور والنقاد معها.
+اكتب تقريراً موجزاً ومميزاً وغير مكرر بـ ${ctx.dialectStyle} يصف ما حدث في الحلقة ${episodeNumber} وكيف تفاعل الجمهور والنقاد معها.
 أرجع JSON فقط يحتوي على:
 - headline: عنوان تقرير الحلقة ${episodeNumber}
 - detail: جملتان تصفان أبرز مشهد في الحلقة ${episodeNumber} ورد فعل المشاهدين والنقاد
@@ -601,7 +621,7 @@ async function handleEvaluateSeriesEpisode(
     return NextResponse.json({
       source: 'مرصد الدراما',
       headline: `الحلقة الأخيرة (${episodeNumber}): نهاية حاسمة لمسلسل «${title}» تتصدر نقاشات الجمهور!`,
-      detail: `حسمت الحلقة الأخيرة مصير الصراع عند "${endingClause}" في مواجهة تمثيلية قوية بين ${leadName} و${antagonistName}، ووصلت إجمالي عوائد المسلسل إلى ${currentRevenueMillions}M ج.م.`,
+      detail: `حسمت الحلقة الأخيرة مصير الصراع عند "${endingClause}" في مواجهة تمثيلية قوية بين ${leadName} و${antagonistName}، ووصلت إجمالي عوائد المسلسل إلى ${currentRevenueMillions}M ${ctx.currencyLabel}.`,
       impact_type: 'positive',
       hype_delta: 7,
     });
@@ -620,7 +640,7 @@ async function handleEvaluateSeriesEpisode(
   const midVariants = [
     {
       headline: `الحلقة ${episodeNumber}: مواجهة قوية لـ ${leadName} تغير مسار الأحداث في «${title}»`,
-      detail: `تفاعل المشاهدون مع تطور خط "${openingClause}" في الحلقة ${episodeNumber}، بينما أشاد النقاد بتماسك الإيقاع الدرامي وارتفاع عوائد البث إلى ${currentRevenueMillions}M ج.م.`,
+      detail: `تفاعل المشاهدون مع تطور خط "${openingClause}" في الحلقة ${episodeNumber}، بينما أشاد النقاد بتماسك الإيقاع الدرامي وارتفاع عوائد البث إلى ${currentRevenueMillions}M ${ctx.currencyLabel}.`,
       impact_type: 'positive',
       hype_delta: 4,
     },
@@ -659,9 +679,10 @@ async function handleGenerateDailyNews(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { ctx, directive } = resolveMarketContext(payload);
   const phase = String(payload.phase || 'box_office');
   const day = Number(payload.gameDay || payload.day || 1);
-  const title = String(payload.projectTitle || payload.title || 'الفرعون الأخير');
+  const title = String(payload.projectTitle || payload.title || 'العمل الفني الجديد');
   const synopsis = String(payload.synopsis || '');
   const leadName = String(payload.leadActorName || payload.leadName || 'بطل العمل');
   const directorName = String(payload.directorName || 'المخرج');
@@ -679,14 +700,15 @@ async function handleGenerateDailyNews(
       ? `\n- ذاكرة الأحداث السابقة في الاستوديو والصناعة:\n  * ${aiMemoryLog.join('\n  * ')}`
       : '';
 
-  const systemPrompt = `أنت محرر صحافة فنية في لعبة Hyptrix.
-اكتب خبراً فنياً واحداً مميزاً وغير مكرر بلغة مصرية طبيعية واحترافية (بدون مبالغة سوقية) عن اليوم رقم ${day}:
+  const systemPrompt = `${directive}
+أنت محرر صحافة فنية في عالم ${ctx.industryLabel}.
+اكتب خبراً فنياً واحداً مميزاً وغير مكرر بـ ${ctx.dialectStyle} عن اليوم رقم ${day}:
 - المرحلة: ${phase === 'filming' ? 'كواليس التصوير والإنتاج' : 'منافسة شباك التذاكر السينمائي'}
 - اسم العمل: "${title}"
 - القصة: "${synopsis}"
 - البطل: "${leadName}" والمخرج: "${directorName}"
 - المنافس: "${rivalTitle}"
-- الإيرادات الحالية: ${currentRevenueMillions} مليون ج.م${memoryContext}
+- الإيرادات الحالية: ${currentRevenueMillions} مليون ${ctx.currencyLabel}${memoryContext}
 
 اربط الخبر بتفاصيل القصة ("${openingClause}" أو "${conflictClause}") وبسجل أحداث الاستوديو إن وجد.
 أرجع JSON فقط يحتوي على:
@@ -744,7 +766,7 @@ async function handleGenerateDailyNews(
   const releaseNews = [
     {
       headline: `اليوم ${day}: منافسة قوية في شباك التذاكر بين «${title}» و«${rivalTitle}»`,
-      detail: `وصلت إيرادات «${title}» إلى ${currentRevenueMillions}M ج.م بدعم من الإقبال الجماهيري على مشاهدة خط "${conflictClause.slice(0, 38)}...".`,
+      detail: `وصلت إيرادات «${title}» إلى ${currentRevenueMillions}M ${ctx.currencyLabel} بدعم من الإقبال الجماهيري على مشاهدة خط "${conflictClause.slice(0, 38)}...".`,
       impact_type: 'rival',
       hype_delta: 4,
     },
@@ -755,7 +777,7 @@ async function handleGenerateDailyNews(
       hype_delta: 5,
     },
     {
-      headline: `اليوم ${day}: الحفلات المسائية ترفع حصيلة «${title}» إلى ${currentRevenueMillions}M ج.م`,
+      headline: `اليوم ${day}: الحفلات المسائية ترفع حصيلة «${title}» إلى ${currentRevenueMillions}M ${ctx.currencyLabel}`,
       detail: `سجلت قاعات العرض نسب إشغال مرتفعة مع توصيات الجمهور بمشاهدة المواجهة التمثيلية التي يقودها ${leadName}.`,
       impact_type: 'positive',
       hype_delta: 5,
@@ -768,7 +790,7 @@ async function handleGenerateDailyNews(
     },
     {
       headline: `اليوم ${day}: «${title}» يحافظ على زخمه الجماهيري ويقترب من حاجز جديد في الإيرادات`,
-      detail: `استمر تدفق العائلات والشباب على القاعات لترتفع الحصيلة التراكمية إلى ${currentRevenueMillions}M ج.م في سباق الموسم.`,
+      detail: `استمر تدفق العائلات والشباب على القاعات لترتفع الحصيلة التراكمية إلى ${currentRevenueMillions}M ${ctx.currencyLabel} في سباق الموسم.`,
       impact_type: 'positive',
       hype_delta: 4,
     },
@@ -789,19 +811,21 @@ async function handleGenerateCrises(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
-  const title = String(payload?.title || 'الفرعون الأخير');
+  const { ctx, directive } = resolveMarketContext(payload);
+  const title = String(payload?.title || 'العمل الفني الجديد');
   const synopsis = String(payload?.synopsis || '');
-  const leadName = String(payload?.leadName || 'بطل العمل');
+  const leadName = String(payload?.leadActorName || payload?.leadName || 'بطل العمل');
   const antagonistName = String(payload?.antagonistName || 'الخصم الدرامي');
   const ageRating = String(payload?.ageRating || '+12');
   const hasEgoClash = Boolean(payload?.hasEgoClash);
 
   const { openingClause, conflictClause } = extractSynopsisHighlights(synopsis, title);
 
-  const systemPrompt = `أنت محرك مواقف وأزمات إنتاجية في لعبة إدارة الاستوديو السينمائي Hyptrix.
+  const systemPrompt = `${directive}
+أنت محرك مواقف وأزمات إنتاجية في عالم ${ctx.industryLabel}.
 ولّد 3 مواقف إنتاجية واقعية تحدث أثناء تصوير عمل "${title}" الذي تدور قصته حول: "${synopsis}".
 البطل: "${leadName}"، الخصم: "${antagonistName}"، التصنيف العمري: "${ageRating}"، توتر بين النجوم: ${hasEgoClash}.
-يجب أن تكون المواقف مرتبطة بأحداث سيناريو اللاعب ("${openingClause}" و "${conflictClause}") ومكتوبة بلغة مصرية طبيعية واحترافية.
+يجب أن تكون المواقف مرتبطة بأحداث سيناريو اللاعب ("${openingClause}" و "${conflictClause}") ومكتوبة بـ ${ctx.dialectStyle} وباستخدام عملة (${ctx.currencyLabel}).
 أرجع JSON فقط يحتوي على مصفوفة crises من 3 عناصر، كل عنصر يحتوي على:
 id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB (label, cost, hypeDelta, qualityDelta).`;
 
@@ -821,7 +845,7 @@ id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB 
       title: `تعديل مفاجئ في تنفيذ مشهد "${openingClause.slice(0, 38)}..."`,
       description: `أثناء تصوير المشهد المحوري في «${title}»، طلب ${leadName} ومدير التصوير إعادة بناء جزء من الديكور ليظهر المشهد بواقعية أعلى، وهو ما يتطلب ميزانية إضافية.`,
       optionA: {
-        label: 'الموافقة على تطوير الديكور وتنفيذ المشهد بأعلى جودة (3.5M ج.م)',
+        label: `الموافقة على تطوير الديكور وتنفيذ المشهد بأعلى جودة (3.5M ${ctx.currencyLabel})`,
         cost: 3_500_000,
         hypeDelta: 6,
         qualityDelta: 5,
@@ -842,13 +866,13 @@ id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB 
         ? `توقف التصوير مؤقتاً بسبب نقاش حاد بين ${leadName} و${antagonistName} حول صياغة الحوار في مشهد "${conflictClause.slice(0, 40)}..." وترتيب الظهور.`
         : `انتشرت عبر منصات التواصل لقطات مسربة من كواليس تصوير مشهد "${conflictClause.slice(0, 40)}..." مما كشف جزءاً من مفاجأة العمل.`,
       optionA: {
-        label: 'تصوير مشاهد إضافية بديلة واستثمار الحدث دعائياً (2.5M ج.م)',
+        label: `تصوير مشاهد إضافية بديلة واستثمار الحدث دعائياً (2.5M ${ctx.currencyLabel})`,
         cost: 2_500_000,
         hypeDelta: 10,
         qualityDelta: 4,
       },
       optionB: {
-        label: 'تشديد الحراسة على اللوكيشن واستكمال الجدول كما هو (0.5M ج.م)',
+        label: `تشديد الحراسة على اللوكيشن واستكمال الجدول كما هو (0.5M ${ctx.currencyLabel})`,
         cost: 500_000,
         hypeDelta: -3,
         qualityDelta: -2,
@@ -859,7 +883,7 @@ id, title, description, optionA (label, cost, hypeDelta, qualityDelta), optionB 
       title: `ملاحظات رقابية على بعض مشاهد «${title}» (${ageRating})`,
       description: `طلبت اللجنة الرقابية تخفيف حدة بعض التفاصيل في خط "${conflictClause.slice(0, 40)}..." للحفاظ على التصنيف العمري (${ageRating}) دون تأجيل موعد العرض.`,
       optionA: {
-        label: 'إعادة صياغة وتصوير المشهد بمعالجة درامية ذكية (1.8M ج.م)',
+        label: `إعادة صياغة وتصوير المشهد بمعالجة درامية ذكية (1.8M ${ctx.currencyLabel})`,
         cost: 1_800_000,
         hypeDelta: 4,
         qualityDelta: 3,
@@ -884,20 +908,28 @@ async function handleEvaluateFestivalCeremony(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
-  const festivalName = String(payload.festivalName || 'مهرجان القاهرة السينمائي');
-  const title = String(payload.title || 'الفرعون الأخير');
+  const { ctx, directive } = resolveMarketContext(payload);
+  const festivalName = String(payload.festivalName || ctx.defaultFestival);
+  const title = String(payload.projectTitle || payload.title || 'العمل الفني الجديد');
   const synopsis = String(payload.synopsis || '');
   const directorName = String(payload.directorName || 'المخرج');
-  const leadName = String(payload.leadName || 'البطل');
+  const leadName = String(
+    Array.isArray(payload.leadActors)
+      ? (payload.leadActors as string[]).join(' و')
+      : payload.leadName || 'البطل'
+  );
   const criticScore = Number(payload.criticScore || 7.2);
-  const wonCount = Number(payload.wonCount || 0);
+  const wonCount = Array.isArray(payload.wonAwards)
+    ? payload.wonAwards.length
+    : Number(payload.wonCount || 0);
 
   const { openingClause } = extractSynopsisHighlights(synopsis, title);
 
-  const systemPrompt = `أنت رئيس لجنة التحكيم في "${festivalName}".
+  const systemPrompt = `${directive}
+أنت رئيس لجنة التحكيم في "${festivalName}" ضمن عالم ${ctx.industryLabel}.
 تم عرض عمل "${title}" (تقييم النقاد: ${criticScore}/10، إخراج: ${directorName}، بطولة: ${leadName}) والذي تدور قصته حول: "${synopsis}".
 العمل فاز بـ ${wonCount} جوائز في المهرجان.
-اكتب بيان لجنة التحكيم بأسلوب سينمائي مصري راقٍ وطبيعي (جملتين فقط) يوضح رأي اللجنة في معالجة العمل ("${openingClause}") وأداء الأبطال.
+اكتب بيان لجنة التحكيم بـ ${ctx.dialectStyle} (جملتين فقط) يوضح رأي اللجنة في معالجة العمل ("${openingClause}") وأداء الأبطال.
 أرجع JSON فقط يحتوي على:
 - juryStatement: نص بيان لجنة التحكيم
 - festivalBuzz: جملة قصيرة تصف أصداء الحفل على السجادة الحمراء.`;
@@ -939,6 +971,7 @@ async function handleDiscoverAiRisingStar(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { ctx, directive } = resolveMarketContext(payload);
   const existingNames = Array.isArray(payload?.existingNames)
     ? (payload.existingNames as string[]).join('، ')
     : '';
@@ -950,10 +983,11 @@ async function handleDiscoverAiRisingStar(
     ? (payload.aiMemoryLog as string[])
     : [];
 
-  const systemPrompt = `أنت كشاف مواهب سينمائية ودرامية في مصر والوطن العربي.
+  const systemPrompt = `${directive}
+أنت كشاف مواهب سينمائية ودرامية في ${ctx.countryLabel} (${ctx.industryLabel}).
 سياق عالم اللاعب الحالي: شركة "${studioName}" بقيادة "${ceoName}" في اليوم #${gameDay} من عام ${currentYear}.
 آخر أحداث عالم هذا اللاعب: ${memoryArr.slice(0, 4).join(' | ') || 'انطلاق الموسم السينمائي'}.
-المطلوب منك ابتكار ممثل شاب صاعد جديد تماماً أو ممثلة شابة صاعدة جديدة تماماً (اسم ثنائي مصري/عربي واقعي ومبتكر غير موجود في القائمة الحالية: ${existingNames.slice(0, 500)}).
+المطلوب منك ابتكار ممثل شاب صاعد جديد تماماً أو ممثلة شابة صاعدة جديدة تماماً (اسم ثنائي واقعي ومبتكر مناسب لـ ${ctx.countryLabel} وغير موجود في القائمة الحالية: ${existingNames.slice(0, 500)}).
 أرجع JSON فقط يحتوي على:
 - name: الاسم الثنائي للموهبة الصاعدة
 - gender: "M" أو "F"
@@ -976,7 +1010,6 @@ async function handleDiscoverAiRisingStar(
 
   if (groqRes && typeof groqRes.data.name === 'string') {
     const ovr = Math.min(79, Math.max(70, Number(groqRes.data.overall || 74)));
-    const bestGenre = String(groqRes.data.best_genre || 'Drama');
     const actor = {
       id: `act_ai_${Date.now()}_${gameDay}`,
       name: groqRes.data.name.trim(),
@@ -1027,10 +1060,10 @@ async function handleDiscoverAiRisingStar(
     });
   }
 
-  // Unique procedural seed tied to player's studioName + ceoName + gameDay + timestamp
-  const firstMale = ['زياد', 'مروان', 'آدم', 'سيف', 'نديم', 'فارس', 'باسل', 'تيم', 'رامي', 'مازن', 'كريم', 'ياسين'];
-  const firstFemale = ['لينا', 'مريم', 'ملك', 'تيا', 'داليدا', 'فريدة', 'نور', 'سارة', 'جنى', 'كرمة', 'سلسبيل', 'تمارا'];
-  const lastNames = ['الشناوي', 'النبوي', 'ذو الفقار', 'المنسترلي', 'الداغر', 'السيوفي', 'العلايلي', 'المهدي', 'الرفاعي', 'الشهابي', 'البنداري', 'سرحان'];
+  // Unique procedural seed tied to player's market, studioName, ceoName & gameDay
+  const firstMale = ctx.risingFirstMale;
+  const firstFemale = ctx.risingFirstFemale;
+  const lastNames = ctx.risingLastNames;
   const seed = hashSeed(`${studioName}_${ceoName}_${gameDay}_${currentYear}_${Date.now()}`);
   const isFem = seed % 2 === 0;
   const fName = isFem
@@ -1087,6 +1120,7 @@ async function handleDiscoverAiEmergingStudio(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { profile, ctx, directive } = resolveMarketContext(payload);
   const studioName = String(payload?.studioName || 'استوديو اللاعب');
   const ceoName = String(payload?.ceoName || 'المنتج التنفيذي');
   const currentYear = Number(payload?.currentYear || 2026);
@@ -1098,17 +1132,18 @@ async function handleDiscoverAiEmergingStudio(
     ? (payload.aiMemoryLog as string[])
     : [];
 
-  const systemPrompt = `أنت محلل اقتصادي لصناعة السينما والدراما في مصر والشرق الأوسط.
+  const systemPrompt = `${directive}
+أنت محلل اقتصادي لصناعة ${ctx.industryLabel}.
 سياق العالم الحالي: شركة اللاعب هي "${studioName}" بقيادة "${ceoName}" في عام ${currentYear} (اليوم #${gameDay}).
 الشركات الموجودة حالياً في السوق: (${existingStudios}).
 آخر أحداث السوق: ${memoryArr.slice(0, 4).join(' | ') || 'منافسة محتدمة على شباك التذاكر'}.
 
-المطلوب منك ابتكار شركة إنتاج سينمائي ودرامي جديدة تماماً تدخل السوق الآن برأس مال قوي لتنافس "${studioName}" وباقي الشركات (اختر اسماً عربياً/مصرياً فخماً ومبتكراً غير مكرر في القائمة أعلاه).
+المطلوب منك ابتكار شركة إنتاج سينمائي ودرامي جديدة تماماً تدخل السوق الآن برأس مال قوي لتنافس "${studioName}" وباقي الشركات (اختر اسماً فخماً ومبتكراً يلائم ${ctx.countryLabel} وغير مكرر في القائمة أعلاه).
 أرجع JSON فقط يحتوي على:
 - name: اسم شركة الإنتاج الجديدة
 - ceo: اسم المؤسس والمدير التنفيذي للشركة الجديدة
 - specialty: تخصص الشركة الفني (مثلاً "أفلام الإثارة والمنصات الرقمية" أو "الإنتاجات التاريخية والأكشن الضخم")
-- estimated_net_worth: القيمة السوقية المبدئية للشركة بالجنيه (رقم بين 180000000 و 460000000)
+- estimated_net_worth: القيمة السوقية المبدئية للشركة بعملة ${profile.currencyFullName} (رقم بين 180000000 و 460000000)
 - market_power: رقم بين 66 و 83
 - preferred_genres: مصفوفة من تصنيفين من ("Action", "Drama", "Thriller", "Comedy", "Horror", "Sci-Fi", "Romance", "Historical")
 - headline: عنوان خبر صحفي اقتصادي عاجل عن تأسيس الشركة ودخولها المنافسة
@@ -1157,7 +1192,7 @@ async function handleDiscoverAiEmergingStudio(
       headline:
         typeof groqRes.data.headline === 'string'
           ? groqRes.data.headline
-          : `بورصة الإنتاج: الإعلان رسمياً عن تأسيس «${newStudio.name}» بقيمة سوقية ${(netWorth / 1_000_000).toFixed(0)}M ج.م!`,
+          : `بورصة الإنتاج: الإعلان رسمياً عن تأسيس «${newStudio.name}» بقيمة سوقية ${(netWorth / 1_000_000).toFixed(0)}M ${ctx.currencyLabel}!`,
       detail:
         typeof groqRes.data.detail === 'string'
           ? groqRes.data.detail
@@ -1165,13 +1200,10 @@ async function handleDiscoverAiEmergingStudio(
     });
   }
 
-  const studioPrefixes = ['مجموعة كليوباترا', 'استوديوهات أوريون', 'شركة الصقر الذهبي', 'دار الفنون الحديثة', 'كيان ميديا', 'أفلام المحروسة الجديدة', 'بوابة الشرق'];
-  const studioSuffixes = ['للإنتاج السينمائي', 'للصناعات الإبداعية', 'للإنتاج الفني والمنصات', 'للسينما والدراما'];
-  const ceoFirst = ['شريف', 'طارق', 'نديم', 'عاصم', 'هشام', 'باهر', 'سلطان'];
-  const ceoLast = ['الدمرداش', 'المنشاوي', 'الألفي', 'الكيلاني', 'التهامي', 'البهنساوي'];
-
-  const genStudioName = `${studioPrefixes[seed % studioPrefixes.length]} ${studioSuffixes[(seed >> 2) % studioSuffixes.length]}`;
-  const genCeoName = `${ceoFirst[(seed >> 3) % ceoFirst.length]} ${ceoLast[(seed >> 4) % ceoLast.length]}`;
+  const genStudioName =
+    ctx.emergingStudioNames[seed % ctx.emergingStudioNames.length];
+  const genCeoName =
+    ctx.emergingCeoNames[(seed >> 3) % ctx.emergingCeoNames.length];
   const netWorth = (195 + (seed % 180)) * 1_000_000;
 
   const fallbackStudio = {
@@ -1189,7 +1221,7 @@ async function handleDiscoverAiEmergingStudio(
 
   return NextResponse.json({
     studio: fallbackStudio,
-    headline: `منافس جديد في السوق: تدشين «${genStudioName}» بقيادة ${genCeoName} بقيمة ${(netWorth / 1_000_000).toFixed(0)}M ج.م!`,
+    headline: `منافس جديد في السوق: تدشين «${genStudioName}» بقيادة ${genCeoName} بقيمة ${(netWorth / 1_000_000).toFixed(0)}M ${ctx.currencyLabel}!`,
     detail: `دخلت «${genStudioName}» رسمياً إلى جدول ترتيب شركات الإنتاج برأس مال ضخم، معلنة استهدافها استقطاب نجوم الصف الأول ومنافسة «${studioName}».`,
   });
 }
@@ -1202,6 +1234,7 @@ async function handleGenerateAiMemoryNews(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { profile, ctx, directive } = resolveMarketContext(payload);
   const studioName = String(payload?.studioName || 'استوديو اللاعب');
   const ceoName = String(payload?.ceoName || 'المنتج التنفيذي');
   const gameDay = Number(payload?.gameDay || 10);
@@ -1215,34 +1248,28 @@ async function handleGenerateAiMemoryNews(
   const memoryContext =
     memoryArr.length > 0
       ? memoryArr.slice(0, 10).join('\n- ')
-      : `تأسيس شركة «${studioName}» بقيادة «${ceoName}» بقيمة سوقية ${(marketValue / 1_000_000).toFixed(0)}M ج.م`;
+      : `تأسيس شركة «${studioName}» بقيادة «${ceoName}» بقيمة سوقية ${(marketValue / 1_000_000).toFixed(0)}M ${ctx.currencyLabel}`;
 
-  const rivalPool = [
-    'المتحدون ميديا جروب',
-    'سيرجي للإنتاج الفني',
-    'العدلي جروب للدراما',
-    'نيو سينما للقرن الجديد',
-    'السباعي للإنتاج السينمائي',
-    'أفلام النيل الدولية',
-  ];
+  const rivalPool = ctx.fallbackRivalStudios;
   const chosenRival = rivalPool[(gameDay + currentYear) % rivalPool.length];
 
-  const systemPrompt = `أنت رئيس تحرير جريدة وبوابة أخبار فنية واقتصادية متخصصة في صناعة السينما والدراما في مصر والشرق الأوسط.
+  const systemPrompt = `${directive}
+أنت رئيس تحرير جريدة وبوابة أخبار فنية واقتصادية متخصصة في صناعة ${ctx.industryLabel}.
 لديك ذاكرة كاملة بكل ما حدث في عالم اللعبة حتى اليوم #${gameDay} من عام ${currentYear}:
 - اسم شركة اللاعب: "${studioName}"، المؤسس والمدير التنفيذي: "${ceoName}"
-- القيمة السوقية الحالية لشركة اللاعب: ${(marketValue / 1_000_000).toFixed(1)}M ج.م، والسيولة بالخزينة: ${(cash / 1_000_000).toFixed(1)}M ج.م
+- القيمة السوقية الحالية لشركة اللاعب: ${(marketValue / 1_000_000).toFixed(1)}M ${ctx.currencyLabel}، والسيولة بالخزينة: ${(cash / 1_000_000).toFixed(1)}M ${ctx.currencyLabel}
 - سجل ذاكرة الأحداث الأخيرة في عالم اللعبة:
 - ${memoryContext}
 
 المطلوب منك:
-كتابة خبر صحفي عاجل وحقيقي الصياغة (بأسلوب صحفي فني واقتصادي رصين ومشوق مثل عناوين الصحف الفنية الكبرى) يربط بين أحداث الذاكرة السابقة، ويكون له تأثير فعلي ومباشر على عالم اللعبة (إما رفع/خفض القيمة السوقية لشركة "${studioName}"، أو صفقة رعاية تضخ سيولة، أو هزة/قفزة كبيرة في القيمة السوقية لشركة منافسة مثل "${chosenRival}" تغير ترتيب الشركات).
+كتابة خبر صحفي عاجل وحقيقي الصياغة (بأسلوب صحفي فني واقتصادي رصين ومشوق يناسب ${ctx.countryLabel}) يربط بين أحداث الذاكرة السابقة، ويكون له تأثير فعلي ومباشر على عالم اللعبة (إما رفع/خفض القيمة السوقية لشركة "${studioName}"، أو صفقة رعاية تضخ سيولة، أو هزة/قفزة كبيرة في القيمة السوقية لشركة منافسة مثل "${chosenRival}" تغير ترتيب الشركات).
 
 أرجع كائن JSON فقط يحتوي على:
 - headline: عنوان صحفي عاجل وقوي
 - detail: تفاصيل التقرير الصحفي في جملتين تذكران اسم "${studioName}" أو "${ceoName}" أو "${chosenRival}" وما حدث في الذاكرة
 - badgeLabel: تصنيف الخبر (مثل "عاجل · بورصة الإنتاج" أو "تقرير صحفي خاص" أو "كواليس الصناعة")
 - category: "ai_industry_report" أو "rival_project"
-- marketValueDelta: رقم التأثير على القيمة السوقية لشركة اللاعب بالجنيه (بين -18000000 و +26000000، أو 0 لو الخبر عن شركة منافسة فقط)
+- marketValueDelta: رقم التأثير على القيمة السوقية لشركة اللاعب بعملة ${profile.currencyFullName} (بين -18000000 و +26000000، أو 0 لو الخبر عن شركة منافسة فقط)
 - cashDelta: رقم التأثير على خزينة السيولة لشركة اللاعب (بين -5000000 و +12000000، أو 0)
 - reputationDelta: رقم بين -3 و +5
 - hypeDelta: رقم بين -4 و +8
@@ -1356,6 +1383,7 @@ async function handleGenerateAiRivalReleases(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
+  const { ctx, directive } = resolveMarketContext(payload);
   const studioName = String(payload?.studioName || 'استوديو اللاعب');
   const ceoName = String(payload?.ceoName || 'المنتج التنفيذي');
   const currentYear = Number(payload?.currentYear || 2026);
@@ -1363,29 +1391,17 @@ async function handleGenerateAiRivalReleases(
   const format = String(payload?.format || (gameDay % 2 === 0 ? 'series' : 'film'));
   const isSeries = format === 'series';
 
-  const studios = normalizeNameList(payload?.competitorStudios, [
-    'المتحدون ميديا جروب',
-    'سيرجي للإنتاج الفني',
-    'العدلي جروب للدراما',
-    'نيو سينما للقرن الجديد',
-    'السباعي للإنتاج السينمائي',
-    'أفلام النيل الدولية',
-  ]);
-  const stars = normalizeNameList(payload?.availableStars, [
-    'كريم عبدون',
-    'أحمد عزمي',
-    'أمير كرم',
-    'منى زاهر',
-    'ياسمين العبد',
-    'ماجد الكدواني',
-    'عمرو يونس',
-    'هند صبري',
-  ]);
+  const studios = normalizeNameList(
+    payload?.competitorStudios,
+    ctx.fallbackRivalStudios
+  );
+  const stars = normalizeNameList(payload?.availableStars, ctx.fallbackStars);
   const memoryArr = Array.isArray(payload?.aiMemoryLog)
     ? (payload.aiMemoryLog as string[]).slice(0, 6)
     : [];
 
-  const systemPrompt = `أنت محرك الذكاء الاصطناعي المسؤول عن إدارة الشركات المنافسة وإنتاجاتها الضخمة في لعبة إمبراطور السينما والدراما.
+  const systemPrompt = `${directive}
+أنت محرك الذكاء الاصطناعي المسؤول عن إدارة الشركات المنافسة وإنتاجاتها الضخمة في عالم ${ctx.industryLabel}.
 سياق العالم الحالي: اليوم #${gameDay} من عام ${currentYear}. شركة اللاعب هي "${studioName}" بقيادة "${ceoName}".
 الشركات المنافسة النشطة في السوق: (${studios.slice(0, 8).join('، ')}).
 نجوم الصف الأول المتاحون للشركات المنافسة: (${stars.slice(0, 12).join('، ')}).
@@ -1393,8 +1409,8 @@ async function handleGenerateAiRivalReleases(
 
 المطلوب منك ابتكار عملين منافسين قويين جداً وعاليي الميزانية (${isSeries ? 'مسلسلات درامية ضخمة' : 'أفلام سينمائية ضخمة'}) تطرحها الشركات المنافسة الآن لتشعل المنافسة ضد "${studioName}" في شباك التذاكر والترتيب العام وموسم الجوائز السنوي.
 اجعل المنافسة شرسة وعالية جداً:
-- عناوين عربية مبتكرة وجذابة جداً وغير مكررة
-- إيرادات متوقعة ضخمة وواقعية (boxOfficeRevenue بين 95000000 و 245000000 ج.م)
+- عناوين مبتكرة وجذابة جداً تعكس روح ${ctx.industryLabel} وغير مكررة
+- إيرادات متوقعة ضخمة وواقعية (boxOfficeRevenue بين 95000000 و 245000000 ${ctx.currencyLabel})
 - تقييمات نقدية قوية (criticScore بين 7.5 و 9.2)
 
 أرجع كائن JSON فقط يحتوي على:
@@ -1487,44 +1503,22 @@ async function handleGenerateAiRivalReleases(
 }
 
 function buildGroundedRivalReleases(payload: Record<string, unknown>) {
+  const { profile, ctx } = resolveMarketContext(payload);
   const format = String(payload?.format || 'film');
   const isSeries = format === 'series';
-  const studios = normalizeNameList(payload?.competitorStudios, [
-    'المتحدون ميديا جروب',
-    'سيرجي للإنتاج الفني',
-    'العدلي جروب للدراما',
-    'نيو سينما للقرن الجديد',
-    'السباعي للإنتاج السينمائي',
-  ]);
-  const stars = normalizeNameList(payload?.availableStars, [
-    'كريم عبدون',
-    'أحمد عزمي',
-    'أمير كرم',
-    'منى زاهر',
-    'ياسمين العبد',
-  ]);
+  const studios = normalizeNameList(
+    payload?.competitorStudios,
+    ctx.fallbackRivalStudios
+  );
+  const stars = normalizeNameList(payload?.availableStars, ctx.fallbackStars);
 
   const sampleTitles = isSeries
-    ? [
-        'العهد السري',
-        'شارع السلطان',
-        'الوريث الأخير',
-        'ليالي المحروسة',
-        'دائرة الشك',
-        'متاهة القصر',
-        'خيط الدخان',
-        'أبواب الظل',
-      ]
-    : [
-        'الرصاصة الذهبية',
-        'خط النار',
-        'سر الغرفة 204',
-        'ليلة في الزمالك',
-        'طريق الهروب',
-        'الصفقة الكبرى',
-        'شفرة الميناء',
-        'الحصار الأخير',
-      ];
+    ? profile.rivalSeriesTitles.length > 0
+      ? profile.rivalSeriesTitles
+      : ['العهد السري', 'الوريث الأخير', 'دائرة الشك', 'متاهة القصر']
+    : profile.rivalFilmTitles.length > 0
+    ? profile.rivalFilmTitles
+    : ['الرصاصة الذهبية', 'خط النار', 'طريق الهروب', 'الصفقة الكبرى'];
 
   const seed = hashSeed(`${payload?.title || 'film'}_${studios[0] || ''}_${Date.now()}`);
   const count = 4;
@@ -1608,8 +1602,9 @@ function evaluateSilentScriptQuality(synopsis: string, title: string): number {
   return Math.min(96, Math.max(26, Math.round(lengthScore + structureScore + richnessScore + titleRelevance)));
 }
 
-function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>) {
-  const title = String(payload?.title || 'الفرعون الأخير');
+function buildGroundedReleaseEvaluation(payload: Record<string, unknown>) {
+  const { ctx } = resolveMarketContext(payload);
+  const title = String(payload?.title || 'العمل الفني الجديد');
   const synopsis = String(payload?.synopsis || '');
   const directorName = String(payload?.directorName || 'المخرج');
   const leadName = String(payload?.leadName || 'بطل العمل');
@@ -1647,6 +1642,12 @@ function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>
   const negScore = Number(Math.max(2.5, criticScore - 1.2).toFixed(1));
 
   const seed = hashSeed(`${title}_${leadName}_${directorName}`);
+  const criticA = ctx.fallbackCritics[0] || { name: 'ناقد أول', publication: 'الشاشة الذهبية' };
+  const criticB = ctx.fallbackCritics[1] || { name: 'ناقد ثانٍ', publication: 'سينما إنسايدر' };
+  const criticC = {
+    name: ctx.fallbackCritics[0]?.name ? `أ. ${ctx.fallbackCritics[0].name}` : 'ماجد الشريف',
+    publication: 'بوابة الفن السابع',
+  };
 
   const masterpieceQuotes = [
     `تحفة سينمائية متكاملة! معالجة «${title}» بداية من "${openingClause}" وحتى ذروة "${conflictClause}" تثبت نضج رؤية المخرج ${directorName}، وقدم ${leadName} واحداً من أعظم أدواره.`,
@@ -1677,32 +1678,32 @@ function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>
     box_office_multiplier,
     viral_trend_label:
       isMasterpiece
-        ? `#${title.replace(/\s+/g, '_')} إشادة نقدية وجماهيرية كاسحة بعمل الموسم`
+        ? `#${title.replace(/\s+/g, '_')} إشادة نقدية وجماهيرية كاسحة في ${ctx.trendHashtagLabel}`
         : audienceScore >= 7.8 && criticScore < 7.0
         ? `#${title.replace(/\s+/g, '_')} يكتسح شباك التذاكر رغم انقسام النقاد!`
         : criticScore >= 6.8
-        ? `#${title.replace(/\s+/g, '_')} يتصدر نقاشات الموسم بإقبال قوي`
+        ? `#${title.replace(/\s+/g, '_')} يتصدر ${ctx.trendHashtagLabel} بإقبال قوي`
         : `انتقادات حادة لحبكة «${title}» ومطالبات بمراجعة الاختيارات القادمة`,
     rival_releases: buildGroundedRivalReleases(payload),
     reviews: isMasterpiece
       ? [
           {
-            criticName: 'طارق الشهاوي',
-            publication: 'الشاشة الذهبية',
+            criticName: criticA.name,
+            publication: criticA.publication,
             sentiment: 'positive',
             quote: masterpieceQuotes[seed % masterpieceQuotes.length],
             score: Number(Math.min(9.8, criticScore + 0.4).toFixed(1)),
           },
           {
-            criticName: 'نديم محسن',
-            publication: 'سينما إنسايدر',
+            criticName: criticB.name,
+            publication: criticB.publication,
             sentiment: 'positive',
             quote: positiveQuotes[seed % positiveQuotes.length],
             score: criticScore,
           },
           {
-            criticName: 'ماجدة خيرت',
-            publication: 'بوابة الفن السابع',
+            criticName: criticC.name,
+            publication: criticC.publication,
             sentiment: 'positive',
             quote: `رغم تحفظي البسيط على إيقاع بعض مشاهد المنتصف، إلا أن «${title}» يظل علامة فنية فارقة هذا العام.`,
             score: Number(Math.max(7.8, criticScore - 0.5).toFixed(1)),
@@ -1711,22 +1712,22 @@ function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>
       : isWeak
       ? [
           {
-            criticName: 'ماجدة خيرت',
-            publication: 'بوابة الفن السابع',
+            criticName: criticC.name,
+            publication: criticC.publication,
             sentiment: 'negative',
             quote: negativeQuotes[seed % negativeQuotes.length],
             score: negScore,
           },
           {
-            criticName: 'نديم محسن',
-            publication: 'سينما إنسايدر',
+            criticName: criticB.name,
+            publication: criticB.publication,
             sentiment: 'negative',
             quote: negativeQuotes[(seed + 1) % negativeQuotes.length],
             score: criticScore,
           },
           {
-            criticName: 'طارق الشهاوي',
-            publication: 'الشاشة الذهبية',
+            criticName: criticA.name,
+            publication: criticA.publication,
             sentiment: 'mixed',
             quote: mixedQuotes[seed % mixedQuotes.length],
             score: Number(Math.min(6.5, criticScore + 0.7).toFixed(1)),
@@ -1734,22 +1735,22 @@ function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>
         ]
       : [
           {
-            criticName: 'طارق الشهاوي',
-            publication: 'الشاشة الذهبية',
+            criticName: criticA.name,
+            publication: criticA.publication,
             sentiment: posScore >= 7.0 ? 'positive' : 'mixed',
             quote: positiveQuotes[seed % positiveQuotes.length],
             score: posScore,
           },
           {
-            criticName: 'ماجدة خيرت',
-            publication: 'بوابة الفن السابع',
+            criticName: criticC.name,
+            publication: criticC.publication,
             sentiment: 'negative',
             quote: negativeQuotes[(seed + 1) % negativeQuotes.length],
             score: negScore,
           },
           {
-            criticName: 'نديم محسن',
-            publication: 'سينما إنسايدر',
+            criticName: criticB.name,
+            publication: criticB.publication,
             sentiment: 'mixed',
             quote: mixedQuotes[(seed + 2) % mixedQuotes.length],
             score: mixedScore,
@@ -1757,31 +1758,31 @@ function buildGroundedEgyptianReleaseEvaluation(payload: Record<string, unknown>
         ],
     social_posts: [
       {
-        handle: '@CinemaMasr_Fan',
+        handle: ctx.socialHandles[0],
         platform: 'X',
         content:
           audienceScore >= 8.0
             ? isSeries
-              ? `مسلسل «${title}» عامل حالة مش طبيعية.. مشهد "${openingClause}" وأداء ${leadName} خطفوا الموسم كله 🎬🔥`
-              : `لسه خارج من عرض «${title}» في السينما.. القاعة كلها سقفت في النهاية، ${leadName} عمل عظمة بجد! 🎬🔥`
+              ? `مسلسل «${title}» حديث الجمهور الليلة.. مشهد "${openingClause}" وأداء ${leadName} خطفوا الموسم كله 🎬🔥`
+              : `للتو خارج من عرض «${title}» في السينما.. القاعة كلها صفقت في النهاية، ${leadName} قدّم أداءً مذهلاً! 🎬🔥`
             : audienceScore >= 6.4
-            ? `«${title}» تجربة ممتعة ومسلية في المجمل، خصوصاً حضور ${leadName} رغم إن فيه شوية مط في النص 🍿`
-            : `بصراحة «${title}» كان أقل بكتير من التوقعات.. الفكرة كانت حلوة بس التنفيذ ضعيف للأسف 😕`,
+            ? `«${title}» تجربة ممتعة ومسلية في المجمل، خصوصاً حضور ${leadName} رغم بعض الإطالة في المنتصف 🍿`
+            : `بصراحة «${title}» كان أقل من التوقعات.. الفكرة كانت واعدة لكن التنفيذ لم يرتقِ للمستوى للأسف 😕`,
         likes: audienceScore >= 8.0 ? '54.2K' : audienceScore >= 6.5 ? '18.4K' : '6.1K',
       },
       {
-        handle: '@FilmCritic_Cairo',
+        handle: ctx.socialHandles[1],
         platform: 'X',
         content: `المواجهة بين ${leadName} و${antagonistName} في خط "${conflictClause}" هي النقطة الأبرز في «${title}».. تقييمي الواقعي ${criticScore}/10.`,
         likes: '12.8K',
       },
       {
-        handle: '@DramaTrends_EG',
+        handle: ctx.socialHandles[2],
         platform: 'TikTok',
         content:
           audienceScore >= 7.5
-            ? `نقاشات الجمهور مولعة على قفلة «${title}» ولحظة "${endingClause}".. العمل مسيطر على التريند 🍿✨`
-            : `آراء الجمهور متباينة جداً حول «${title}» بعد أول يوم عرض.. هل يستاهل التذكرة ولا لأ؟ 👀`,
+            ? `نقاشات الجمهور مشتعلة حول نهاية «${title}» ولحظة "${endingClause}".. العمل مسيطر على ${ctx.trendHashtagLabel} 🍿✨`
+            : `آراء الجمهور متباينة جداً حول «${title}» بعد أول يوم عرض.. هل يستحق التذكرة أم لا؟ 👀`,
         likes: audienceScore >= 7.5 ? '168K' : '44K',
       },
     ],
@@ -1793,7 +1794,8 @@ async function handleEvaluateRelease(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
-  const title = String(payload?.title || 'الفرعون الأخير');
+  const { ctx, directive } = resolveMarketContext(payload);
+  const title = String(payload?.title || 'العمل الفني الجديد');
   const synopsis = String(payload?.synopsis || '');
   const directorName = String(payload?.directorName || 'المخرج');
   const leadName = String(payload?.leadName || 'البطل');
@@ -1811,20 +1813,17 @@ async function handleEvaluateRelease(
   const format = String(payload?.format || 'film');
   const isSeries = format === 'series';
   const silentScriptScore = evaluateSilentScriptQuality(synopsis, title);
-  const competitorStudios = normalizeNameList(payload?.competitorStudios, [
-    'المتحدون ميديا جروب',
-    'سيرجي للإنتاج الفني',
-    'العدلي جروب للدراما',
-    'نيو سينما للقرن الجديد',
-  ]).join('، ');
-  const availableStars = normalizeNameList(payload?.availableStars, [
-    'كريم عبدون',
-    'أحمد عزمي',
-    'أمير كرم',
-    'منى زاهر',
-  ]).join('، ');
+  const competitorStudios = normalizeNameList(
+    payload?.competitorStudios,
+    ctx.fallbackRivalStudios
+  ).join('، ');
+  const availableStars = normalizeNameList(
+    payload?.availableStars,
+    ctx.fallbackStars
+  ).join('، ');
 
-  const systemPrompt = `أنت لجنة نقاد سينمائيين ودراميين مصريين ومحللي ${isSeries ? 'نسب مشاهدات المسلسلات والمنصات' : 'إيرادات شباك التذاكر السينمائي'}.
+  const systemPrompt = `${directive}
+أنت لجنة نقاد سينمائيين ودراميين ومحللي ${isSeries ? 'نسب مشاهدات المسلسلات والمنصات' : 'إيرادات شباك التذاكر السينمائي'} في ${ctx.industryLabel}.
 المطلوب منك تقييم العمل بعدالة وواقعية تامة (لا تقسُ على الأعمال الرائعة ولا تجامل الأعمال الضعيفة):
 - عنوان العمل: "${title}" (${isSeries ? 'مسلسل' : 'فيلم'} — تصنيف: ${genre})
 - نص السيناريو: "${synopsis}"
@@ -1945,7 +1944,7 @@ async function handleEvaluateRelease(
 
   return NextResponse.json({
     source: 'لجنة النقاد',
-    ...buildGroundedEgyptianReleaseEvaluation(payload),
+    ...buildGroundedReleaseEvaluation(payload),
   });
 }
 
@@ -1957,10 +1956,13 @@ async function handleGeneratePrMediaResponse(
   groqKeyOverride?: string,
   preferredModel?: string
 ) {
-  const studioName = String(payload?.studioName || 'العقرب ستوديوز');
+  const { profile, ctx, directive } = resolveMarketContext(payload);
+  const studioName = String(payload?.studioName || profile.defaultStudioName);
   const ceoName = String(payload?.ceoName || 'المنتج');
   const activeProjectTitle = String(payload?.activeProjectTitle || 'العمل الجديد');
-  const rivalStudioName = String(payload?.rivalStudioName || 'المتحدون ميديا جروب');
+  const rivalStudioName = String(
+    payload?.rivalStudioName || ctx.fallbackRivalStudios[0]
+  );
   const rivalFilmTitle = String(payload?.rivalFilmTitle || 'العمل المنافس');
   const campaignId = String(payload?.campaignId || 'support_film_trolls');
   const situationHeadline = String(payload?.situationHeadline || '');
@@ -1969,7 +1971,8 @@ async function handleGeneratePrMediaResponse(
   const isAttack =
     campaignId === 'rival_rumor_trolls' || campaignId === 'rival_smear_campaign';
 
-  const systemPrompt = `أنت محرك السوشيال ميديا والردود الإعلامية واللجان الإلكترونية في صناعة السينما المصرية والعربية.
+  const systemPrompt = `${directive}
+أنت محرك السوشيال ميديا والردود الإعلامية واللجان الإلكترونية في عالم ${ctx.industryLabel}.
 شركة اللاعب: "${studioName}" بقيادة "${ceoName}".
 عمل اللاعب الحالي: "${activeProjectTitle}".
 الشركة المنافسة المستهدفة: "${rivalStudioName}" وعملها "${rivalFilmTitle}".
@@ -1979,7 +1982,7 @@ ${customPlayerAngle ? `توجيه خاص من المنتج للرد الإعلا
 
 المطلوب:
 1. صياغة بيان أو عنوان رد إعلامي ناري وذكي جداً يناسب هذا الموقف تحديداً (officialStatement).
-2. توليد 3 منشورات تفاعلية حية على منصتي X و TikTok باللهجة المصرية السينمائية الطبيعية تتفاعل مع هذا الرد أو الإشاعة وتذكر أسماء الأعمال والشركات.
+2. توليد 3 منشورات تفاعلية حية على منصتي X و TikTok بـ ${ctx.dialectStyle} تتفاعل مع هذا الرد أو الإشاعة وتذكر أسماء الأعمال والشركات.
 3. تحديد التأثير الرقمي المنطقي على ضجة الفيلم (hypeDelta بين 8 و 22) والسمعة (reputationDelta بين -2 و 6).
 
 أرجع JSON فقط بهذا الشكل:
@@ -1992,7 +1995,7 @@ ${customPlayerAngle ? `توجيه خاص من المنتج للرد الإعلا
     {
       "platform": "X",
       "authorName": "اسم الحساب",
-      "handle": "@HandleEG",
+      "handle": "${ctx.socialHandles[0]}",
       "content": "نص التغريدة أو التعليق",
       "hashtag": "#هاشتاج_مناسب",
       "likes": "64.2K",
@@ -2001,7 +2004,7 @@ ${customPlayerAngle ? `توجيه خاص من المنتج للرد الإعلا
     {
       "platform": "TikTok",
       "authorName": "اسم صانع المحتوى",
-      "handle": "@CreatorEG",
+      "handle": "${ctx.socialHandles[2]}",
       "content": "نص الفيديو أو التعليق الرائج",
       "hashtag": "#هاشتاج_تيك_توك",
       "likes": "182K",
@@ -2025,7 +2028,7 @@ ${customPlayerAngle ? `توجيه خاص من المنتج للرد الإعلا
         id: `groq_pr_${Date.now()}_${idx}`,
         platform: p.platform === 'TikTok' ? ('TikTok' as const) : ('X' as const),
         authorName: String(p.authorName || 'ناقد سينمائي'),
-        handle: String(p.handle || '@CinemaTrendEG'),
+        handle: String(p.handle || ctx.socialHandles[idx % ctx.socialHandles.length]),
         content: String(p.content || ''),
         hashtag: String(p.hashtag || `#${activeProjectTitle.replace(/\s+/g, '_')}`),
         likes: String(p.likes || '52.4K'),
@@ -2054,7 +2057,7 @@ ${customPlayerAngle ? `توجيه خاص من المنتج للرد الإعلا
     ok: false,
     officialStatement: isAttack
       ? `تسريبات حصرية تكشف ارتباكاً داخل «${rivalStudioName}» وتراجع الحجوزات لـ «${rivalFilmTitle}» أمام زخم «${activeProjectTitle}»!`
-      : `المكتب الإعلامي لـ «${studioName}» يطلق حملة تفاعلية موسعة لـ «${activeProjectTitle}» تتصدر التريند المصري والعربي!`,
+      : `المكتب الإعلامي لـ «${studioName}» يطلق حملة تفاعلية موسعة لـ «${activeProjectTitle}» تتصدر ${ctx.trendHashtagLabel}!`,
     hypeDelta: 12,
     reputationDelta: 2,
     posts: [],

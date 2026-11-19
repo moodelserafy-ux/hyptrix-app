@@ -1,0 +1,4251 @@
+{
+  "meta": {
+    "pack_name": "السعودية والخليج — النسخة الرسمية",
+    "version": "1.0.0",
+    "targetMarket": "saudi"
+  },
+  "actors": [
+    {
+      "id": "sa_act_1",
+      "name": "سلطان المنيعي",
+      "gender": "male",
+      "age": 57,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 32500000,
+      "archetype": "أسطورة الكوميديا السعودية الساخرة والشباك",
+      "stats": {
+        "overall": 96,
+        "acting": 98,
+        "charisma": 95,
+        "box_office_pull": 97,
+        "ego": 90
+      },
+      "genre_mastery": {
+        "action": 72,
+        "popular_drama": 79,
+        "comedy": 97,
+        "light_comedy": 87,
+        "psychological_horror": 72,
+        "supernatural_horror": 79,
+        "crime_mystery": 72,
+        "sci_fi": 79,
+        "romance": 72,
+        "historical": 79,
+        "biography": 72,
+        "heist": 79,
+        "fantasy": 72,
+        "superhero": 79
+      }
+    },
+    {
+      "id": "sa_act_2",
+      "name": "حمدان العريفي",
+      "gender": "male",
+      "age": 58,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 34500000,
+      "archetype": "عميد الدراما الخليجية والكوميديا الاجتماعية",
+      "stats": {
+        "overall": 96,
+        "acting": 95,
+        "charisma": 94,
+        "box_office_pull": 98,
+        "ego": 91
+      },
+      "genre_mastery": {
+        "action": 79,
+        "popular_drama": 91,
+        "comedy": 94,
+        "light_comedy": 72,
+        "psychological_horror": 79,
+        "supernatural_horror": 72,
+        "crime_mystery": 79,
+        "sci_fi": 72,
+        "romance": 79,
+        "historical": 72,
+        "biography": 79,
+        "heist": 72,
+        "fantasy": 79,
+        "superhero": 72
+      }
+    },
+    {
+      "id": "sa_act_3",
+      "name": "بدران الخزاعي",
+      "gender": "male",
+      "age": 37,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 27000000,
+      "archetype": "نجم شباك السينما السعودية الحديثة والأكشن الكوميدي",
+      "stats": {
+        "overall": 90,
+        "acting": 91,
+        "charisma": 91,
+        "box_office_pull": 91,
+        "ego": 91
+      },
+      "genre_mastery": {
+        "action": 91,
+        "popular_drama": 66,
+        "comedy": 96,
+        "light_comedy": 66,
+        "psychological_horror": 73,
+        "supernatural_horror": 66,
+        "crime_mystery": 73,
+        "sci_fi": 66,
+        "romance": 73,
+        "historical": 66,
+        "biography": 73,
+        "heist": 66,
+        "fantasy": 73,
+        "superhero": 66
+      }
+    },
+    {
+      "id": "sa_act_4",
+      "name": "فواز البابطين",
+      "gender": "male",
+      "age": 54,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 30500000,
+      "archetype": "نجم الكوميديا الجماهيرية والبطولات العائلية",
+      "stats": {
+        "overall": 93,
+        "acting": 95,
+        "charisma": 95,
+        "box_office_pull": 96,
+        "ego": 81
+      },
+      "genre_mastery": {
+        "action": 69,
+        "popular_drama": 88,
+        "comedy": 69,
+        "light_comedy": 97,
+        "psychological_horror": 69,
+        "supernatural_horror": 76,
+        "crime_mystery": 69,
+        "sci_fi": 76,
+        "romance": 69,
+        "historical": 76,
+        "biography": 69,
+        "heist": 76,
+        "fantasy": 69,
+        "superhero": 76
+      }
+    },
+    {
+      "id": "sa_act_5",
+      "name": "راشد المرزوقي",
+      "gender": "male",
+      "age": 59,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 35000000,
+      "archetype": "إمبراطور الملاحم التاريخية والدراما الثقيلة",
+      "stats": {
+        "overall": 96,
+        "acting": 97,
+        "charisma": 98,
+        "box_office_pull": 98,
+        "ego": 88
+      },
+      "genre_mastery": {
+        "action": 72,
+        "popular_drama": 79,
+        "comedy": 72,
+        "light_comedy": 79,
+        "psychological_horror": 72,
+        "supernatural_horror": 79,
+        "crime_mystery": 86,
+        "sci_fi": 79,
+        "romance": 72,
+        "historical": 96,
+        "biography": 72,
+        "heist": 79,
+        "fantasy": 72,
+        "superhero": 79
+      }
+    },
+    {
+      "id": "sa_act_6",
+      "name": "ذيبان القثامي",
+      "gender": "male",
+      "age": 58,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 32500000,
+      "archetype": "عملاق المسرح الخليجي وشباك الأعياد",
+      "stats": {
+        "overall": 95,
+        "acting": 96,
+        "charisma": 96,
+        "box_office_pull": 98,
+        "ego": 87
+      },
+      "genre_mastery": {
+        "action": 71,
+        "popular_drama": 78,
+        "comedy": 96,
+        "light_comedy": 86,
+        "psychological_horror": 71,
+        "supernatural_horror": 78,
+        "crime_mystery": 71,
+        "sci_fi": 78,
+        "romance": 71,
+        "historical": 78,
+        "biography": 71,
+        "heist": 78,
+        "fantasy": 71,
+        "superhero": 78
+      }
+    },
+    {
+      "id": "sa_act_7",
+      "name": "مشاري البراهيم",
+      "gender": "male",
+      "age": 42,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 33500000,
+      "archetype": "نجم شباب المواسم الرمضانية والكوميديا",
+      "stats": {
+        "overall": 95,
+        "acting": 94,
+        "charisma": 93,
+        "box_office_pull": 98,
+        "ego": 91
+      },
+      "genre_mastery": {
+        "action": 71,
+        "popular_drama": 87,
+        "comedy": 71,
+        "light_comedy": 94,
+        "psychological_horror": 71,
+        "supernatural_horror": 78,
+        "crime_mystery": 71,
+        "sci_fi": 78,
+        "romance": 71,
+        "historical": 78,
+        "biography": 71,
+        "heist": 78,
+        "fantasy": 71,
+        "superhero": 78
+      }
+    },
+    {
+      "id": "sa_act_8",
+      "name": "غازي الفالح",
+      "gender": "male",
+      "age": 41,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 34500000,
+      "archetype": "أستاذ التشويق النفسي والجريمة والسينما",
+      "stats": {
+        "overall": 95,
+        "acting": 96,
+        "charisma": 93,
+        "box_office_pull": 98,
+        "ego": 93
+      },
+      "genre_mastery": {
+        "action": 71,
+        "popular_drama": 78,
+        "comedy": 71,
+        "light_comedy": 78,
+        "psychological_horror": 87,
+        "supernatural_horror": 78,
+        "crime_mystery": 96,
+        "sci_fi": 78,
+        "romance": 71,
+        "historical": 78,
+        "biography": 71,
+        "heist": 78,
+        "fantasy": 71,
+        "superhero": 78
+      }
+    },
+    {
+      "id": "sa_act_9",
+      "name": "نواف الصويان",
+      "gender": "male",
+      "age": 48,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 31000000,
+      "archetype": "عبقري التقمص والكاركترات الكوميدية",
+      "stats": {
+        "overall": 93,
+        "acting": 91,
+        "charisma": 91,
+        "box_office_pull": 97,
+        "ego": 86
+      },
+      "genre_mastery": {
+        "action": 76,
+        "popular_drama": 69,
+        "comedy": 93,
+        "light_comedy": 69,
+        "psychological_horror": 76,
+        "supernatural_horror": 69,
+        "crime_mystery": 76,
+        "sci_fi": 69,
+        "romance": 76,
+        "historical": 69,
+        "biography": 76,
+        "heist": 69,
+        "fantasy": 86,
+        "superhero": 69
+      }
+    },
+    {
+      "id": "sa_act_10",
+      "name": "سعود الملحم",
+      "gender": "male",
+      "age": 62,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 33000000,
+      "archetype": "مدرسة الكوميديا السوداء والدراما الوطنية",
+      "stats": {
+        "overall": 94,
+        "acting": 96,
+        "charisma": 94,
+        "box_office_pull": 97,
+        "ego": 83
+      },
+      "genre_mastery": {
+        "action": 77,
+        "popular_drama": 97,
+        "comedy": 87,
+        "light_comedy": 70,
+        "psychological_horror": 77,
+        "supernatural_horror": 70,
+        "crime_mystery": 77,
+        "sci_fi": 70,
+        "romance": 77,
+        "historical": 70,
+        "biography": 77,
+        "heist": 70,
+        "fantasy": 77,
+        "superhero": 70
+      }
+    },
+    {
+      "id": "sa_act_11",
+      "name": "عساف العجلاني",
+      "gender": "male",
+      "age": 44,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 15000000,
+      "archetype": "فارس الأكشن والمطاردات الصحراوية",
+      "stats": {
+        "overall": 84,
+        "acting": 84,
+        "charisma": 82,
+        "box_office_pull": 82,
+        "ego": 64
+      },
+      "genre_mastery": {
+        "action": 89,
+        "popular_drama": 63,
+        "comedy": 70,
+        "light_comedy": 63,
+        "psychological_horror": 70,
+        "supernatural_horror": 63,
+        "crime_mystery": 70,
+        "sci_fi": 63,
+        "romance": 70,
+        "historical": 63,
+        "biography": 70,
+        "heist": 84,
+        "fantasy": 70,
+        "superhero": 63
+      }
+    },
+    {
+      "id": "sa_act_12",
+      "name": "متعب الوهيبي",
+      "gender": "male",
+      "age": 51,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 14500000,
+      "archetype": "نجم الدراما الاجتماعية والتاريخية",
+      "stats": {
+        "overall": 82,
+        "acting": 80,
+        "charisma": 80,
+        "box_office_pull": 82,
+        "ego": 62
+      },
+      "genre_mastery": {
+        "action": 68,
+        "popular_drama": 61,
+        "comedy": 68,
+        "light_comedy": 61,
+        "psychological_horror": 68,
+        "supernatural_horror": 61,
+        "crime_mystery": 68,
+        "sci_fi": 61,
+        "romance": 68,
+        "historical": 87,
+        "biography": 84,
+        "heist": 61,
+        "fantasy": 68,
+        "superhero": 61
+      }
+    },
+    {
+      "id": "sa_act_13",
+      "name": "هزاع السويلم",
+      "gender": "male",
+      "age": 39,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 14500000,
+      "archetype": "بطل الملاحم البدوية والأكشن",
+      "stats": {
+        "overall": 84,
+        "acting": 83,
+        "charisma": 83,
+        "box_office_pull": 84,
+        "ego": 68
+      },
+      "genre_mastery": {
+        "action": 88,
+        "popular_drama": 65,
+        "comedy": 72,
+        "light_comedy": 65,
+        "psychological_horror": 72,
+        "supernatural_horror": 65,
+        "crime_mystery": 72,
+        "sci_fi": 65,
+        "romance": 72,
+        "historical": 80,
+        "biography": 72,
+        "heist": 65,
+        "fantasy": 72,
+        "superhero": 65
+      }
+    },
+    {
+      "id": "sa_act_14",
+      "name": "براك الهذلي",
+      "gender": "male",
+      "age": 36,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 17000000,
+      "archetype": "نجم التشويق والسطو والمنصات الحديثة",
+      "stats": {
+        "overall": 88,
+        "acting": 88,
+        "charisma": 86,
+        "box_office_pull": 86,
+        "ego": 64
+      },
+      "genre_mastery": {
+        "action": 60,
+        "popular_drama": 67,
+        "comedy": 60,
+        "light_comedy": 67,
+        "psychological_horror": 60,
+        "supernatural_horror": 67,
+        "crime_mystery": 81,
+        "sci_fi": 67,
+        "romance": 60,
+        "historical": 67,
+        "biography": 60,
+        "heist": 89,
+        "fantasy": 60,
+        "superhero": 67
+      }
+    },
+    {
+      "id": "sa_act_15",
+      "name": "ضاوي المريخي",
+      "gender": "male",
+      "age": 35,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 18000000,
+      "archetype": "نجم الكوميديا الشبابية في الرياض",
+      "stats": {
+        "overall": 88,
+        "acting": 87,
+        "charisma": 87,
+        "box_office_pull": 87,
+        "ego": 68
+      },
+      "genre_mastery": {
+        "action": 66,
+        "popular_drama": 73,
+        "comedy": 66,
+        "light_comedy": 88,
+        "psychological_horror": 66,
+        "supernatural_horror": 73,
+        "crime_mystery": 66,
+        "sci_fi": 73,
+        "romance": 81,
+        "historical": 73,
+        "biography": 66,
+        "heist": 73,
+        "fantasy": 66,
+        "superhero": 73
+      }
+    },
+    {
+      "id": "sa_act_16",
+      "name": "ليث البقمي",
+      "gender": "male",
+      "age": 33,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 18000000,
+      "archetype": "فارس الرومانسية والدراما العصرية",
+      "stats": {
+        "overall": 87,
+        "acting": 89,
+        "charisma": 87,
+        "box_office_pull": 87,
+        "ego": 71
+      },
+      "genre_mastery": {
+        "action": 67,
+        "popular_drama": 60,
+        "comedy": 67,
+        "light_comedy": 60,
+        "psychological_horror": 67,
+        "supernatural_horror": 60,
+        "crime_mystery": 85,
+        "sci_fi": 60,
+        "romance": 91,
+        "historical": 60,
+        "biography": 67,
+        "heist": 60,
+        "fantasy": 67,
+        "superhero": 60
+      }
+    },
+    {
+      "id": "sa_act_17",
+      "name": "صقر العبدلي",
+      "gender": "male",
+      "age": 39,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 14000000,
+      "archetype": "نجم الكوميديا الذكية والسينما المستقلة",
+      "stats": {
+        "overall": 84,
+        "acting": 86,
+        "charisma": 85,
+        "box_office_pull": 83,
+        "ego": 76
+      },
+      "genre_mastery": {
+        "action": 68,
+        "popular_drama": 61,
+        "comedy": 91,
+        "light_comedy": 61,
+        "psychological_horror": 68,
+        "supernatural_horror": 61,
+        "crime_mystery": 68,
+        "sci_fi": 82,
+        "romance": 68,
+        "historical": 61,
+        "biography": 68,
+        "heist": 61,
+        "fantasy": 68,
+        "superhero": 61
+      }
+    },
+    {
+      "id": "sa_act_18",
+      "name": "ثامر الغنيم",
+      "gender": "male",
+      "age": 44,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 18500000,
+      "archetype": "جوكر الدراما النفسية والتشويق",
+      "stats": {
+        "overall": 89,
+        "acting": 90,
+        "charisma": 87,
+        "box_office_pull": 89,
+        "ego": 65
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 68,
+        "comedy": 61,
+        "light_comedy": 68,
+        "psychological_horror": 90,
+        "supernatural_horror": 68,
+        "crime_mystery": 83,
+        "sci_fi": 68,
+        "romance": 61,
+        "historical": 68,
+        "biography": 61,
+        "heist": 68,
+        "fantasy": 61,
+        "superhero": 68
+      }
+    },
+    {
+      "id": "sa_act_19",
+      "name": "مهند البسامي",
+      "gender": "male",
+      "age": 42,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 18000000,
+      "archetype": "نجم البطولات الشعبية والحارة الخليجية",
+      "stats": {
+        "overall": 87,
+        "acting": 85,
+        "charisma": 86,
+        "box_office_pull": 88,
+        "ego": 67
+      },
+      "genre_mastery": {
+        "action": 83,
+        "popular_drama": 87,
+        "comedy": 71,
+        "light_comedy": 64,
+        "psychological_horror": 71,
+        "supernatural_horror": 64,
+        "crime_mystery": 71,
+        "sci_fi": 64,
+        "romance": 71,
+        "historical": 64,
+        "biography": 71,
+        "heist": 64,
+        "fantasy": 71,
+        "superhero": 64
+      }
+    },
+    {
+      "id": "sa_act_20",
+      "name": "زياد الصالحاني",
+      "gender": "male",
+      "age": 40,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 17000000,
+      "archetype": "نجم الأكشن والمغامرات في العلا",
+      "stats": {
+        "overall": 85,
+        "acting": 84,
+        "charisma": 85,
+        "box_office_pull": 86,
+        "ego": 73
+      },
+      "genre_mastery": {
+        "action": 88,
+        "popular_drama": 60,
+        "comedy": 67,
+        "light_comedy": 60,
+        "psychological_horror": 67,
+        "supernatural_horror": 60,
+        "crime_mystery": 67,
+        "sci_fi": 60,
+        "romance": 67,
+        "historical": 60,
+        "biography": 67,
+        "heist": 60,
+        "fantasy": 67,
+        "superhero": 82
+      }
+    },
+    {
+      "id": "sa_act_21",
+      "name": "عدنان الخثعمي",
+      "gender": "male",
+      "age": 41,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 14500000,
+      "archetype": "نجم الأعمال الموسيقية والرومانسية",
+      "stats": {
+        "overall": 84,
+        "acting": 82,
+        "charisma": 84,
+        "box_office_pull": 85,
+        "ego": 72
+      },
+      "genre_mastery": {
+        "action": 64,
+        "popular_drama": 71,
+        "comedy": 64,
+        "light_comedy": 84,
+        "psychological_horror": 64,
+        "supernatural_horror": 71,
+        "crime_mystery": 64,
+        "sci_fi": 71,
+        "romance": 87,
+        "historical": 71,
+        "biography": 64,
+        "heist": 71,
+        "fantasy": 64,
+        "superhero": 71
+      }
+    },
+    {
+      "id": "sa_act_22",
+      "name": "طارق الفوزان",
+      "gender": "male",
+      "age": 43,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 13000000,
+      "archetype": "نجم الإثارة والغموض الخليجي",
+      "stats": {
+        "overall": 82,
+        "acting": 81,
+        "charisma": 84,
+        "box_office_pull": 80,
+        "ego": 78
+      },
+      "genre_mastery": {
+        "action": 60,
+        "popular_drama": 84,
+        "comedy": 60,
+        "light_comedy": 67,
+        "psychological_horror": 60,
+        "supernatural_horror": 67,
+        "crime_mystery": 88,
+        "sci_fi": 67,
+        "romance": 60,
+        "historical": 67,
+        "biography": 60,
+        "heist": 67,
+        "fantasy": 60,
+        "superhero": 67
+      }
+    },
+    {
+      "id": "sa_act_23",
+      "name": "جاسم الدخيل",
+      "gender": "male",
+      "age": 39,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 13500000,
+      "archetype": "بطل الدراما العصرية والمنصات",
+      "stats": {
+        "overall": 82,
+        "acting": 83,
+        "charisma": 82,
+        "box_office_pull": 81,
+        "ego": 70
+      },
+      "genre_mastery": {
+        "action": 70,
+        "popular_drama": 90,
+        "comedy": 70,
+        "light_comedy": 63,
+        "psychological_horror": 70,
+        "supernatural_horror": 63,
+        "crime_mystery": 70,
+        "sci_fi": 63,
+        "romance": 82,
+        "historical": 63,
+        "biography": 70,
+        "heist": 63,
+        "fantasy": 70,
+        "superhero": 63
+      }
+    },
+    {
+      "id": "sa_act_24",
+      "name": "هشام السماعيل",
+      "gender": "male",
+      "age": 38,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 14000000,
+      "archetype": "نجم أفلام الأكشن والكوميديا الشبابية",
+      "stats": {
+        "overall": 82,
+        "acting": 82,
+        "charisma": 83,
+        "box_office_pull": 81,
+        "ego": 74
+      },
+      "genre_mastery": {
+        "action": 89,
+        "popular_drama": 61,
+        "comedy": 80,
+        "light_comedy": 61,
+        "psychological_horror": 68,
+        "supernatural_horror": 61,
+        "crime_mystery": 68,
+        "sci_fi": 61,
+        "romance": 68,
+        "historical": 61,
+        "biography": 68,
+        "heist": 61,
+        "fantasy": 68,
+        "superhero": 61
+      }
+    },
+    {
+      "id": "sa_act_25",
+      "name": "عمار الماجداني",
+      "gender": "male",
+      "age": 36,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 18000000,
+      "archetype": "كوميديان المواقف السريعة والارتجال",
+      "stats": {
+        "overall": 89,
+        "acting": 90,
+        "charisma": 87,
+        "box_office_pull": 89,
+        "ego": 65
+      },
+      "genre_mastery": {
+        "action": 67,
+        "popular_drama": 60,
+        "comedy": 90,
+        "light_comedy": 60,
+        "psychological_horror": 67,
+        "supernatural_horror": 60,
+        "crime_mystery": 67,
+        "sci_fi": 60,
+        "romance": 67,
+        "historical": 60,
+        "biography": 67,
+        "heist": 83,
+        "fantasy": 67,
+        "superhero": 60
+      }
+    },
+    {
+      "id": "sa_act_26",
+      "name": "منصور الغفيلي",
+      "gender": "male",
+      "age": 52,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 13500000,
+      "archetype": "عملاق الشخصيات المركبة والشر الدرامي",
+      "stats": {
+        "overall": 83,
+        "acting": 85,
+        "charisma": 83,
+        "box_office_pull": 81,
+        "ego": 71
+      },
+      "genre_mastery": {
+        "action": 73,
+        "popular_drama": 66,
+        "comedy": 73,
+        "light_comedy": 66,
+        "psychological_horror": 73,
+        "supernatural_horror": 66,
+        "crime_mystery": 91,
+        "sci_fi": 66,
+        "romance": 73,
+        "historical": 82,
+        "biography": 73,
+        "heist": 66,
+        "fantasy": 73,
+        "superhero": 66
+      }
+    },
+    {
+      "id": "sa_act_27",
+      "name": "حسام الجبرين",
+      "gender": "male",
+      "age": 41,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 18000000,
+      "archetype": "نجم التحقيقات والغموض النفسي",
+      "stats": {
+        "overall": 88,
+        "acting": 89,
+        "charisma": 90,
+        "box_office_pull": 87,
+        "ego": 80
+      },
+      "genre_mastery": {
+        "action": 62,
+        "popular_drama": 69,
+        "comedy": 62,
+        "light_comedy": 69,
+        "psychological_horror": 90,
+        "supernatural_horror": 81,
+        "crime_mystery": 62,
+        "sci_fi": 69,
+        "romance": 62,
+        "historical": 69,
+        "biography": 62,
+        "heist": 69,
+        "fantasy": 62,
+        "superhero": 69
+      }
+    },
+    {
+      "id": "sa_act_28",
+      "name": "وليد النفيعي",
+      "gender": "male",
+      "age": 40,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 19000000,
+      "archetype": "نجم البطولات الشعبية والصحراوية",
+      "stats": {
+        "overall": 88,
+        "acting": 88,
+        "charisma": 86,
+        "box_office_pull": 89,
+        "ego": 64
+      },
+      "genre_mastery": {
+        "action": 62,
+        "popular_drama": 89,
+        "comedy": 62,
+        "light_comedy": 69,
+        "psychological_horror": 62,
+        "supernatural_horror": 69,
+        "crime_mystery": 62,
+        "sci_fi": 69,
+        "romance": 62,
+        "historical": 85,
+        "biography": 62,
+        "heist": 69,
+        "fantasy": 62,
+        "superhero": 69
+      }
+    },
+    {
+      "id": "sa_act_29",
+      "name": "راكان الطويرقي",
+      "gender": "male",
+      "age": 29,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8000000,
+      "archetype": "نجم شباك الجيل الجديد في جدة",
+      "stats": {
+        "overall": 80,
+        "acting": 82,
+        "charisma": 79,
+        "box_office_pull": 78,
+        "ego": 49
+      },
+      "genre_mastery": {
+        "action": 85,
+        "popular_drama": 59,
+        "comedy": 66,
+        "light_comedy": 78,
+        "psychological_horror": 66,
+        "supernatural_horror": 59,
+        "crime_mystery": 66,
+        "sci_fi": 59,
+        "romance": 66,
+        "historical": 59,
+        "biography": 66,
+        "heist": 59,
+        "fantasy": 66,
+        "superhero": 59
+      }
+    },
+    {
+      "id": "sa_act_30",
+      "name": "فارس الشثري",
+      "gender": "male",
+      "age": 31,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 5000000,
+      "archetype": "موهبة الكوميديا العائلية والمنصات",
+      "stats": {
+        "overall": 73,
+        "acting": 72,
+        "charisma": 73,
+        "box_office_pull": 71,
+        "ego": 56
+      },
+      "genre_mastery": {
+        "action": 57,
+        "popular_drama": 64,
+        "comedy": 77,
+        "light_comedy": 82,
+        "psychological_horror": 57,
+        "supernatural_horror": 64,
+        "crime_mystery": 57,
+        "sci_fi": 64,
+        "romance": 57,
+        "historical": 64,
+        "biography": 57,
+        "heist": 64,
+        "fantasy": 57,
+        "superhero": 64
+      }
+    },
+    {
+      "id": "sa_act_31",
+      "name": "نادر الصقيه",
+      "gender": "male",
+      "age": 33,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 6000000,
+      "archetype": "بطل الرعب الروحاني والتشويق",
+      "stats": {
+        "overall": 75,
+        "acting": 73,
+        "charisma": 75,
+        "box_office_pull": 73,
+        "ego": 55
+      },
+      "genre_mastery": {
+        "action": 54,
+        "popular_drama": 61,
+        "comedy": 54,
+        "light_comedy": 61,
+        "psychological_horror": 74,
+        "supernatural_horror": 81,
+        "crime_mystery": 54,
+        "sci_fi": 61,
+        "romance": 54,
+        "historical": 61,
+        "biography": 54,
+        "heist": 61,
+        "fantasy": 54,
+        "superhero": 61
+      }
+    },
+    {
+      "id": "sa_act_32",
+      "name": "خالد البريك",
+      "gender": "male",
+      "age": 45,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7000000,
+      "archetype": "نجم الدراما الحجازية والكوميديا",
+      "stats": {
+        "overall": 76,
+        "acting": 77,
+        "charisma": 74,
+        "box_office_pull": 77,
+        "ego": 48
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 84,
+        "comedy": 77,
+        "light_comedy": 54,
+        "psychological_horror": 61,
+        "supernatural_horror": 54,
+        "crime_mystery": 61,
+        "sci_fi": 54,
+        "romance": 61,
+        "historical": 54,
+        "biography": 61,
+        "heist": 54,
+        "fantasy": 61,
+        "superhero": 54
+      }
+    },
+    {
+      "id": "sa_act_33",
+      "name": "أنس الحجيلان",
+      "gender": "male",
+      "age": 46,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 6000000,
+      "archetype": "صاحب الحضور الدرامي الأصيل",
+      "stats": {
+        "overall": 74,
+        "acting": 72,
+        "charisma": 72,
+        "box_office_pull": 74,
+        "ego": 45
+      },
+      "genre_mastery": {
+        "action": 60,
+        "popular_drama": 78,
+        "comedy": 60,
+        "light_comedy": 67,
+        "psychological_horror": 60,
+        "supernatural_horror": 67,
+        "crime_mystery": 60,
+        "sci_fi": 67,
+        "romance": 60,
+        "historical": 81,
+        "biography": 60,
+        "heist": 67,
+        "fantasy": 60,
+        "superhero": 67
+      }
+    },
+    {
+      "id": "sa_act_34",
+      "name": "معاذ الرميح",
+      "gender": "male",
+      "age": 55,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8500000,
+      "archetype": "رمز الوقار والأدوار القيادية",
+      "stats": {
+        "overall": 80,
+        "acting": 78,
+        "charisma": 79,
+        "box_office_pull": 81,
+        "ego": 50
+      },
+      "genre_mastery": {
+        "action": 55,
+        "popular_drama": 62,
+        "comedy": 55,
+        "light_comedy": 62,
+        "psychological_horror": 55,
+        "supernatural_horror": 62,
+        "crime_mystery": 55,
+        "sci_fi": 62,
+        "romance": 55,
+        "historical": 77,
+        "biography": 81,
+        "heist": 62,
+        "fantasy": 55,
+        "superhero": 62
+      }
+    },
+    {
+      "id": "sa_act_35",
+      "name": "سالم الدريهم",
+      "gender": "male",
+      "age": 59,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 5000000,
+      "archetype": "أيقونة الكوميديا العائلية",
+      "stats": {
+        "overall": 73,
+        "acting": 74,
+        "charisma": 71,
+        "box_office_pull": 71,
+        "ego": 48
+      },
+      "genre_mastery": {
+        "action": 67,
+        "popular_drama": 60,
+        "comedy": 77,
+        "light_comedy": 84,
+        "psychological_horror": 67,
+        "supernatural_horror": 60,
+        "crime_mystery": 67,
+        "sci_fi": 60,
+        "romance": 67,
+        "historical": 60,
+        "biography": 67,
+        "heist": 60,
+        "fantasy": 67,
+        "superhero": 60
+      }
+    },
+    {
+      "id": "sa_act_36",
+      "name": "يوسف العرفج",
+      "gender": "male",
+      "age": 49,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8000000,
+      "archetype": "ملك الكاركترات والتقليد الكوميدي",
+      "stats": {
+        "overall": 79,
+        "acting": 79,
+        "charisma": 81,
+        "box_office_pull": 80,
+        "ego": 62
+      },
+      "genre_mastery": {
+        "action": 59,
+        "popular_drama": 66,
+        "comedy": 83,
+        "light_comedy": 66,
+        "psychological_horror": 59,
+        "supernatural_horror": 66,
+        "crime_mystery": 59,
+        "sci_fi": 66,
+        "romance": 59,
+        "historical": 66,
+        "biography": 59,
+        "heist": 66,
+        "fantasy": 76,
+        "superhero": 66
+      }
+    },
+    {
+      "id": "sa_act_37",
+      "name": "عمر البازعي",
+      "gender": "male",
+      "age": 44,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 9000000,
+      "archetype": "نجم الكوميديا الارتجالية الشبابية",
+      "stats": {
+        "overall": 81,
+        "acting": 81,
+        "charisma": 83,
+        "box_office_pull": 82,
+        "ego": 62
+      },
+      "genre_mastery": {
+        "action": 65,
+        "popular_drama": 58,
+        "comedy": 83,
+        "light_comedy": 75,
+        "psychological_horror": 65,
+        "supernatural_horror": 58,
+        "crime_mystery": 65,
+        "sci_fi": 58,
+        "romance": 65,
+        "historical": 58,
+        "biography": 65,
+        "heist": 58,
+        "fantasy": 65,
+        "superhero": 58
+      }
+    },
+    {
+      "id": "sa_act_38",
+      "name": "ماجد الطريقي",
+      "gender": "male",
+      "age": 28,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 6000000,
+      "archetype": "نجم أفلام المهرجانات السعودية الشاب",
+      "stats": {
+        "overall": 74,
+        "acting": 72,
+        "charisma": 72,
+        "box_office_pull": 74,
+        "ego": 45
+      },
+      "genre_mastery": {
+        "action": 58,
+        "popular_drama": 65,
+        "comedy": 58,
+        "light_comedy": 65,
+        "psychological_horror": 58,
+        "supernatural_horror": 65,
+        "crime_mystery": 78,
+        "sci_fi": 65,
+        "romance": 58,
+        "historical": 65,
+        "biography": 81,
+        "heist": 65,
+        "fantasy": 58,
+        "superhero": 65
+      }
+    },
+    {
+      "id": "sa_act_39",
+      "name": "فيصل الزومان",
+      "gender": "male",
+      "age": 32,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7500000,
+      "archetype": "موهبة الخيال العلمي والأكشن العصري",
+      "stats": {
+        "overall": 79,
+        "acting": 79,
+        "charisma": 81,
+        "box_office_pull": 78,
+        "ego": 62
+      },
+      "genre_mastery": {
+        "action": 79,
+        "popular_drama": 64,
+        "comedy": 57,
+        "light_comedy": 64,
+        "psychological_horror": 57,
+        "supernatural_horror": 64,
+        "crime_mystery": 57,
+        "sci_fi": 83,
+        "romance": 57,
+        "historical": 64,
+        "biography": 57,
+        "heist": 64,
+        "fantasy": 57,
+        "superhero": 64
+      }
+    },
+    {
+      "id": "sa_act_40",
+      "name": "تركي المقحم",
+      "gender": "male",
+      "age": 38,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7000000,
+      "archetype": "نجم الكوميديا الاجتماعية بالرياض",
+      "stats": {
+        "overall": 77,
+        "acting": 76,
+        "charisma": 77,
+        "box_office_pull": 75,
+        "ego": 56
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 75,
+        "comedy": 61,
+        "light_comedy": 82,
+        "psychological_horror": 61,
+        "supernatural_horror": 54,
+        "crime_mystery": 61,
+        "sci_fi": 54,
+        "romance": 61,
+        "historical": 54,
+        "biography": 61,
+        "heist": 54,
+        "fantasy": 61,
+        "superhero": 54
+      }
+    },
+    {
+      "id": "sa_act_41",
+      "name": "بندر الهويمل",
+      "gender": "male",
+      "age": 35,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7500000,
+      "archetype": "نجم السينما الشابة وأفلام المغامرة",
+      "stats": {
+        "overall": 78,
+        "acting": 76,
+        "charisma": 79,
+        "box_office_pull": 79,
+        "ego": 60
+      },
+      "genre_mastery": {
+        "action": 55,
+        "popular_drama": 62,
+        "comedy": 79,
+        "light_comedy": 62,
+        "psychological_horror": 55,
+        "supernatural_horror": 62,
+        "crime_mystery": 55,
+        "sci_fi": 62,
+        "romance": 55,
+        "historical": 62,
+        "biography": 55,
+        "heist": 81,
+        "fantasy": 55,
+        "superhero": 62
+      }
+    },
+    {
+      "id": "sa_act_42",
+      "name": "سعد المسعودي",
+      "gender": "male",
+      "age": 36,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 6000000,
+      "archetype": "موهبة الأداء الواقعي والغموض",
+      "stats": {
+        "overall": 74,
+        "acting": 75,
+        "charisma": 76,
+        "box_office_pull": 73,
+        "ego": 63
+      },
+      "genre_mastery": {
+        "action": 62,
+        "popular_drama": 55,
+        "comedy": 62,
+        "light_comedy": 55,
+        "psychological_horror": 76,
+        "supernatural_horror": 55,
+        "crime_mystery": 84,
+        "sci_fi": 55,
+        "romance": 62,
+        "historical": 55,
+        "biography": 62,
+        "heist": 55,
+        "fantasy": 62,
+        "superhero": 55
+      }
+    },
+    {
+      "id": "sa_act_43",
+      "name": "نايف الخليوي",
+      "gender": "male",
+      "age": 30,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8000000,
+      "archetype": "نجم الرومانسية والشباب الخليجي",
+      "stats": {
+        "overall": 79,
+        "acting": 81,
+        "charisma": 78,
+        "box_office_pull": 80,
+        "ego": 49
+      },
+      "genre_mastery": {
+        "action": 56,
+        "popular_drama": 63,
+        "comedy": 56,
+        "light_comedy": 74,
+        "psychological_horror": 56,
+        "supernatural_horror": 63,
+        "crime_mystery": 56,
+        "sci_fi": 63,
+        "romance": 85,
+        "historical": 63,
+        "biography": 56,
+        "heist": 63,
+        "fantasy": 56,
+        "superhero": 63
+      }
+    },
+    {
+      "id": "sa_act_44",
+      "name": "عادل المنقور",
+      "gender": "male",
+      "age": 47,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7000000,
+      "archetype": "نجم الدراما الأسرية والتاريخية",
+      "stats": {
+        "overall": 78,
+        "acting": 76,
+        "charisma": 77,
+        "box_office_pull": 76,
+        "ego": 50
+      },
+      "genre_mastery": {
+        "action": 63,
+        "popular_drama": 81,
+        "comedy": 63,
+        "light_comedy": 56,
+        "psychological_horror": 63,
+        "supernatural_horror": 56,
+        "crime_mystery": 63,
+        "sci_fi": 56,
+        "romance": 63,
+        "historical": 56,
+        "biography": 75,
+        "heist": 56,
+        "fantasy": 63,
+        "superhero": 56
+      }
+    },
+    {
+      "id": "sa_act_45",
+      "name": "كريم الجاسري",
+      "gender": "male",
+      "age": 68,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7500000,
+      "archetype": "خبير الأدوار التراثية والكبيرة",
+      "stats": {
+        "overall": 78,
+        "acting": 77,
+        "charisma": 76,
+        "box_office_pull": 77,
+        "ego": 46
+      },
+      "genre_mastery": {
+        "action": 65,
+        "popular_drama": 58,
+        "comedy": 65,
+        "light_comedy": 58,
+        "psychological_horror": 65,
+        "supernatural_horror": 58,
+        "crime_mystery": 65,
+        "sci_fi": 58,
+        "romance": 65,
+        "historical": 82,
+        "biography": 78,
+        "heist": 58,
+        "fantasy": 65,
+        "superhero": 58
+      }
+    },
+    {
+      "id": "sa_act_46",
+      "name": "إياد المعيوف",
+      "gender": "male",
+      "age": 74,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7000000,
+      "archetype": "عميد الأدوار الأبوية الدافئة",
+      "stats": {
+        "overall": 77,
+        "acting": 78,
+        "charisma": 77,
+        "box_office_pull": 75,
+        "ego": 53
+      },
+      "genre_mastery": {
+        "action": 62,
+        "popular_drama": 84,
+        "comedy": 62,
+        "light_comedy": 75,
+        "psychological_horror": 62,
+        "supernatural_horror": 55,
+        "crime_mystery": 62,
+        "sci_fi": 55,
+        "romance": 62,
+        "historical": 55,
+        "biography": 62,
+        "heist": 55,
+        "fantasy": 62,
+        "superhero": 55
+      }
+    },
+    {
+      "id": "sa_act_47",
+      "name": "مروان القفاري",
+      "gender": "male",
+      "age": 27,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 5500000,
+      "archetype": "نجم الفانتازيا والمغامرات الشابة",
+      "stats": {
+        "overall": 73,
+        "acting": 71,
+        "charisma": 73,
+        "box_office_pull": 73,
+        "ego": 55
+      },
+      "genre_mastery": {
+        "action": 56,
+        "popular_drama": 63,
+        "comedy": 56,
+        "light_comedy": 63,
+        "psychological_horror": 56,
+        "supernatural_horror": 63,
+        "crime_mystery": 56,
+        "sci_fi": 63,
+        "romance": 56,
+        "historical": 63,
+        "biography": 56,
+        "heist": 63,
+        "fantasy": 81,
+        "superhero": 75
+      }
+    },
+    {
+      "id": "sa_act_48",
+      "name": "حازم الفريان",
+      "gender": "male",
+      "age": 34,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8000000,
+      "archetype": "بطل التحقيقات والسطو الذكي",
+      "stats": {
+        "overall": 80,
+        "acting": 81,
+        "charisma": 80,
+        "box_office_pull": 78,
+        "ego": 53
+      },
+      "genre_mastery": {
+        "action": 78,
+        "popular_drama": 59,
+        "comedy": 66,
+        "light_comedy": 59,
+        "psychological_horror": 66,
+        "supernatural_horror": 59,
+        "crime_mystery": 66,
+        "sci_fi": 59,
+        "romance": 66,
+        "historical": 59,
+        "biography": 66,
+        "heist": 84,
+        "fantasy": 66,
+        "superhero": 59
+      }
+    },
+    {
+      "id": "sa_act_49",
+      "name": "ريان الجريسي",
+      "gender": "male",
+      "age": 25,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 3400000,
+      "archetype": "وجه صاعد من مسرح الرياض",
+      "stats": {
+        "overall": 72,
+        "acting": 72,
+        "charisma": 71,
+        "box_office_pull": 73,
+        "ego": 47
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 54,
+        "comedy": 77,
+        "light_comedy": 73,
+        "psychological_horror": 61,
+        "supernatural_horror": 54,
+        "crime_mystery": 61,
+        "sci_fi": 54,
+        "romance": 61,
+        "historical": 54,
+        "biography": 61,
+        "heist": 54,
+        "fantasy": 61,
+        "superhero": 54
+      }
+    },
+    {
+      "id": "sa_act_50",
+      "name": "ضاري العتيق",
+      "gender": "male",
+      "age": 24,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2400000,
+      "archetype": "موهبة شابة في أفلام الإثارة القصيرة",
+      "stats": {
+        "overall": 67,
+        "acting": 67,
+        "charisma": 69,
+        "box_office_pull": 66,
+        "ego": 33
+      },
+      "genre_mastery": {
+        "action": 73,
+        "popular_drama": 58,
+        "comedy": 51,
+        "light_comedy": 58,
+        "psychological_horror": 51,
+        "supernatural_horror": 58,
+        "crime_mystery": 77,
+        "sci_fi": 58,
+        "romance": 51,
+        "historical": 58,
+        "biography": 51,
+        "heist": 58,
+        "fantasy": 51,
+        "superhero": 58
+      }
+    },
+    {
+      "id": "sa_act_51",
+      "name": "عزام الدبيان",
+      "gender": "male",
+      "age": 26,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 3200000,
+      "archetype": "طاقة كوميدية جديدة من الدمام",
+      "stats": {
+        "overall": 72,
+        "acting": 73,
+        "charisma": 74,
+        "box_office_pull": 70,
+        "ego": 38
+      },
+      "genre_mastery": {
+        "action": 48,
+        "popular_drama": 55,
+        "comedy": 71,
+        "light_comedy": 78,
+        "psychological_horror": 48,
+        "supernatural_horror": 55,
+        "crime_mystery": 48,
+        "sci_fi": 55,
+        "romance": 48,
+        "historical": 55,
+        "biography": 48,
+        "heist": 55,
+        "fantasy": 48,
+        "superhero": 55
+      }
+    },
+    {
+      "id": "sa_act_52",
+      "name": "هتان الباهلي",
+      "gender": "male",
+      "age": 23,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2800000,
+      "archetype": "وجه جديد في سينما جدة المستقلة",
+      "stats": {
+        "overall": 70,
+        "acting": 70,
+        "charisma": 72,
+        "box_office_pull": 68,
+        "ego": 45
+      },
+      "genre_mastery": {
+        "action": 59,
+        "popular_drama": 70,
+        "comedy": 59,
+        "light_comedy": 52,
+        "psychological_horror": 59,
+        "supernatural_horror": 52,
+        "crime_mystery": 59,
+        "sci_fi": 52,
+        "romance": 77,
+        "historical": 52,
+        "biography": 59,
+        "heist": 52,
+        "fantasy": 59,
+        "superhero": 52
+      }
+    },
+    {
+      "id": "sa_act_53",
+      "name": "باسل الشبيلي",
+      "gender": "male",
+      "age": 27,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 3300000,
+      "archetype": "موهبة رعب نفسي وغموض",
+      "stats": {
+        "overall": 72,
+        "acting": 71,
+        "charisma": 74,
+        "box_office_pull": 71,
+        "ego": 38
+      },
+      "genre_mastery": {
+        "action": 56,
+        "popular_drama": 49,
+        "comedy": 56,
+        "light_comedy": 49,
+        "psychological_horror": 76,
+        "supernatural_horror": 73,
+        "crime_mystery": 56,
+        "sci_fi": 49,
+        "romance": 56,
+        "historical": 49,
+        "biography": 56,
+        "heist": 49,
+        "fantasy": 56,
+        "superhero": 49
+      }
+    },
+    {
+      "id": "sa_act_54",
+      "name": "زيد الصبيحي",
+      "gender": "male",
+      "age": 25,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2200000,
+      "archetype": "نجم مسرح الجامعات والخيال العلمي",
+      "stats": {
+        "overall": 66,
+        "acting": 67,
+        "charisma": 64,
+        "box_office_pull": 64,
+        "ego": 41
+      },
+      "genre_mastery": {
+        "action": 57,
+        "popular_drama": 50,
+        "comedy": 57,
+        "light_comedy": 50,
+        "psychological_horror": 57,
+        "supernatural_horror": 50,
+        "crime_mystery": 57,
+        "sci_fi": 78,
+        "romance": 57,
+        "historical": 50,
+        "biography": 57,
+        "heist": 50,
+        "fantasy": 73,
+        "superhero": 50
+      }
+    },
+    {
+      "id": "sa_act_55",
+      "name": "يامن الحسينان",
+      "gender": "male",
+      "age": 22,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2700000,
+      "archetype": "وجه سينمائي صاعد من مهرجان الظهران",
+      "stats": {
+        "overall": 68,
+        "acting": 70,
+        "charisma": 69,
+        "box_office_pull": 69,
+        "ego": 34
+      },
+      "genre_mastery": {
+        "action": 48,
+        "popular_drama": 55,
+        "comedy": 48,
+        "light_comedy": 55,
+        "psychological_horror": 48,
+        "supernatural_horror": 55,
+        "crime_mystery": 48,
+        "sci_fi": 55,
+        "romance": 48,
+        "historical": 73,
+        "biography": 79,
+        "heist": 55,
+        "fantasy": 48,
+        "superhero": 55
+      }
+    },
+    {
+      "id": "sa_act_56",
+      "name": "قيس الدغيثر",
+      "gender": "male",
+      "age": 28,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 3300000,
+      "archetype": "موهبة أدوار مساعدة متقنة",
+      "stats": {
+        "overall": 72,
+        "acting": 72,
+        "charisma": 73,
+        "box_office_pull": 72,
+        "ego": 38
+      },
+      "genre_mastery": {
+        "action": 60,
+        "popular_drama": 77,
+        "comedy": 60,
+        "light_comedy": 53,
+        "psychological_horror": 60,
+        "supernatural_horror": 53,
+        "crime_mystery": 73,
+        "sci_fi": 53,
+        "romance": 60,
+        "historical": 53,
+        "biography": 60,
+        "heist": 53,
+        "fantasy": 60,
+        "superhero": 53
+      }
+    },
+    {
+      "id": "sa_act_57",
+      "name": "وسام القنيبط",
+      "gender": "male",
+      "age": 29,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2300000,
+      "archetype": "كوميديان صاعد من منصات المحتوى",
+      "stats": {
+        "overall": 67,
+        "acting": 65,
+        "charisma": 67,
+        "box_office_pull": 65,
+        "ego": 42
+      },
+      "genre_mastery": {
+        "action": 52,
+        "popular_drama": 59,
+        "comedy": 75,
+        "light_comedy": 59,
+        "psychological_horror": 52,
+        "supernatural_horror": 59,
+        "crime_mystery": 52,
+        "sci_fi": 59,
+        "romance": 52,
+        "historical": 59,
+        "biography": 52,
+        "heist": 72,
+        "fantasy": 52,
+        "superhero": 59
+      }
+    },
+    {
+      "id": "sa_act_58",
+      "name": "لؤي الحضيف",
+      "gender": "male",
+      "age": 26,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 3200000,
+      "archetype": "نجم أكشن شاب ولياقة بدنية عالية",
+      "stats": {
+        "overall": 71,
+        "acting": 71,
+        "charisma": 69,
+        "box_office_pull": 72,
+        "ego": 46
+      },
+      "genre_mastery": {
+        "action": 77,
+        "popular_drama": 57,
+        "comedy": 50,
+        "light_comedy": 57,
+        "psychological_horror": 50,
+        "supernatural_horror": 57,
+        "crime_mystery": 50,
+        "sci_fi": 57,
+        "romance": 50,
+        "historical": 57,
+        "biography": 50,
+        "heist": 57,
+        "fantasy": 50,
+        "superhero": 70
+      }
+    },
+    {
+      "id": "sa_act_59",
+      "name": "منيرة السويلم",
+      "gender": "female",
+      "age": 72,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 30000000,
+      "archetype": "سندريلا وعميدة الدراما الخليجية",
+      "stats": {
+        "overall": 92,
+        "acting": 94,
+        "charisma": 91,
+        "box_office_pull": 96,
+        "ego": 90
+      },
+      "genre_mastery": {
+        "action": 68,
+        "popular_drama": 97,
+        "comedy": 68,
+        "light_comedy": 75,
+        "psychological_horror": 68,
+        "supernatural_horror": 75,
+        "crime_mystery": 68,
+        "sci_fi": 75,
+        "romance": 68,
+        "historical": 75,
+        "biography": 91,
+        "heist": 75,
+        "fantasy": 68,
+        "superhero": 75
+      }
+    },
+    {
+      "id": "sa_act_60",
+      "name": "لطيفة الفوزان",
+      "gender": "female",
+      "age": 74,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 28500000,
+      "archetype": "سيدة الشاشة الخليجية والتراجيديا الكبرى",
+      "stats": {
+        "overall": 91,
+        "acting": 91,
+        "charisma": 92,
+        "box_office_pull": 93,
+        "ego": 82
+      },
+      "genre_mastery": {
+        "action": 74,
+        "popular_drama": 95,
+        "comedy": 74,
+        "light_comedy": 67,
+        "psychological_horror": 74,
+        "supernatural_horror": 67,
+        "crime_mystery": 74,
+        "sci_fi": 67,
+        "romance": 74,
+        "historical": 91,
+        "biography": 74,
+        "heist": 67,
+        "fantasy": 74,
+        "superhero": 67
+      }
+    },
+    {
+      "id": "sa_act_61",
+      "name": "الجوهرة المنيعي",
+      "gender": "female",
+      "age": 39,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 27500000,
+      "archetype": "نجمة الجوائز والبطولات الدرامية والسينمائية",
+      "stats": {
+        "overall": 92,
+        "acting": 94,
+        "charisma": 93,
+        "box_office_pull": 93,
+        "ego": 80
+      },
+      "genre_mastery": {
+        "action": 68,
+        "popular_drama": 90,
+        "comedy": 68,
+        "light_comedy": 75,
+        "psychological_horror": 68,
+        "supernatural_horror": 75,
+        "crime_mystery": 97,
+        "sci_fi": 75,
+        "romance": 68,
+        "historical": 75,
+        "biography": 68,
+        "heist": 75,
+        "fantasy": 68,
+        "superhero": 75
+      }
+    },
+    {
+      "id": "sa_act_62",
+      "name": "نوف البابطين",
+      "gender": "female",
+      "age": 37,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 28500000,
+      "archetype": "أيقونة الدراما السعودية والتاريخية",
+      "stats": {
+        "overall": 91,
+        "acting": 92,
+        "charisma": 93,
+        "box_office_pull": 94,
+        "ego": 88
+      },
+      "genre_mastery": {
+        "action": 74,
+        "popular_drama": 67,
+        "comedy": 74,
+        "light_comedy": 67,
+        "psychological_horror": 74,
+        "supernatural_horror": 67,
+        "crime_mystery": 74,
+        "sci_fi": 67,
+        "romance": 90,
+        "historical": 96,
+        "biography": 74,
+        "heist": 67,
+        "fantasy": 74,
+        "superhero": 67
+      }
+    },
+    {
+      "id": "sa_act_63",
+      "name": "عبير العريفي",
+      "gender": "female",
+      "age": 36,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 31500000,
+      "archetype": "قنبلة الطاقة والبطولات الجماهيرية",
+      "stats": {
+        "overall": 92,
+        "acting": 91,
+        "charisma": 90,
+        "box_office_pull": 96,
+        "ego": 91
+      },
+      "genre_mastery": {
+        "action": 75,
+        "popular_drama": 94,
+        "comedy": 75,
+        "light_comedy": 68,
+        "psychological_horror": 91,
+        "supernatural_horror": 68,
+        "crime_mystery": 75,
+        "sci_fi": 68,
+        "romance": 75,
+        "historical": 68,
+        "biography": 75,
+        "heist": 68,
+        "fantasy": 75,
+        "superhero": 68
+      }
+    },
+    {
+      "id": "sa_act_64",
+      "name": "دلال المرزوقي",
+      "gender": "female",
+      "age": 36,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 29500000,
+      "archetype": "نجمة السينما السعودية العالمية والمهرجانات",
+      "stats": {
+        "overall": 92,
+        "acting": 94,
+        "charisma": 92,
+        "box_office_pull": 95,
+        "ego": 83
+      },
+      "genre_mastery": {
+        "action": 75,
+        "popular_drama": 68,
+        "comedy": 75,
+        "light_comedy": 68,
+        "psychological_horror": 75,
+        "supernatural_horror": 68,
+        "crime_mystery": 75,
+        "sci_fi": 68,
+        "romance": 97,
+        "historical": 68,
+        "biography": 87,
+        "heist": 68,
+        "fantasy": 75,
+        "superhero": 68
+      }
+    },
+    {
+      "id": "sa_act_65",
+      "name": "أمل البراهيم",
+      "gender": "female",
+      "age": 39,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 28500000,
+      "archetype": "نجمة الأدوار القوية والتشويق",
+      "stats": {
+        "overall": 91,
+        "acting": 89,
+        "charisma": 89,
+        "box_office_pull": 93,
+        "ego": 78
+      },
+      "genre_mastery": {
+        "action": 88,
+        "popular_drama": 67,
+        "comedy": 74,
+        "light_comedy": 67,
+        "psychological_horror": 74,
+        "supernatural_horror": 67,
+        "crime_mystery": 93,
+        "sci_fi": 67,
+        "romance": 74,
+        "historical": 67,
+        "biography": 74,
+        "heist": 67,
+        "fantasy": 74,
+        "superhero": 67
+      }
+    },
+    {
+      "id": "sa_act_66",
+      "name": "وضحى الفالح",
+      "gender": "female",
+      "age": 35,
+      "tier": "S",
+      "image_url": "",
+      "base_salary": 26500000,
+      "archetype": "نجمة الرومانسية والدراما العربية المشتركة",
+      "stats": {
+        "overall": 90,
+        "acting": 90,
+        "charisma": 89,
+        "box_office_pull": 93,
+        "ego": 89
+      },
+      "genre_mastery": {
+        "action": 73,
+        "popular_drama": 66,
+        "comedy": 73,
+        "light_comedy": 90,
+        "psychological_horror": 73,
+        "supernatural_horror": 66,
+        "crime_mystery": 73,
+        "sci_fi": 66,
+        "romance": 95,
+        "historical": 66,
+        "biography": 73,
+        "heist": 66,
+        "fantasy": 73,
+        "superhero": 66
+      }
+    },
+    {
+      "id": "sa_act_67",
+      "name": "نورة الصويان",
+      "gender": "female",
+      "age": 31,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 17000000,
+      "archetype": "نجمة الكوميديا الراقية وشباك التذاكر",
+      "stats": {
+        "overall": 87,
+        "acting": 89,
+        "charisma": 87,
+        "box_office_pull": 86,
+        "ego": 71
+      },
+      "genre_mastery": {
+        "action": 63,
+        "popular_drama": 70,
+        "comedy": 63,
+        "light_comedy": 91,
+        "psychological_horror": 63,
+        "supernatural_horror": 70,
+        "crime_mystery": 63,
+        "sci_fi": 70,
+        "romance": 83,
+        "historical": 70,
+        "biography": 63,
+        "heist": 70,
+        "fantasy": 63,
+        "superhero": 70
+      }
+    },
+    {
+      "id": "sa_act_68",
+      "name": "العنود الملحم",
+      "gender": "female",
+      "age": 33,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 18500000,
+      "archetype": "بطلة الأكشن النسائي والإثارة",
+      "stats": {
+        "overall": 89,
+        "acting": 88,
+        "charisma": 89,
+        "box_office_pull": 87,
+        "ego": 73
+      },
+      "genre_mastery": {
+        "action": 88,
+        "popular_drama": 72,
+        "comedy": 65,
+        "light_comedy": 72,
+        "psychological_horror": 65,
+        "supernatural_horror": 72,
+        "crime_mystery": 65,
+        "sci_fi": 72,
+        "romance": 65,
+        "historical": 72,
+        "biography": 65,
+        "heist": 85,
+        "fantasy": 65,
+        "superhero": 72
+      }
+    },
+    {
+      "id": "sa_act_69",
+      "name": "سارة العجلاني",
+      "gender": "female",
+      "age": 36,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 13000000,
+      "archetype": "نجمة مهرجان البحر الأحمر والدراما العميقة",
+      "stats": {
+        "overall": 83,
+        "acting": 82,
+        "charisma": 81,
+        "box_office_pull": 81,
+        "ego": 63
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 68,
+        "comedy": 61,
+        "light_comedy": 68,
+        "psychological_horror": 84,
+        "supernatural_horror": 68,
+        "crime_mystery": 61,
+        "sci_fi": 68,
+        "romance": 61,
+        "historical": 68,
+        "biography": 88,
+        "heist": 68,
+        "fantasy": 61,
+        "superhero": 68
+      }
+    },
+    {
+      "id": "sa_act_70",
+      "name": "ريم الوهيبي",
+      "gender": "female",
+      "age": 34,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 14500000,
+      "archetype": "نجمة الغموض والإثارة السينمائية",
+      "stats": {
+        "overall": 84,
+        "acting": 86,
+        "charisma": 85,
+        "box_office_pull": 83,
+        "ego": 76
+      },
+      "genre_mastery": {
+        "action": 66,
+        "popular_drama": 73,
+        "comedy": 66,
+        "light_comedy": 73,
+        "psychological_horror": 91,
+        "supernatural_horror": 73,
+        "crime_mystery": 82,
+        "sci_fi": 73,
+        "romance": 66,
+        "historical": 73,
+        "biography": 66,
+        "heist": 73,
+        "fantasy": 66,
+        "superhero": 73
+      }
+    },
+    {
+      "id": "sa_act_71",
+      "name": "مها الهذلي",
+      "gender": "female",
+      "age": 31,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 19000000,
+      "archetype": "نجمة الرومانسية وشباك المنصات",
+      "stats": {
+        "overall": 89,
+        "acting": 87,
+        "charisma": 90,
+        "box_office_pull": 89,
+        "ego": 77
+      },
+      "genre_mastery": {
+        "action": 73,
+        "popular_drama": 81,
+        "comedy": 73,
+        "light_comedy": 66,
+        "psychological_horror": 73,
+        "supernatural_horror": 66,
+        "crime_mystery": 73,
+        "sci_fi": 66,
+        "romance": 87,
+        "historical": 66,
+        "biography": 73,
+        "heist": 66,
+        "fantasy": 73,
+        "superhero": 66
+      }
+    },
+    {
+      "id": "sa_act_72",
+      "name": "لمياء المريخي",
+      "gender": "female",
+      "age": 58,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 14000000,
+      "archetype": "ملكة التشويق والملفات النفسية المعقدة",
+      "stats": {
+        "overall": 82,
+        "acting": 81,
+        "charisma": 84,
+        "box_office_pull": 80,
+        "ego": 78
+      },
+      "genre_mastery": {
+        "action": 60,
+        "popular_drama": 67,
+        "comedy": 60,
+        "light_comedy": 67,
+        "psychological_horror": 88,
+        "supernatural_horror": 67,
+        "crime_mystery": 84,
+        "sci_fi": 67,
+        "romance": 60,
+        "historical": 67,
+        "biography": 60,
+        "heist": 67,
+        "fantasy": 60,
+        "superhero": 67
+      }
+    },
+    {
+      "id": "sa_act_73",
+      "name": "خلود البقمي",
+      "gender": "female",
+      "age": 40,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 16000000,
+      "archetype": "نجمة الدراما الأسرية والاجتماعية",
+      "stats": {
+        "overall": 87,
+        "acting": 88,
+        "charisma": 88,
+        "box_office_pull": 85,
+        "ego": 75
+      },
+      "genre_mastery": {
+        "action": 69,
+        "popular_drama": 90,
+        "comedy": 69,
+        "light_comedy": 62,
+        "psychological_horror": 69,
+        "supernatural_horror": 62,
+        "crime_mystery": 69,
+        "sci_fi": 62,
+        "romance": 83,
+        "historical": 62,
+        "biography": 69,
+        "heist": 62,
+        "fantasy": 69,
+        "superhero": 62
+      }
+    },
+    {
+      "id": "sa_act_74",
+      "name": "أروى العبدلي",
+      "gender": "female",
+      "age": 33,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 14000000,
+      "archetype": "موهبة الكوميديا الخفيفة والدراما",
+      "stats": {
+        "overall": 83,
+        "acting": 85,
+        "charisma": 83,
+        "box_office_pull": 82,
+        "ego": 71
+      },
+      "genre_mastery": {
+        "action": 67,
+        "popular_drama": 60,
+        "comedy": 80,
+        "light_comedy": 91,
+        "psychological_horror": 67,
+        "supernatural_horror": 60,
+        "crime_mystery": 67,
+        "sci_fi": 60,
+        "romance": 67,
+        "historical": 60,
+        "biography": 67,
+        "heist": 60,
+        "fantasy": 67,
+        "superhero": 60
+      }
+    },
+    {
+      "id": "sa_act_75",
+      "name": "نجلاء البسامي",
+      "gender": "female",
+      "age": 41,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 15500000,
+      "archetype": "نجمة الدراما السعودية الكلاسيكية",
+      "stats": {
+        "overall": 85,
+        "acting": 83,
+        "charisma": 86,
+        "box_office_pull": 83,
+        "ego": 77
+      },
+      "genre_mastery": {
+        "action": 65,
+        "popular_drama": 87,
+        "comedy": 65,
+        "light_comedy": 72,
+        "psychological_horror": 65,
+        "supernatural_horror": 72,
+        "crime_mystery": 65,
+        "sci_fi": 72,
+        "romance": 65,
+        "historical": 84,
+        "biography": 65,
+        "heist": 72,
+        "fantasy": 65,
+        "superhero": 72
+      }
+    },
+    {
+      "id": "sa_act_76",
+      "name": "غادة الخثعمي",
+      "gender": "female",
+      "age": 29,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 16000000,
+      "archetype": "نجمة الفانتازيا والرومانسية الشبابية",
+      "stats": {
+        "overall": 84,
+        "acting": 85,
+        "charisma": 86,
+        "box_office_pull": 84,
+        "ego": 80
+      },
+      "genre_mastery": {
+        "action": 68,
+        "popular_drama": 61,
+        "comedy": 68,
+        "light_comedy": 61,
+        "psychological_horror": 68,
+        "supernatural_horror": 61,
+        "crime_mystery": 68,
+        "sci_fi": 61,
+        "romance": 82,
+        "historical": 61,
+        "biography": 68,
+        "heist": 61,
+        "fantasy": 90,
+        "superhero": 61
+      }
+    },
+    {
+      "id": "sa_act_77",
+      "name": "بشاير الدخيل",
+      "gender": "female",
+      "age": 35,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 17000000,
+      "archetype": "نجمة الكوميديا السوداء والسينما المستقلة",
+      "stats": {
+        "overall": 89,
+        "acting": 87,
+        "charisma": 90,
+        "box_office_pull": 87,
+        "ego": 77
+      },
+      "genre_mastery": {
+        "action": 69,
+        "popular_drama": 62,
+        "comedy": 87,
+        "light_comedy": 62,
+        "psychological_horror": 69,
+        "supernatural_horror": 62,
+        "crime_mystery": 69,
+        "sci_fi": 62,
+        "romance": 69,
+        "historical": 62,
+        "biography": 85,
+        "heist": 62,
+        "fantasy": 69,
+        "superhero": 62
+      }
+    },
+    {
+      "id": "sa_act_78",
+      "name": "حصة السماعيل",
+      "gender": "female",
+      "age": 32,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 13500000,
+      "archetype": "نجمة الإثارة والأدوار الجريئة",
+      "stats": {
+        "overall": 83,
+        "acting": 82,
+        "charisma": 81,
+        "box_office_pull": 81,
+        "ego": 63
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 68,
+        "comedy": 61,
+        "light_comedy": 68,
+        "psychological_horror": 61,
+        "supernatural_horror": 68,
+        "crime_mystery": 80,
+        "sci_fi": 68,
+        "romance": 61,
+        "historical": 68,
+        "biography": 61,
+        "heist": 88,
+        "fantasy": 61,
+        "superhero": 68
+      }
+    },
+    {
+      "id": "sa_act_79",
+      "name": "شوق الغفيلي",
+      "gender": "female",
+      "age": 29,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 15000000,
+      "archetype": "نجمة شباب المنصات والرومانسية",
+      "stats": {
+        "overall": 84,
+        "acting": 82,
+        "charisma": 84,
+        "box_office_pull": 83,
+        "ego": 72
+      },
+      "genre_mastery": {
+        "action": 66,
+        "popular_drama": 73,
+        "comedy": 66,
+        "light_comedy": 84,
+        "psychological_horror": 66,
+        "supernatural_horror": 73,
+        "crime_mystery": 66,
+        "sci_fi": 73,
+        "romance": 87,
+        "historical": 73,
+        "biography": 66,
+        "heist": 73,
+        "fantasy": 66,
+        "superhero": 73
+      }
+    },
+    {
+      "id": "sa_act_80",
+      "name": "تهاني الجبرين",
+      "gender": "female",
+      "age": 34,
+      "tier": "A",
+      "image_url": "",
+      "base_salary": 16000000,
+      "archetype": "بطلة الملاحم التاريخية والدراما",
+      "stats": {
+        "overall": 84,
+        "acting": 85,
+        "charisma": 86,
+        "box_office_pull": 84,
+        "ego": 80
+      },
+      "genre_mastery": {
+        "action": 70,
+        "popular_drama": 84,
+        "comedy": 70,
+        "light_comedy": 63,
+        "psychological_horror": 70,
+        "supernatural_horror": 63,
+        "crime_mystery": 70,
+        "sci_fi": 63,
+        "romance": 70,
+        "historical": 90,
+        "biography": 70,
+        "heist": 63,
+        "fantasy": 70,
+        "superhero": 63
+      }
+    },
+    {
+      "id": "sa_act_81",
+      "name": "رنا النفيعي",
+      "gender": "female",
+      "age": 27,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8000000,
+      "archetype": "نجمة السينما السعودية الشابة",
+      "stats": {
+        "overall": 80,
+        "acting": 82,
+        "charisma": 81,
+        "box_office_pull": 79,
+        "ego": 59
+      },
+      "genre_mastery": {
+        "action": 56,
+        "popular_drama": 63,
+        "comedy": 56,
+        "light_comedy": 85,
+        "psychological_horror": 56,
+        "supernatural_horror": 63,
+        "crime_mystery": 56,
+        "sci_fi": 63,
+        "romance": 76,
+        "historical": 63,
+        "biography": 56,
+        "heist": 63,
+        "fantasy": 56,
+        "superhero": 63
+      }
+    },
+    {
+      "id": "sa_act_82",
+      "name": "هيا الطويرقي",
+      "gender": "female",
+      "age": 26,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8000000,
+      "archetype": "موهبة الرعب النفسي والغموض",
+      "stats": {
+        "overall": 80,
+        "acting": 82,
+        "charisma": 80,
+        "box_office_pull": 78,
+        "ego": 54
+      },
+      "genre_mastery": {
+        "action": 57,
+        "popular_drama": 64,
+        "comedy": 57,
+        "light_comedy": 64,
+        "psychological_horror": 77,
+        "supernatural_horror": 85,
+        "crime_mystery": 57,
+        "sci_fi": 64,
+        "romance": 57,
+        "historical": 64,
+        "biography": 57,
+        "heist": 64,
+        "fantasy": 57,
+        "superhero": 64
+      }
+    },
+    {
+      "id": "sa_act_83",
+      "name": "جود الشثري",
+      "gender": "female",
+      "age": 28,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7500000,
+      "archetype": "نجمة الكوميديا العفوية بالرياض",
+      "stats": {
+        "overall": 77,
+        "acting": 78,
+        "charisma": 78,
+        "box_office_pull": 78,
+        "ego": 58
+      },
+      "genre_mastery": {
+        "action": 67,
+        "popular_drama": 60,
+        "comedy": 84,
+        "light_comedy": 77,
+        "psychological_horror": 67,
+        "supernatural_horror": 60,
+        "crime_mystery": 67,
+        "sci_fi": 60,
+        "romance": 67,
+        "historical": 60,
+        "biography": 67,
+        "heist": 60,
+        "fantasy": 67,
+        "superhero": 60
+      }
+    },
+    {
+      "id": "sa_act_84",
+      "name": "دانة الصقيه",
+      "gender": "female",
+      "age": 31,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8000000,
+      "archetype": "بطلة أفلام المهرجانات والتشويق",
+      "stats": {
+        "overall": 80,
+        "acting": 80,
+        "charisma": 81,
+        "box_office_pull": 80,
+        "ego": 57
+      },
+      "genre_mastery": {
+        "action": 56,
+        "popular_drama": 63,
+        "comedy": 56,
+        "light_comedy": 63,
+        "psychological_horror": 56,
+        "supernatural_horror": 63,
+        "crime_mystery": 83,
+        "sci_fi": 63,
+        "romance": 56,
+        "historical": 63,
+        "biography": 78,
+        "heist": 63,
+        "fantasy": 56,
+        "superhero": 63
+      }
+    },
+    {
+      "id": "sa_act_85",
+      "name": "شهد البريك",
+      "gender": "female",
+      "age": 30,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7000000,
+      "archetype": "نجمة الأفلام العصرية والخيال العلمي",
+      "stats": {
+        "overall": 78,
+        "acting": 78,
+        "charisma": 80,
+        "box_office_pull": 76,
+        "ego": 62
+      },
+      "genre_mastery": {
+        "action": 75,
+        "popular_drama": 64,
+        "comedy": 57,
+        "light_comedy": 64,
+        "psychological_horror": 57,
+        "supernatural_horror": 64,
+        "crime_mystery": 57,
+        "sci_fi": 83,
+        "romance": 57,
+        "historical": 64,
+        "biography": 57,
+        "heist": 64,
+        "fantasy": 57,
+        "superhero": 64
+      }
+    },
+    {
+      "id": "sa_act_86",
+      "name": "لين الحجيلان",
+      "gender": "female",
+      "age": 35,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7500000,
+      "archetype": "حضور راقٍ في الدراما الرومانسية",
+      "stats": {
+        "overall": 77,
+        "acting": 78,
+        "charisma": 77,
+        "box_office_pull": 78,
+        "ego": 53
+      },
+      "genre_mastery": {
+        "action": 56,
+        "popular_drama": 63,
+        "comedy": 56,
+        "light_comedy": 63,
+        "psychological_horror": 56,
+        "supernatural_horror": 63,
+        "crime_mystery": 56,
+        "sci_fi": 63,
+        "romance": 84,
+        "historical": 78,
+        "biography": 56,
+        "heist": 63,
+        "fantasy": 56,
+        "superhero": 63
+      }
+    },
+    {
+      "id": "sa_act_87",
+      "name": "ديما الرميح",
+      "gender": "female",
+      "age": 37,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 8500000,
+      "archetype": "نجمة الدراما الاجتماعية الخليجية",
+      "stats": {
+        "overall": 80,
+        "acting": 78,
+        "charisma": 81,
+        "box_office_pull": 81,
+        "ego": 60
+      },
+      "genre_mastery": {
+        "action": 59,
+        "popular_drama": 81,
+        "comedy": 59,
+        "light_comedy": 66,
+        "psychological_horror": 59,
+        "supernatural_horror": 66,
+        "crime_mystery": 78,
+        "sci_fi": 66,
+        "romance": 59,
+        "historical": 66,
+        "biography": 59,
+        "heist": 66,
+        "fantasy": 59,
+        "superhero": 66
+      }
+    },
+    {
+      "id": "sa_act_88",
+      "name": "ميار الدريهم",
+      "gender": "female",
+      "age": 31,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7500000,
+      "archetype": "نجمة الكوميديا الشعبية والبطولات",
+      "stats": {
+        "overall": 78,
+        "acting": 79,
+        "charisma": 76,
+        "box_office_pull": 79,
+        "ego": 48
+      },
+      "genre_mastery": {
+        "action": 55,
+        "popular_drama": 79,
+        "comedy": 84,
+        "light_comedy": 62,
+        "psychological_horror": 55,
+        "supernatural_horror": 62,
+        "crime_mystery": 55,
+        "sci_fi": 62,
+        "romance": 55,
+        "historical": 62,
+        "biography": 55,
+        "heist": 62,
+        "fantasy": 55,
+        "superhero": 62
+      }
+    },
+    {
+      "id": "sa_act_89",
+      "name": "سجى العرفج",
+      "gender": "female",
+      "age": 35,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7500000,
+      "archetype": "موهبة الدراما العاطفية والتشويق",
+      "stats": {
+        "overall": 78,
+        "acting": 80,
+        "charisma": 80,
+        "box_office_pull": 79,
+        "ego": 64
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 54,
+        "comedy": 61,
+        "light_comedy": 54,
+        "psychological_horror": 79,
+        "supernatural_horror": 54,
+        "crime_mystery": 61,
+        "sci_fi": 54,
+        "romance": 85,
+        "historical": 54,
+        "biography": 61,
+        "heist": 54,
+        "fantasy": 61,
+        "superhero": 54
+      }
+    },
+    {
+      "id": "sa_act_90",
+      "name": "غلا البازعي",
+      "gender": "female",
+      "age": 33,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 7000000,
+      "archetype": "نجمة أفلام المغامرة والسطو",
+      "stats": {
+        "overall": 77,
+        "acting": 76,
+        "charisma": 77,
+        "box_office_pull": 77,
+        "ego": 56
+      },
+      "genre_mastery": {
+        "action": 78,
+        "popular_drama": 62,
+        "comedy": 55,
+        "light_comedy": 62,
+        "psychological_horror": 55,
+        "supernatural_horror": 62,
+        "crime_mystery": 55,
+        "sci_fi": 62,
+        "romance": 55,
+        "historical": 62,
+        "biography": 55,
+        "heist": 82,
+        "fantasy": 55,
+        "superhero": 62
+      }
+    },
+    {
+      "id": "sa_act_91",
+      "name": "تالا الطريقي",
+      "gender": "female",
+      "age": 27,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 5500000,
+      "archetype": "موهبة الفانتازيا والأعمال العائلية",
+      "stats": {
+        "overall": 74,
+        "acting": 73,
+        "charisma": 76,
+        "box_office_pull": 72,
+        "ego": 61
+      },
+      "genre_mastery": {
+        "action": 58,
+        "popular_drama": 65,
+        "comedy": 58,
+        "light_comedy": 78,
+        "psychological_horror": 58,
+        "supernatural_horror": 65,
+        "crime_mystery": 58,
+        "sci_fi": 65,
+        "romance": 58,
+        "historical": 65,
+        "biography": 58,
+        "heist": 65,
+        "fantasy": 82,
+        "superhero": 65
+      }
+    },
+    {
+      "id": "sa_act_92",
+      "name": "ريفان الزومان",
+      "gender": "female",
+      "age": 32,
+      "tier": "B",
+      "image_url": "",
+      "base_salary": 9000000,
+      "archetype": "نجمة الدراما الواقعية بجدة",
+      "stats": {
+        "overall": 81,
+        "acting": 82,
+        "charisma": 79,
+        "box_office_pull": 82,
+        "ego": 48
+      },
+      "genre_mastery": {
+        "action": 57,
+        "popular_drama": 84,
+        "comedy": 57,
+        "light_comedy": 64,
+        "psychological_horror": 57,
+        "supernatural_horror": 64,
+        "crime_mystery": 57,
+        "sci_fi": 64,
+        "romance": 57,
+        "historical": 64,
+        "biography": 79,
+        "heist": 64,
+        "fantasy": 57,
+        "superhero": 64
+      }
+    },
+    {
+      "id": "sa_act_93",
+      "name": "حور المقحم",
+      "gender": "female",
+      "age": 23,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 3300000,
+      "archetype": "وجه سينمائي واعد من الرياض",
+      "stats": {
+        "overall": 72,
+        "acting": 72,
+        "charisma": 74,
+        "box_office_pull": 71,
+        "ego": 47
+      },
+      "genre_mastery": {
+        "action": 53,
+        "popular_drama": 60,
+        "comedy": 53,
+        "light_comedy": 69,
+        "psychological_horror": 53,
+        "supernatural_horror": 60,
+        "crime_mystery": 53,
+        "sci_fi": 60,
+        "romance": 77,
+        "historical": 60,
+        "biography": 53,
+        "heist": 60,
+        "fantasy": 53,
+        "superhero": 60
+      }
+    },
+    {
+      "id": "sa_act_94",
+      "name": "سدن الهويمل",
+      "gender": "female",
+      "age": 22,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 1900000,
+      "archetype": "موهبة شابة في الكوميديا الخفيفة",
+      "stats": {
+        "overall": 64,
+        "acting": 65,
+        "charisma": 62,
+        "box_office_pull": 63,
+        "ego": 39
+      },
+      "genre_mastery": {
+        "action": 59,
+        "popular_drama": 52,
+        "comedy": 71,
+        "light_comedy": 78,
+        "psychological_horror": 59,
+        "supernatural_horror": 52,
+        "crime_mystery": 59,
+        "sci_fi": 52,
+        "romance": 59,
+        "historical": 52,
+        "biography": 59,
+        "heist": 52,
+        "fantasy": 59,
+        "superhero": 52
+      }
+    },
+    {
+      "id": "sa_act_95",
+      "name": "وتين المسعودي",
+      "gender": "female",
+      "age": 24,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2100000,
+      "archetype": "وجه جديد في أفلام الرعب والغموض",
+      "stats": {
+        "overall": 65,
+        "acting": 67,
+        "charisma": 67,
+        "box_office_pull": 65,
+        "ego": 31
+      },
+      "genre_mastery": {
+        "action": 51,
+        "popular_drama": 58,
+        "comedy": 51,
+        "light_comedy": 58,
+        "psychological_horror": 79,
+        "supernatural_horror": 58,
+        "crime_mystery": 72,
+        "sci_fi": 58,
+        "romance": 51,
+        "historical": 58,
+        "biography": 51,
+        "heist": 58,
+        "fantasy": 51,
+        "superhero": 58
+      }
+    },
+    {
+      "id": "sa_act_96",
+      "name": "جوري الخليوي",
+      "gender": "female",
+      "age": 25,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2700000,
+      "archetype": "موهبة مسرحية صاعدة من جدة",
+      "stats": {
+        "overall": 68,
+        "acting": 69,
+        "charisma": 66,
+        "box_office_pull": 69,
+        "ego": 43
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 78,
+        "comedy": 61,
+        "light_comedy": 54,
+        "psychological_horror": 61,
+        "supernatural_horror": 54,
+        "crime_mystery": 61,
+        "sci_fi": 54,
+        "romance": 61,
+        "historical": 69,
+        "biography": 61,
+        "heist": 54,
+        "fantasy": 61,
+        "superhero": 54
+      }
+    },
+    {
+      "id": "sa_act_97",
+      "name": "ملاك المنقور",
+      "gender": "female",
+      "age": 23,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 3300000,
+      "archetype": "وجه شاب في أفلام الخيال والمغامرة",
+      "stats": {
+        "overall": 72,
+        "acting": 73,
+        "charisma": 74,
+        "box_office_pull": 72,
+        "ego": 38
+      },
+      "genre_mastery": {
+        "action": 58,
+        "popular_drama": 51,
+        "comedy": 58,
+        "light_comedy": 51,
+        "psychological_horror": 58,
+        "supernatural_horror": 51,
+        "crime_mystery": 58,
+        "sci_fi": 78,
+        "romance": 58,
+        "historical": 51,
+        "biography": 58,
+        "heist": 51,
+        "fantasy": 71,
+        "superhero": 51
+      }
+    },
+    {
+      "id": "sa_act_98",
+      "name": "ريما الجاسري",
+      "gender": "female",
+      "age": 26,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2100000,
+      "archetype": "موهبة صاعدة في دراما المنصات",
+      "stats": {
+        "overall": 65,
+        "acting": 64,
+        "charisma": 65,
+        "box_office_pull": 65,
+        "ego": 31
+      },
+      "genre_mastery": {
+        "action": 53,
+        "popular_drama": 60,
+        "comedy": 53,
+        "light_comedy": 60,
+        "psychological_horror": 53,
+        "supernatural_horror": 60,
+        "crime_mystery": 76,
+        "sci_fi": 60,
+        "romance": 72,
+        "historical": 60,
+        "biography": 53,
+        "heist": 60,
+        "fantasy": 53,
+        "superhero": 60
+      }
+    },
+    {
+      "id": "sa_act_99",
+      "name": "ليندا المعيوف",
+      "gender": "female",
+      "age": 24,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 2700000,
+      "archetype": "وجه جديد في أفلام الأكشن الشابة",
+      "stats": {
+        "overall": 69,
+        "acting": 71,
+        "charisma": 70,
+        "box_office_pull": 67,
+        "ego": 44
+      },
+      "genre_mastery": {
+        "action": 79,
+        "popular_drama": 49,
+        "comedy": 56,
+        "light_comedy": 49,
+        "psychological_horror": 56,
+        "supernatural_horror": 49,
+        "crime_mystery": 56,
+        "sci_fi": 49,
+        "romance": 56,
+        "historical": 49,
+        "biography": 56,
+        "heist": 71,
+        "fantasy": 56,
+        "superhero": 49
+      }
+    },
+    {
+      "id": "sa_act_100",
+      "name": "سماهر الفريان",
+      "gender": "female",
+      "age": 22,
+      "tier": "C",
+      "image_url": "",
+      "base_salary": 3300000,
+      "archetype": "خريجة ورش التمثيل بمهرجان البحر الأحمر",
+      "stats": {
+        "overall": 72,
+        "acting": 73,
+        "charisma": 73,
+        "box_office_pull": 72,
+        "ego": 47
+      },
+      "genre_mastery": {
+        "action": 61,
+        "popular_drama": 69,
+        "comedy": 61,
+        "light_comedy": 54,
+        "psychological_horror": 61,
+        "supernatural_horror": 54,
+        "crime_mystery": 61,
+        "sci_fi": 54,
+        "romance": 61,
+        "historical": 54,
+        "biography": 78,
+        "heist": 54,
+        "fantasy": 61,
+        "superhero": 54
+      }
+    }
+  ],
+  "crew": [
+    {
+      "id": "sa_dir_1",
+      "name": "نورة الشبيلي",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 17000000,
+      "specialty": "سينما المهرجانات العالمية والدراما الإنسانية",
+      "stats": {
+        "overall": 94,
+        "vision": 96,
+        "pacing": 93,
+        "efficiency": 92,
+        "control": 95
+      },
+      "best_genres": [
+        "biography",
+        "popular_drama",
+        "romance"
+      ]
+    },
+    {
+      "id": "sa_dir_2",
+      "name": "فهد الجريسي",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 16500000,
+      "specialty": "السينما السعودية المعاصرة والكوميديا السوداء",
+      "stats": {
+        "overall": 93,
+        "vision": 95,
+        "pacing": 92,
+        "efficiency": 91,
+        "control": 94
+      },
+      "best_genres": [
+        "comedy",
+        "crime_mystery",
+        "action"
+      ]
+    },
+    {
+      "id": "sa_dir_3",
+      "name": "طلال الدغيثر",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 15000000,
+      "specialty": "التشويق البصري والملاحم الصحراوية",
+      "stats": {
+        "overall": 91,
+        "vision": 93,
+        "pacing": 90,
+        "efficiency": 89,
+        "control": 92
+      },
+      "best_genres": [
+        "crime_mystery",
+        "historical",
+        "psychological_horror"
+      ]
+    },
+    {
+      "id": "sa_dir_4",
+      "name": "سلمان القنيبط",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 14500000,
+      "specialty": "الملاحم التاريخية والدراما البصرية العميقة",
+      "stats": {
+        "overall": 90,
+        "vision": 92,
+        "pacing": 89,
+        "efficiency": 88,
+        "control": 91
+      },
+      "best_genres": [
+        "historical",
+        "biography",
+        "popular_drama"
+      ]
+    },
+    {
+      "id": "sa_dir_5",
+      "name": "ياسر الحضيف",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 13000000,
+      "specialty": "الكوميديا الذكية والسينما المستقلة",
+      "stats": {
+        "overall": 88,
+        "vision": 90,
+        "pacing": 87,
+        "efficiency": 86,
+        "control": 89
+      },
+      "best_genres": [
+        "light_comedy",
+        "comedy",
+        "romance"
+      ]
+    },
+    {
+      "id": "sa_dir_6",
+      "name": "مرام العتيق",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 14000000,
+      "specialty": "الفانتازيا السينمائية والرمزية البصرية",
+      "stats": {
+        "overall": 89,
+        "vision": 91,
+        "pacing": 88,
+        "efficiency": 87,
+        "control": 90
+      },
+      "best_genres": [
+        "fantasy",
+        "supernatural_horror",
+        "psychological_horror"
+      ]
+    },
+    {
+      "id": "sa_dir_7",
+      "name": "مازن الدبيان",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 12500000,
+      "specialty": "الأكشن السريع وأفلام الشباك الشبابية",
+      "stats": {
+        "overall": 87,
+        "vision": 89,
+        "pacing": 86,
+        "efficiency": 85,
+        "control": 88
+      },
+      "best_genres": [
+        "action",
+        "heist",
+        "comedy"
+      ]
+    },
+    {
+      "id": "sa_dir_8",
+      "name": "خليفة الباهلي",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 11000000,
+      "specialty": "أفلام IMAX الضخمة والخيال العلمي",
+      "stats": {
+        "overall": 85,
+        "vision": 87,
+        "pacing": 84,
+        "efficiency": 83,
+        "control": 86
+      },
+      "best_genres": [
+        "sci_fi",
+        "superhero",
+        "action"
+      ]
+    },
+    {
+      "id": "sa_dir_9",
+      "name": "عماد الصبيحي",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 10500000,
+      "specialty": "مسلسلات المنصات والإثارة البوليسية",
+      "stats": {
+        "overall": 84,
+        "vision": 86,
+        "pacing": 83,
+        "efficiency": 82,
+        "control": 85
+      },
+      "best_genres": [
+        "crime_mystery",
+        "heist",
+        "popular_drama"
+      ]
+    },
+    {
+      "id": "sa_dir_10",
+      "name": "سلمى الحسينان",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 10000000,
+      "specialty": "الدراما الرومانسية والكوميديا العائلية",
+      "stats": {
+        "overall": 83,
+        "vision": 85,
+        "pacing": 82,
+        "efficiency": 81,
+        "control": 84
+      },
+      "best_genres": [
+        "romance",
+        "light_comedy",
+        "biography"
+      ]
+    },
+    {
+      "id": "sa_dir_11",
+      "name": "رائد النمشان",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 8000000,
+      "specialty": "الرعب الروحاني والتشويق النفسي",
+      "stats": {
+        "overall": 80,
+        "vision": 82,
+        "pacing": 79,
+        "efficiency": 78,
+        "control": 81
+      },
+      "best_genres": [
+        "supernatural_horror",
+        "psychological_horror",
+        "crime_mystery"
+      ]
+    },
+    {
+      "id": "sa_dir_12",
+      "name": "بشار العيساني",
+      "role": "director",
+      "image_url": "",
+      "base_salary": 12000000,
+      "specialty": "السرد السينمائي المكثف والدراما الحديثة",
+      "stats": {
+        "overall": 86,
+        "vision": 88,
+        "pacing": 85,
+        "efficiency": 84,
+        "control": 87
+      },
+      "best_genres": [
+        "popular_drama",
+        "crime_mystery",
+        "historical"
+      ]
+    },
+    {
+      "id": "sa_wri_1",
+      "name": "أميرة المقرن",
+      "role": "writer",
+      "image_url": "",
+      "base_salary": 11000000,
+      "specialty": "الحوار الاجتماعي العميق والدراما التاريخية",
+      "stats": {
+        "overall": 93,
+        "vision": 93,
+        "pacing": 92,
+        "efficiency": 91,
+        "plot_strength": 95,
+        "dialogue": 94
+      },
+      "best_genres": [
+        "popular_drama",
+        "historical",
+        "biography"
+      ]
+    },
+    {
+      "id": "sa_wri_2",
+      "name": "سليمان البليهيد",
+      "role": "writer",
+      "image_url": "",
+      "base_salary": 10000000,
+      "specialty": "سيناريوهات الإثارة والتشويق والسينما",
+      "stats": {
+        "overall": 91,
+        "vision": 91,
+        "pacing": 90,
+        "efficiency": 89,
+        "plot_strength": 93,
+        "dialogue": 92
+      },
+      "best_genres": [
+        "crime_mystery",
+        "psychological_horror",
+        "historical"
+      ]
+    },
+    {
+      "id": "sa_wri_3",
+      "name": "فواز المشيقح",
+      "role": "writer",
+      "image_url": "",
+      "base_salary": 9500000,
+      "specialty": "الدراما الرومانسية ومسلسلات رمضان",
+      "stats": {
+        "overall": 90,
+        "vision": 90,
+        "pacing": 89,
+        "efficiency": 88,
+        "plot_strength": 92,
+        "dialogue": 91
+      },
+      "best_genres": [
+        "romance",
+        "popular_drama",
+        "crime_mystery"
+      ]
+    },
+    {
+      "id": "sa_wri_4",
+      "name": "حاتم الدويس",
+      "role": "writer",
+      "image_url": "",
+      "base_salary": 10500000,
+      "specialty": "الكوميديا الساخرة وكتابة الشباك",
+      "stats": {
+        "overall": 92,
+        "vision": 92,
+        "pacing": 91,
+        "efficiency": 90,
+        "plot_strength": 94,
+        "dialogue": 93
+      },
+      "best_genres": [
+        "comedy",
+        "light_comedy",
+        "popular_drama"
+      ]
+    },
+    {
+      "id": "sa_wri_5",
+      "name": "ندى العثيم",
+      "role": "writer",
+      "image_url": "",
+      "base_salary": 10000000,
+      "specialty": "الحبكات الاجتماعية الجريئة والمنصات",
+      "stats": {
+        "overall": 91,
+        "vision": 91,
+        "pacing": 90,
+        "efficiency": 89,
+        "plot_strength": 93,
+        "dialogue": 92
+      },
+      "best_genres": [
+        "popular_drama",
+        "romance",
+        "crime_mystery"
+      ]
+    },
+    {
+      "id": "sa_wri_6",
+      "name": "ثنيان السماري",
+      "role": "writer",
+      "image_url": "",
+      "base_salary": 7000000,
+      "specialty": "حبكات السطو والأكشن العصري",
+      "stats": {
+        "overall": 86,
+        "vision": 86,
+        "pacing": 85,
+        "efficiency": 84,
+        "plot_strength": 88,
+        "dialogue": 87
+      },
+      "best_genres": [
+        "heist",
+        "action",
+        "sci_fi"
+      ]
+    },
+    {
+      "id": "sa_wri_7",
+      "name": "رغدة البواردي",
+      "role": "writer",
+      "image_url": "",
+      "base_salary": 6500000,
+      "specialty": "الفانتازيا والرعب النفسي المتقن",
+      "stats": {
+        "overall": 85,
+        "vision": 85,
+        "pacing": 84,
+        "efficiency": 83,
+        "plot_strength": 87,
+        "dialogue": 86
+      },
+      "best_genres": [
+        "fantasy",
+        "supernatural_horror",
+        "psychological_horror"
+      ]
+    },
+    {
+      "id": "sa_wri_8",
+      "name": "طاهر البدراني",
+      "role": "writer",
+      "image_url": "",
+      "base_salary": 5500000,
+      "specialty": "الكوميديا الشبابية والمغامرات",
+      "stats": {
+        "overall": 83,
+        "vision": 83,
+        "pacing": 82,
+        "efficiency": 81,
+        "plot_strength": 85,
+        "dialogue": 84
+      },
+      "best_genres": [
+        "light_comedy",
+        "comedy",
+        "heist"
+      ]
+    },
+    {
+      "id": "sa_dop_1",
+      "name": "سعيد المنيع",
+      "role": "cinematographer",
+      "image_url": "",
+      "base_salary": 8200000,
+      "specialty": "تصوير صحارى العلا بشاشات IMAX",
+      "stats": {
+        "overall": 92,
+        "vision": 94,
+        "pacing": 90,
+        "efficiency": 92
+      },
+      "best_genres": [
+        "historical",
+        "action",
+        "sci_fi"
+      ]
+    },
+    {
+      "id": "sa_dop_2",
+      "name": "نواف العقيل",
+      "role": "cinematographer",
+      "image_url": "",
+      "base_salary": 7000000,
+      "specialty": "إضاءة النيون والتشويق الليلي بالرياض",
+      "stats": {
+        "overall": 89,
+        "vision": 91,
+        "pacing": 87,
+        "efficiency": 89
+      },
+      "best_genres": [
+        "crime_mystery",
+        "psychological_horror",
+        "heist"
+      ]
+    },
+    {
+      "id": "sa_dop_3",
+      "name": "لجين السالمي",
+      "role": "cinematographer",
+      "image_url": "",
+      "base_salary": 6200000,
+      "specialty": "الجماليات السينمائية الدافئة والرومانسية",
+      "stats": {
+        "overall": 87,
+        "vision": 89,
+        "pacing": 85,
+        "efficiency": 87
+      },
+      "best_genres": [
+        "romance",
+        "biography",
+        "light_comedy"
+      ]
+    },
+    {
+      "id": "sa_dop_4",
+      "name": "بدر الفهيد",
+      "role": "cinematographer",
+      "image_url": "",
+      "base_salary": 5600000,
+      "specialty": "حركة الكاميرا السريعة للمطاردات",
+      "stats": {
+        "overall": 85,
+        "vision": 87,
+        "pacing": 83,
+        "efficiency": 85
+      },
+      "best_genres": [
+        "action",
+        "superhero",
+        "fantasy"
+      ]
+    },
+    {
+      "id": "sa_dop_5",
+      "name": "راشد الحمودي",
+      "role": "cinematographer",
+      "image_url": "",
+      "base_salary": 4800000,
+      "specialty": "كادرات الدراما التراثية والحارة",
+      "stats": {
+        "overall": 83,
+        "vision": 85,
+        "pacing": 81,
+        "efficiency": 83
+      },
+      "best_genres": [
+        "popular_drama",
+        "historical",
+        "comedy"
+      ]
+    },
+    {
+      "id": "sa_dop_6",
+      "name": "سلطان المحيميد",
+      "role": "cinematographer",
+      "image_url": "",
+      "base_salary": 4000000,
+      "specialty": "تصوير الرعب والظلال السينمائية",
+      "stats": {
+        "overall": 81,
+        "vision": 83,
+        "pacing": 79,
+        "efficiency": 81
+      },
+      "best_genres": [
+        "supernatural_horror",
+        "psychological_horror",
+        "crime_mystery"
+      ]
+    },
+    {
+      "id": "sa_comp_1",
+      "name": "مشاري الذكير",
+      "role": "composer",
+      "image_url": "",
+      "base_salary": 7600000,
+      "specialty": "مزج الإيقاعات السعودية بالأوركسترا العالمية",
+      "stats": {
+        "overall": 92,
+        "vision": 93,
+        "pacing": 92,
+        "efficiency": 91
+      },
+      "best_genres": [
+        "historical",
+        "action",
+        "popular_drama"
+      ]
+    },
+    {
+      "id": "sa_comp_2",
+      "name": "هاني العنقري",
+      "role": "composer",
+      "image_url": "",
+      "base_salary": 6600000,
+      "specialty": "الموسيقى التصويرية الملحمية والعاطفية",
+      "stats": {
+        "overall": 90,
+        "vision": 91,
+        "pacing": 90,
+        "efficiency": 89
+      },
+      "best_genres": [
+        "romance",
+        "biography",
+        "historical"
+      ]
+    },
+    {
+      "id": "sa_comp_3",
+      "name": "تركي التويجري",
+      "role": "composer",
+      "image_url": "",
+      "base_salary": 5200000,
+      "specialty": "موسيقى التوتر والغموض النفسي",
+      "stats": {
+        "overall": 87,
+        "vision": 88,
+        "pacing": 87,
+        "efficiency": 86
+      },
+      "best_genres": [
+        "crime_mystery",
+        "psychological_horror",
+        "supernatural_horror"
+      ]
+    },
+    {
+      "id": "sa_comp_4",
+      "name": "لينا الشايع",
+      "role": "composer",
+      "image_url": "",
+      "base_salary": 4200000,
+      "specialty": "ألحان الكوميديا الخفيفة والرومانسية",
+      "stats": {
+        "overall": 85,
+        "vision": 86,
+        "pacing": 85,
+        "efficiency": 84
+      },
+      "best_genres": [
+        "light_comedy",
+        "comedy",
+        "romance"
+      ]
+    },
+    {
+      "id": "sa_comp_5",
+      "name": "وسيم المعجل",
+      "role": "composer",
+      "image_url": "",
+      "base_salary": 5600000,
+      "specialty": "موسيقى الخيال العلمي والأبطال الخارقين",
+      "stats": {
+        "overall": 88,
+        "vision": 89,
+        "pacing": 88,
+        "efficiency": 87
+      },
+      "best_genres": [
+        "sci_fi",
+        "superhero",
+        "fantasy"
+      ]
+    },
+    {
+      "id": "sa_vfx_1",
+      "name": "فهد الباحوث",
+      "role": "editor_vfx",
+      "image_url": "",
+      "base_salary": 8800000,
+      "specialty": "استوديوهات المؤثرات البصرية والـ CGI المتقدمة",
+      "stats": {
+        "overall": 92,
+        "vision": 92,
+        "pacing": 94,
+        "efficiency": 91
+      },
+      "best_genres": [
+        "sci_fi",
+        "superhero",
+        "fantasy",
+        "action"
+      ]
+    },
+    {
+      "id": "sa_vfx_2",
+      "name": "سارة النصار",
+      "role": "editor_vfx",
+      "image_url": "",
+      "base_salary": 7000000,
+      "specialty": "مونتاج الإيقاع السريع والسطو والتشويق",
+      "stats": {
+        "overall": 89,
+        "vision": 89,
+        "pacing": 91,
+        "efficiency": 88
+      },
+      "best_genres": [
+        "heist",
+        "crime_mystery",
+        "action"
+      ]
+    },
+    {
+      "id": "sa_vfx_3",
+      "name": "ماجد الحميدان",
+      "role": "editor_vfx",
+      "image_url": "",
+      "base_salary": 5800000,
+      "specialty": "بناء العوالم التاريخية والمدن القديمة رقمياً",
+      "stats": {
+        "overall": 87,
+        "vision": 87,
+        "pacing": 89,
+        "efficiency": 86
+      },
+      "best_genres": [
+        "historical",
+        "biography",
+        "popular_drama"
+      ]
+    },
+    {
+      "id": "sa_vfx_4",
+      "name": "رغد الرشيدان",
+      "role": "editor_vfx",
+      "image_url": "",
+      "base_salary": 4600000,
+      "specialty": "مونتاج الكوميديا وضبط الإفيهات والمشاهد",
+      "stats": {
+        "overall": 85,
+        "vision": 85,
+        "pacing": 87,
+        "efficiency": 84
+      },
+      "best_genres": [
+        "comedy",
+        "light_comedy",
+        "romance"
+      ]
+    },
+    {
+      "id": "sa_vfx_5",
+      "name": "عبدالله السحيباني",
+      "role": "editor_vfx",
+      "image_url": "",
+      "base_salary": 4000000,
+      "specialty": "مؤثرات الرعب والخيال ما وراء الطبيعة",
+      "stats": {
+        "overall": 84,
+        "vision": 84,
+        "pacing": 86,
+        "efficiency": 83
+      },
+      "best_genres": [
+        "supernatural_horror",
+        "psychological_horror",
+        "fantasy"
+      ]
+    }
+  ],
+  "competitor_studios": [
+    {
+      "id": "sa_studio_1",
+      "name": "استوديوهات العلا للإنتاج",
+      "ceoName": "سلطان الشبيلي",
+      "logo_url": "",
+      "market_power": 94,
+      "estimated_net_worth": 580000000,
+      "specialty": "الملاحم التاريخية وأفلام IMAX العالمية",
+      "preferred_genres": [
+        "historical",
+        "action",
+        "sci_fi"
+      ]
+    },
+    {
+      "id": "sa_studio_2",
+      "name": "مجموعة الدرعية ميديا",
+      "ceoName": "خالد البليهيد",
+      "logo_url": "",
+      "market_power": 91,
+      "estimated_net_worth": 510000000,
+      "specialty": "الدراما الرمضانية الكبرى والكوميديا",
+      "preferred_genres": [
+        "popular_drama",
+        "comedy",
+        "historical"
+      ]
+    },
+    {
+      "id": "sa_studio_3",
+      "name": "بوليفارد بيكتشرز",
+      "ceoName": "تركي المشيقح",
+      "logo_url": "",
+      "market_power": 89,
+      "estimated_net_worth": 465000000,
+      "specialty": "أفلام الشباك الشبابية وموسم الرياض",
+      "preferred_genres": [
+        "action",
+        "light_comedy",
+        "heist"
+      ]
+    },
+    {
+      "id": "sa_studio_4",
+      "name": "أفلام البحر الأحمر",
+      "ceoName": "نواف البواردي",
+      "logo_url": "",
+      "market_power": 87,
+      "estimated_net_worth": 420000000,
+      "specialty": "سينما المهرجانات والتشويق النفسي",
+      "preferred_genres": [
+        "biography",
+        "crime_mystery",
+        "psychological_horror"
+      ]
+    },
+    {
+      "id": "sa_studio_5",
+      "name": "المملكة للترفيه",
+      "ceoName": "فيصل السماري",
+      "logo_url": "",
+      "market_power": 92,
+      "estimated_net_worth": 540000000,
+      "specialty": "الأفلام التجارية الضخمة والمنصات",
+      "preferred_genres": [
+        "comedy",
+        "action",
+        "romance"
+      ]
+    },
+    {
+      "id": "sa_studio_6",
+      "name": "طويق فيلمز",
+      "ceoName": "سعود التويجري",
+      "logo_url": "",
+      "market_power": 83,
+      "estimated_net_worth": 340000000,
+      "specialty": "الخيال العلمي والفانتازيا العربية",
+      "preferred_genres": [
+        "sci_fi",
+        "fantasy",
+        "superhero"
+      ]
+    },
+    {
+      "id": "sa_studio_7",
+      "name": "جدة ستوديوز",
+      "ceoName": "ماجد العنقري",
+      "logo_url": "",
+      "market_power": 80,
+      "estimated_net_worth": 295000000,
+      "specialty": "الكوميديا العائلية والدراما الحجازية",
+      "preferred_genres": [
+        "light_comedy",
+        "romance",
+        "popular_drama"
+      ]
+    },
+    {
+      "id": "sa_studio_8",
+      "name": "الخليج بلس للدراما",
+      "ceoName": "بدر الذكير",
+      "logo_url": "",
+      "market_power": 84,
+      "estimated_net_worth": 360000000,
+      "specialty": "المسلسلات الخليجية المشتركة والتشويق",
+      "preferred_genres": [
+        "popular_drama",
+        "crime_mystery",
+        "romance"
+      ]
+    },
+    {
+      "id": "sa_studio_9",
+      "name": "الظهران سينما المستقلة",
+      "ceoName": "عبدالرحمن المعجل",
+      "logo_url": "",
+      "market_power": 76,
+      "estimated_net_worth": 235000000,
+      "specialty": "أفلام الرعب والتجارب البصرية الجريئة",
+      "preferred_genres": [
+        "supernatural_horror",
+        "psychological_horror",
+        "crime_mystery"
+      ]
+    },
+    {
+      "id": "sa_studio_10",
+      "name": "نجد الذهبية للإنتاج",
+      "ceoName": "فهد الشايع",
+      "logo_url": "",
+      "market_power": 78,
+      "estimated_net_worth": 260000000,
+      "specialty": "الدراما الشعبية والكوميديا الموسمية",
+      "preferred_genres": [
+        "comedy",
+        "popular_drama",
+        "light_comedy"
+      ]
+    }
+  ],
+  "streaming_platforms": [
+    {
+      "id": "sa_plat_shashat",
+      "name": "منصة شاشات بلس",
+      "logo_url": "",
+      "budget_capacity": 98,
+      "platform_type": "digital_platform"
+    },
+    {
+      "id": "sa_plat_nujoom",
+      "name": "منصة نجوم VIP",
+      "logo_url": "",
+      "budget_capacity": 94,
+      "platform_type": "digital_platform"
+    },
+    {
+      "id": "sa_plat_roya",
+      "name": "منصة رؤية الخليج",
+      "logo_url": "",
+      "budget_capacity": 88,
+      "platform_type": "digital_platform"
+    },
+    {
+      "id": "sa_plat_riyadh_stream",
+      "name": "منصة بوليفارد ستريم",
+      "logo_url": "",
+      "budget_capacity": 91,
+      "platform_type": "digital_platform"
+    },
+    {
+      "id": "tv_sa_riyadh1",
+      "name": "قناة الرياض الأولى",
+      "logo_url": "",
+      "budget_capacity": 96,
+      "platform_type": "tv_channel"
+    },
+    {
+      "id": "tv_sa_gulf_drama",
+      "name": "شبكة الخليج دراما",
+      "logo_url": "",
+      "budget_capacity": 92,
+      "platform_type": "tv_channel"
+    },
+    {
+      "id": "tv_sa_sahara",
+      "name": "قناة الصحراء",
+      "logo_url": "",
+      "budget_capacity": 85,
+      "platform_type": "tv_channel"
+    },
+    {
+      "id": "tv_sa_jeddah",
+      "name": "قناة جدة الترفيهية",
+      "logo_url": "",
+      "budget_capacity": 86,
+      "platform_type": "tv_channel"
+    },
+    {
+      "id": "tv_sa_arab_hd",
+      "name": "شبكة العرب HD",
+      "logo_url": "",
+      "budget_capacity": 82,
+      "platform_type": "tv_channel"
+    }
+  ],
+  "festivals": [
+    {
+      "id": "sa_fest_redsea",
+      "name": "مهرجان البحر الأحمر السينمائي",
+      "logo_url": "",
+      "prestige": 96
+    },
+    {
+      "id": "sa_fest_riyadh_awards",
+      "name": "حفل صناع الترفيه الذهبي (Riyadh Awards)",
+      "logo_url": "",
+      "prestige": 94
+    },
+    {
+      "id": "sa_fest_dhahran",
+      "name": "مهرجان أفلام السعودية بالظهران",
+      "logo_url": "",
+      "prestige": 90
+    }
+  ]
+}

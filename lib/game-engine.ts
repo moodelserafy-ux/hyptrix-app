@@ -1,4 +1,11 @@
 import { ActorItem, CrewItem, GenreId } from './db-resolver';
+import {
+  getCurrencyLabel,
+  getMarketConfigsForWorld,
+  getMarketProfile,
+  getPrimaryMarketRegion,
+  type WorldMarketId,
+} from './market-profiles';
 export type { ActorItem, CrewItem, GenreId };
 
 export type FounderPerk =
@@ -418,6 +425,7 @@ export function evaluateTalentOfferDeep(params: {
   studioReputation: number;
   directorOverall?: number | null;
   directorName?: string | null;
+  currencyLabel?: string;
 }): DeepTalentEvaluationResult {
   const {
     isActor,
@@ -437,6 +445,7 @@ export function evaluateTalentOfferDeep(params: {
     studioReputation,
     directorOverall = null,
     directorName = null,
+    currencyLabel = 'ج.م',
   } = params;
 
   const hasTopDirector = Boolean(directorOverall && directorOverall >= 86);
@@ -627,7 +636,7 @@ export function evaluateTalentOfferDeep(params: {
       ? ' وبعد جلسة القراءة الخاصة،'
       : '';
     const roleText = customRoleDescription.trim() || roleBillingLabel;
-    const finText = `${formatMoney(offeredSalary)} ج.م${
+    const finText = `${formatMoney(offeredSalary)} ${currencyLabel}${
       backendPoints > 0 ? ` + ${backendPoints}% من الأرباح` : ''
     }`;
 
@@ -665,10 +674,10 @@ export function evaluateTalentOfferDeep(params: {
   }
 
   const rejectVariants = [
-    `رغم إعجابي بفكرة «${projectTitle}» ودور «${customRoleDescription || roleBillingLabel}»، إلا أن العرض المالي (${formatMoney(offeredSalary)} ج.م) يقل عن أجري السوقي المتوقع (${formatMoney(expectedMinimumSalary)} ج.م) لحجم التفرغ المطلوب.`,
-    `اعتذر وكيل أعمالي عن عدم إتمام التعاقد على «${projectTitle}»؛ القيمة المالية المعروضة (${formatMoney(offeredSalary)} ج.م) لا تتناسب مع أجر الفئة (${starTier}) الذي لا يقل عن ${formatMoney(expectedMinimumSalary)} ج.م.`,
-    `النص الدرامي لعمل «${projectTitle}» واعد، لكن الفجوة المالية بين عرضكم (${formatMoney(offeredSalary)} ج.م) ومتطلبات التعاقد (${formatMoney(expectedMinimumSalary)} ج.م) تحول دون توقيعي حالياً.`,
-    `بعد دراسة عرض «${projectTitle}»، أرى أن الميزانية المخصصة لأجري (${formatMoney(offeredSalary)} ج.م) تحتاج إلى مراجعة لتصل إلى حدود ${formatMoney(expectedMinimumSalary)} ج.م أو تعويضها بنسبة أرباح أعلى.`,
+    `رغم إعجابي بفكرة «${projectTitle}» ودور «${customRoleDescription || roleBillingLabel}»، إلا أن العرض المالي (${formatMoney(offeredSalary)} ${currencyLabel}) يقل عن أجري السوقي المتوقع (${formatMoney(expectedMinimumSalary)} ${currencyLabel}) لحجم التفرغ المطلوب.`,
+    `اعتذر وكيل أعمالي عن عدم إتمام التعاقد على «${projectTitle}»؛ القيمة المالية المعروضة (${formatMoney(offeredSalary)} ${currencyLabel}) لا تتناسب مع أجر الفئة (${starTier}) الذي لا يقل عن ${formatMoney(expectedMinimumSalary)} ${currencyLabel}.`,
+    `النص الدرامي لعمل «${projectTitle}» واعد، لكن الفجوة المالية بين عرضكم (${formatMoney(offeredSalary)} ${currencyLabel}) ومتطلبات التعاقد (${formatMoney(expectedMinimumSalary)} ${currencyLabel}) تحول دون توقيعي حالياً.`,
+    `بعد دراسة عرض «${projectTitle}»، أرى أن الميزانية المخصصة لأجري (${formatMoney(offeredSalary)} ${currencyLabel}) تحتاج إلى مراجعة لتصل إلى حدود ${formatMoney(expectedMinimumSalary)} ${currencyLabel} أو تعويضها بنسبة أرباح أعلى.`,
   ];
 
   return {
@@ -722,6 +731,7 @@ export interface ProjectSimulationInput {
   qualityModifier?: number;
   aiBoxOfficeMultiplier: number;
   marketRegion: MarketRegion;
+  worldMarket?: WorldMarketId;
   selectedDistributionMarkets?: MarketRegion[];
   scriptWordCount?: number;
   previousGenres?: GenreId[];
@@ -792,19 +802,23 @@ const GENRE_MARKET_PROFILES: Record<
 export function calculateFinancialsAndQuality(
   input: ProjectSimulationInput
 ): ProjectFinancialResult {
+  const worldMarket: WorldMarketId = input.worldMarket || 'egypt';
+  const primaryRegion = getPrimaryMarketRegion(worldMarket);
+  const marketConfigs = getMarketConfigsForWorld(worldMarket);
+
   const activeMarkets: MarketRegion[] =
     input.selectedDistributionMarkets &&
     input.selectedDistributionMarkets.length > 0
       ? input.selectedDistributionMarkets
-      : [input.marketRegion || 'egypt'];
+      : [input.marketRegion || primaryRegion];
 
   let combinedRevenueMultiplier = 1.0;
   let distributionFeesTotal = 0;
 
   for (const mId of activeMarkets) {
-    const cfg = MARKET_CONFIGS.find((m) => m.id === mId);
+    const cfg = marketConfigs.find((m) => m.id === mId);
     if (!cfg) continue;
-    if (mId !== 'egypt') {
+    if (mId !== primaryRegion) {
       combinedRevenueMultiplier += cfg.revenueBonusFactor;
       distributionFeesTotal += cfg.distributionFeePerProject;
     }
@@ -1247,30 +1261,6 @@ export interface RivalRelease {
   delayReason?: string;
 }
 
-const RIVAL_FILM_TITLES = [
-  'الرصاصة الذهبية',
-  'ولاد الحارة 4',
-  'كازابلانكا الجديدة',
-  'الفيل الأزرق 3',
-  'الهروب من طرة',
-  'شمس الزناتي الجديد',
-  'صقر الصعيد',
-  'ليلة سقوط القناع',
-  'خطة جهنمية',
-  'الممر السري',
-];
-
-const RIVAL_SERIES_TITLES = [
-  'الاختيار الحاسم',
-  'الحشاشين: العهد الجديد',
-  'جعفر العمدة 2',
-  'لعبة نيوتن الجديدة',
-  'تحت الوصاية الكاملة',
-  'الكتيبة 102',
-  'سر الغرفة 207',
-  'الكبير أوي 9',
-];
-
 export function generateRivalReleases(
   competitors: {
     id: string;
@@ -1282,7 +1272,9 @@ export function generateRivalReleases(
   excludedActorIds: string[],
   regionMultiplier: number,
   seedOffset = 0,
-  format: ProjectFormat = 'film'
+  format: ProjectFormat = 'film',
+  worldMarket: WorldMarketId = 'egypt',
+  directors?: { name: string }[]
 ): RivalRelease[] {
   const availableStars = allActors.filter(
     (a) =>
@@ -1291,7 +1283,15 @@ export function generateRivalReleases(
       a.status !== 'retired' &&
       a.status !== 'deceased'
   );
-  const titles = format === 'series' ? RIVAL_SERIES_TITLES : RIVAL_FILM_TITLES;
+  const profile = getMarketProfile(worldMarket);
+  const titles =
+    format === 'series'
+      ? profile.rivalSeriesTitles.length > 0
+        ? profile.rivalSeriesTitles
+        : getMarketProfile('egypt').rivalSeriesTitles
+      : profile.rivalFilmTitles.length > 0
+      ? profile.rivalFilmTitles
+      : getMarketProfile('egypt').rivalFilmTitles;
 
   const activeSeasonCount = 4;
   const rotatedCompetitors = [...competitors].sort((a, b) => {
@@ -1313,6 +1313,10 @@ export function generateRivalReleases(
     const star =
       availableStars[(idx * 3 + seedOffset) % Math.max(1, availableStars.length)] ||
       allActors[0];
+    const dir =
+      directors && directors.length > 0
+        ? directors[(idx * 2 + seedOffset) % directors.length]
+        : undefined;
     const title = titles[(idx * 3 + seedOffset) % titles.length];
     const arch = archetypeOrder[idx % archetypeOrder.length];
 
@@ -1324,6 +1328,7 @@ export function generateRivalReleases(
         title,
         genre: studio.preferred_genres[0] || 'action',
         leadStarName: star?.name || 'نجم شباك',
+        directorName: dir?.name,
         boxOfficeRevenue: 0,
         criticScore: 0,
         audienceScore: 0,
@@ -1379,6 +1384,7 @@ export function generateRivalReleases(
       title,
       genre: studio.preferred_genres[0] || 'action',
       leadStarName: star?.name || 'نجم شباك',
+      directorName: dir?.name,
       boxOfficeRevenue: Math.round(Math.max(24_000_000, Math.min(175_000_000, baseRev))),
       criticScore: Number(Math.min(9.4, Math.max(4.4, criticScore)).toFixed(1)),
       audienceScore: Number(Math.min(9.5, Math.max(4.5, audienceScore)).toFixed(1)),
@@ -1404,4 +1410,11 @@ export function formatMoney(amount: number): string {
     return `${sign}${(abs / 1_000).toFixed(0)}K`;
   }
   return `${sign}${abs}`;
+}
+
+export function formatCurrency(
+  amount: number,
+  worldMarket?: WorldMarketId | null
+): string {
+  return `${formatMoney(amount)} ${getCurrencyLabel(worldMarket)}`;
 }

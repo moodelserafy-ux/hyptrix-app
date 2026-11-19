@@ -7,8 +7,10 @@ import {
   CrisisEventItem,
   DailyAiNewsItem,
   getStudioAssetBenefits,
+  getLiveActorsWithEvolution,
 } from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
+import { getCurrencyLabel } from '@/lib/market-profiles';
 import { formatMoney } from '@/lib/game-engine';
 import { AnimatedFilmingSetGraphic } from '@/components/CinematicGraphicsScene';
 import {
@@ -30,10 +32,13 @@ export function Stage4ProductionCrises() {
     setActiveScreen,
     cash,
     gameDay,
+    currentYear,
     studioName,
     ceoName,
     aiMemoryLog,
     customDbPatch,
+    aiGeneratedActors,
+    actorDynamicState,
     resolveCrisisOption,
     resolveCrisisWithStudioAsset,
     resolveCrisisWithCash8M,
@@ -43,14 +48,33 @@ export function Stage4ProductionCrises() {
     showToast,
     groqApiKeyClient,
     preferredGroqModel,
+    worldMarket,
+    uiLanguage,
   } = useGameStore();
+
+  const currencyLabel = getCurrencyLabel(worldMarket);
 
   const studioAssetBenefits = useMemo(
     () => getStudioAssetBenefits(ownedStudioAssets),
     [ownedStudioAssets]
   );
 
-  const db = useMemo(() => getResolvedDatabase(customDbPatch), [customDbPatch]);
+  const db = useMemo(
+    () => getResolvedDatabase(customDbPatch, worldMarket),
+    [customDbPatch, worldMarket]
+  );
+
+  const liveActors = useMemo(
+    () =>
+      getLiveActorsWithEvolution({
+        baseActors: db.actors,
+        aiGeneratedActors,
+        actorDynamicState,
+        currentYear,
+        gameDay,
+      }),
+    [db.actors, aiGeneratedActors, actorDynamicState, currentYear, gameDay]
+  );
 
   const [isLoadingCrises, setIsLoadingCrises] = useState(false);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
@@ -70,9 +94,9 @@ export function Stage4ProductionCrises() {
 
   const leadActorName = useMemo(
     () =>
-      db.actors.find((a) => a.id === draft.leadActorIds[0])?.name ||
+      liveActors.find((a) => a.id === draft.leadActorIds[0])?.name ||
       'بطل العمل',
-    [db.actors, draft.leadActorIds]
+    [liveActors, draft.leadActorIds]
   );
 
   const generateProductionCrises = async () => {
@@ -87,12 +111,15 @@ export function Stage4ProductionCrises() {
           preferredModel: preferredGroqModel,
           payload: {
             title: draft.title,
+            synopsis: draft.scriptSynopsis,
             genre: draft.primaryGenre,
             leadActorName,
             directorName,
             studioName,
             ceoName,
             aiMemoryLog,
+            worldMarket,
+            uiLanguage,
           },
         }),
       });
@@ -121,11 +148,14 @@ export function Stage4ProductionCrises() {
             phase: 'filming',
             day: draft.filmingDaysElapsed + 1,
             title: draft.title,
+            synopsis: draft.scriptSynopsis,
             genre: draft.primaryGenre,
             leadActorName,
             directorName,
             studioName,
             ceoName,
+            worldMarket,
+            uiLanguage,
           },
         }),
       });
@@ -257,7 +287,7 @@ export function Stage4ProductionCrises() {
             السيولة المتاحة
           </span>
           <span className="font-mono text-sm font-black text-[#1A2530]">
-            {formatMoney(cash)} ج.م
+            {formatMoney(cash)} {currencyLabel}
           </span>
         </div>
       </div>
@@ -338,7 +368,7 @@ export function Stage4ProductionCrises() {
                   </span>
                   <div className="flex flex-wrap items-center justify-between gap-1">
                     <span className="rounded-md bg-[#D91624] px-2 py-0.5 font-mono text-[10px] font-black text-white">
-                      دفع 8.0M ج.م
+                      دفع 8.0M {currencyLabel}
                     </span>
                     <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-900">
                       جودة +3 · ضجة +4
@@ -356,7 +386,7 @@ export function Stage4ProductionCrises() {
                   </span>
                   <div className="flex flex-wrap items-center justify-between gap-1">
                     <span className="rounded-md bg-[#1A2530] px-2 py-0.5 font-mono text-[10px] font-black text-[#D4AF37]">
-                      مجاناً (0 ج.م · إعلان)
+                      مجاناً (0 {currencyLabel} · إعلان)
                     </span>
                     <span className="rounded-md bg-[#15803D] px-2 py-0.5 text-[10px] font-black text-white">
                       جودة +4 · ضجة +5
@@ -376,7 +406,7 @@ export function Stage4ProductionCrises() {
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                   {crisis.optionA.cost > 0 && (
                     <span className="rounded-md bg-[#D91624]/15 px-2 py-0.5 font-mono text-[10px] font-black text-[#D91624]">
-                      -{formatMoney(crisis.optionA.cost)} ج.م
+                      -{formatMoney(crisis.optionA.cost)} {currencyLabel}
                     </span>
                   )}
                   <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-900">
@@ -401,7 +431,7 @@ export function Stage4ProductionCrises() {
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                   {crisis.optionB.cost > 0 && (
                     <span className="rounded-md bg-[#D91624]/15 px-2 py-0.5 font-mono text-[10px] font-black text-[#D91624]">
-                      -{formatMoney(crisis.optionB.cost)} ج.م
+                      -{formatMoney(crisis.optionB.cost)} {currencyLabel}
                     </span>
                   )}
                   <span className="rounded-md bg-[#1A2530]/10 px-2 py-0.5 text-[10px] font-black text-[#1A2530]">
@@ -435,7 +465,7 @@ export function Stage4ProductionCrises() {
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     <span className="rounded-md bg-[#15803D] px-2 py-0.5 font-mono text-[10px] font-black text-white">
-                      مجاناً (0 ج.م)
+                      مجاناً (0 {currencyLabel})
                     </span>
                     <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-900">
                       جودة +4 · ضجة +4

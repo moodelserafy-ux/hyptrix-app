@@ -4,16 +4,21 @@ import React, { useState, useMemo } from 'react';
 import {
   useGameStore,
   ReleasedProjectRecord,
-  DailyAiNewsItem,
   getLiveActorsWithEvolution,
+  getStudioAssetBenefits,
 } from '@/lib/store';
 import { GENRES, getResolvedDatabase } from '@/lib/db-resolver';
 import {
-  MARKET_CONFIGS,
   calculateFinancialsAndQuality,
   generateRivalReleases,
   formatMoney,
 } from '@/lib/game-engine';
+import {
+  getMarketProfile,
+  getMarketConfigsForWorld,
+  getPrimaryMarketRegion,
+  getMarketAiContext,
+} from '@/lib/market-profiles';
 import { AnimatedCinemaPremiereGraphic } from '@/components/CinematicGraphicsScene';
 import {
   Megaphone,
@@ -26,7 +31,7 @@ import {
   Eye,
   Check,
   Zap,
-  Newspaper,
+  Clock,
   Bot,
   Trophy,
   Activity,
@@ -110,7 +115,6 @@ export function Stage5ReleaseSimulation() {
     releasedProjects,
     lastReleasedProject,
     completeProjectRelease,
-    advanceReleaseTrackingDay,
     triggerElectronicTrollsCampaign,
     claimInternationalDistributionAdBonus,
     customDbPatch,
@@ -120,11 +124,23 @@ export function Stage5ReleaseSimulation() {
     aiMemoryLog,
     pushBreakingNewsModal,
     showToast,
+    ownedStudioAssets,
     groqApiKeyClient,
     preferredGroqModel,
+    worldMarket,
+    uiLanguage,
   } = useGameStore();
 
-  const db = useMemo(() => getResolvedDatabase(customDbPatch), [customDbPatch]);
+  const marketProfile = useMemo(() => getMarketProfile(worldMarket), [worldMarket]);
+  const marketConfigs = useMemo(() => getMarketConfigsForWorld(worldMarket), [worldMarket]);
+  const primaryRegion = getPrimaryMarketRegion(worldMarket);
+  const marketAiCtx = getMarketAiContext(worldMarket);
+  const currencyLabel = marketProfile.currencyLabel;
+
+  const db = useMemo(
+    () => getResolvedDatabase(customDbPatch, worldMarket),
+    [customDbPatch, worldMarket]
+  );
 
   const liveActors = useMemo(
     () =>
@@ -140,8 +156,6 @@ export function Stage5ReleaseSimulation() {
 
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const [isSimulating, setIsSimulating] = useState(false);
-  const [isTrackingNext, setIsTrackingNext] = useState(false);
-  const [episodeHighlight, setEpisodeHighlight] = useState<string | null>(null);
   const [simInsights, setSimInsights] = useState<{
     synergyLabel: string;
     chemistryBonus: number;
@@ -149,7 +163,10 @@ export function Stage5ReleaseSimulation() {
     viewershipMillions?: number;
   } | null>(null);
 
-  const isSeries = draft.format === 'series';
+  const isSeries =
+    wizardStep === 2 && lastReleasedProject
+      ? lastReleasedProject.format === 'series'
+      : draft.format === 'series';
 
   const streamingPlatforms = useMemo(
     () =>
@@ -166,6 +183,18 @@ export function Stage5ReleaseSimulation() {
       ),
     [db.streaming_platforms]
   );
+
+  const effectiveSelectedPlatformId = streamingPlatforms.some(
+    (p) => p.id === draft.selectedPlatformId
+  )
+    ? draft.selectedPlatformId
+    : streamingPlatforms[0]?.id || null;
+
+  const effectiveSelectedTvChannelId = tvChannels.some(
+    (tv) => tv.id === draft.selectedTvChannelId
+  )
+    ? draft.selectedTvChannelId
+    : tvChannels[0]?.id || null;
 
   const primaryGenreObj = useMemo(
     () => GENRES.find((g) => g.id === draft.primaryGenre),
@@ -240,6 +269,7 @@ export function Stage5ReleaseSimulation() {
         selectedDistributionMarkets: draft.selectedDistributionMarkets,
         scriptWordCount,
         previousGenres: releasedProjects.slice(0, 3).map((p) => p.primaryGenre),
+        worldMarket,
       });
 
       // 2. Evaluate release via AI using the REAL engine quality & commercial appeal
@@ -287,6 +317,8 @@ export function Stage5ReleaseSimulation() {
               })),
               availableStars: availableRivalStars,
               aiMemoryLog,
+              worldMarket,
+              uiLanguage,
             },
           }),
         });
@@ -302,6 +334,8 @@ export function Stage5ReleaseSimulation() {
           ? aiEval.aiBoxOfficeMultiplier
           : 1.02;
       const aiMult = Math.max(0.55, Math.min(1.4, rawAiMult));
+
+      const assetBenefits = getStudioAssetBenefits(ownedStudioAssets);
 
       // 3. Final financial simulation modulated by AI market response
       const fin = calculateFinancialsAndQuality({
@@ -329,12 +363,13 @@ export function Stage5ReleaseSimulation() {
           (isSeries ? draft.tvChannelDealAmount : 0),
         founderPerk,
         hypeScore: draft.hypeScore,
-        qualityModifier: draft.qualityModifier,
+        qualityModifier: draft.qualityModifier + assetBenefits.totalQualityBonus,
         aiBoxOfficeMultiplier: aiMult,
         marketRegion: currentRegion,
         selectedDistributionMarkets: draft.selectedDistributionMarkets,
         scriptWordCount,
         previousGenres: releasedProjects.slice(0, 3).map((p) => p.primaryGenre),
+        worldMarket,
       });
 
       // Calculate total project cost
@@ -359,11 +394,12 @@ export function Stage5ReleaseSimulation() {
         if (offer) talentCost += offer.offeredSalary;
       }
 
-      const deptCost =
+      const rawDeptCost =
         draft.budgetAllocation.setsAndLocations +
         draft.budgetAllocation.costumesAndMakeup +
         draft.budgetAllocation.vfxAndStunts +
         draft.budgetAllocation.extrasAndCrowds;
+      const deptCost = Math.round(rawDeptCost * assetBenefits.costMultiplier);
 
       const totalBudget =
         talentCost +
@@ -371,13 +407,16 @@ export function Stage5ReleaseSimulation() {
         draft.marketingBudget +
         fin.distributionFeesTotal;
 
+      const marketDirectors = db.crew.filter((c) => c.role === 'director');
       const fallbackRivals = generateRivalReleases(
         allCompetitors,
         liveActors,
         [...draft.leadActorIds, ...(draft.antagonistId ? [draft.antagonistId] : [])],
         1.02,
         currentYear + releasedProjects.length,
-        draft.format
+        draft.format,
+        worldMarket,
+        marketDirectors
       );
 
       const rawRivals =
@@ -400,6 +439,7 @@ export function Stage5ReleaseSimulation() {
                 title: String(r.title || fb?.title || 'عمل منافس'),
                 genre: String(r.genre || primaryGenreObj?.name || 'دراما'),
                 leadStarName: String(r.leadStarName || fb?.leadStarName || 'نجم صف أول'),
+                directorName: String(r.directorName || fb?.directorName || marketDirectors[idx % Math.max(1, marketDirectors.length)]?.name || ''),
                 boxOfficeRevenue: Math.max(
                   24_000_000,
                   Math.min(175_000_000, Number(r.boxOfficeRevenue) || fb?.boxOfficeRevenue || 76_000_000)
@@ -498,13 +538,11 @@ export function Stage5ReleaseSimulation() {
         episodes: isSeries ? draft.episodes : undefined,
         seasonName: isSeries
           ? draft.seriesSeason === 'ramadan'
-            ? 'موسم دراما رمضان'
-            : 'موسم أوف سيزون'
-          : draft.filmSeason === 'eid_adha'
-          ? 'موسم عيد الأضحى'
-          : draft.filmSeason === 'eid_fitr'
-          ? 'موسم عيد الفطر'
-          : 'موسم الصيف السينمائي',
+            ? marketProfile.seriesSeasonPrimaryLabel
+            : marketProfile.seriesSeasonOffLabel
+          : marketProfile.filmSeasons.find((s) => s.id === draft.filmSeason)?.label ||
+            marketProfile.filmSeasons[0]?.label ||
+            'الموسم السينمائي',
         primaryGenre: draft.primaryGenre,
         secondaryGenre: draft.secondaryGenre,
         ageRating: draft.ageRating,
@@ -561,15 +599,17 @@ export function Stage5ReleaseSimulation() {
             }))
           : [
               {
-                criticName: 'طارق الشناوي',
-                publication: 'الشرق الأوسط',
+                criticName: marketAiCtx.fallbackCritics[0]?.name || 'ناقد سينمائي',
+                publication:
+                  marketAiCtx.fallbackCritics[0]?.publication || 'الصحافة الفنية',
                 sentiment: criticScore10 >= 7.2 ? 'positive' : 'mixed',
                 quote: `عمل فني يحمل بصمة واضحة في «${draft.title}» بقيادة المخرج ${director.name} ويقدم معالجة درامية لافتة.`,
                 score: criticScore10,
               },
               {
-                criticName: 'أندرو محسن',
-                publication: 'في الفن',
+                criticName: marketAiCtx.fallbackCritics[1]?.name || 'محرر فني',
+                publication:
+                  marketAiCtx.fallbackCritics[1]?.publication || 'مجلة الشاشة',
                 sentiment: audienceScore10 >= 7.5 ? 'positive' : 'mixed',
                 quote: `تناغم واضح بين الأبطال (${leads.map((l) => l.name).join(' و')}) مع إقبال جماهيري قوي منذ اليوم الأول.`,
                 score: audienceScore10,
@@ -579,15 +619,15 @@ export function Stage5ReleaseSimulation() {
           ? (aiEval.social_posts || aiEval.socialPosts)
           : [
               {
-                handle: '@CinemaLoversEG',
+                handle: marketAiCtx.socialHandles[0],
                 platform: 'X',
                 content: `#${draft.title.replace(/\s+/g, '_')} عمل متعوب عليه جداً وأداء تمثيلي خطف الأنظار من أول مشهد! 🔥👏`,
                 likes: '24.5K',
               },
               {
-                handle: '@DramaTrends',
+                handle: marketAiCtx.socialHandles[2],
                 platform: 'TikTok',
-                content: `مشاهد «${draft.title}» متصدرة التريند والجمهور بيشيد بقوة القصة والإخراج ✨`,
+                content: `مشاهد «${draft.title}» متصدرة التريند والجمهور يشيد بقوة القصة والإخراج ✨`,
                 likes: '61.2K',
               },
             ],
@@ -624,14 +664,14 @@ export function Stage5ReleaseSimulation() {
           : 'افتتاح شباك التذاكر السينمائي',
         headline: isSeries
           ? `انطلاق بث الحلقة الأولى من «${record.title}» بـ ${viewershipMillions}M مشاهدة`
-          : `افتتاح سينمائي قوي لفيلم «${record.title}» بـ ${formatMoney(record.totalGrossRevenue)} ج.م`,
+          : `افتتاح سينمائي قوي لفيلم «${record.title}» بـ ${formatMoney(record.totalGrossRevenue)} ${currencyLabel}`,
         detail: isSeries
           ? `حصدت الحلقة الافتتاحية من مسلسل «${record.title}» إخراج ${allDirectorsDisplayName} تفاعلاً جماهيرياً واسعاً وتقييم ${record.criticScore}/10 من النقاد.`
           : `انطلق عرض فيلم «${record.title}» إخراج ${allDirectorsDisplayName} في قاعات السينما بالمركز #${record.boxOfficeRank} وسط منافسة محتدمة وتقييم ${record.criticScore}/10.`,
         highlightName: record.title,
         extraStatBadge: isSeries
           ? `${viewershipMillions}M مشاهدة`
-          : `${formatMoney(record.totalGrossRevenue)} ج.م`,
+          : `${formatMoney(record.totalGrossRevenue)} ${currencyLabel}`,
         gameImpactLabel: `المركز #${record.boxOfficeRank} في سباق الموسم · تقييم النقاد ${record.criticScore}/10`,
       });
     } finally {
@@ -639,123 +679,7 @@ export function Stage5ReleaseSimulation() {
     }
   };
 
-  // Interactive Day-by-Day Box Office / Episode Broadcast Tracker
-  const handleTrackNextBroadcastStep = async () => {
-    if (!lastReleasedProject) return;
-    setIsTrackingNext(true);
-    try {
-      const nextStep = (lastReleasedProject.daysTracked || 1) + 1;
-      if (isSeries) {
-        const res = await fetch('/api/generate-event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'evaluate_series_episode',
-            groqKeyOverride: groqApiKeyClient,
-            preferredModel: preferredGroqModel,
-            payload: {
-              title: lastReleasedProject.title,
-              synopsis: lastReleasedProject.synopsis,
-              episodeNumber: nextStep,
-              totalEpisodes: lastReleasedProject.episodes || 15,
-              leadActors: lastReleasedProject.leadNames,
-              directorName: lastReleasedProject.directorName,
-              studioName,
-            },
-          }),
-        });
-        const data = await res.json();
-        const highlight =
-          data?.episodeHighlight ||
-          data?.headline ||
-          `تصاعد درامي مثير في الحلقة ${nextStep} من «${lastReleasedProject.title}» يشعل تفاعل المشاهدين!`;
-        setEpisodeHighlight(`الحلقة ${nextStep}: ${highlight}`);
-        const playerMom =
-          typeof data?.daily_revenue_multiplier === 'number'
-            ? data.daily_revenue_multiplier
-            : 1.06;
-        const rivalMom =
-          typeof data?.rival_momentum === 'number' ? data.rival_momentum : 1.0;
-        const epNewsItem: DailyAiNewsItem = {
-          id: `ep_news_${Date.now()}`,
-          day: gameDay,
-          headline: `تفاعل واسع مع الحلقة ${nextStep} من «${lastReleasedProject.title}»`,
-          detail: highlight,
-          impactType: 'positive',
-          hypeDelta: 3,
-        };
-        advanceReleaseTrackingDay(epNewsItem, playerMom, rivalMom);
-        pushBreakingNewsModal({
-          id: `modal_${epNewsItem.id}`,
-          day: gameDay,
-          year: currentYear,
-          category: 'production_news',
-          badgeLabel: `تقرير بث الحلقات · الحلقة ${nextStep}`,
-          headline: epNewsItem.headline,
-          detail: epNewsItem.detail,
-          highlightName: lastReleasedProject.title,
-          extraStatBadge: `الحلقة ${nextStep}`,
-          gameImpactLabel: `تصاعد المشاهدات وعوائد البث لمسلسل «${lastReleasedProject.title}»`,
-        });
-      } else {
-        const res = await fetch('/api/generate-event', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'generate_daily_news',
-            groqKeyOverride: groqApiKeyClient,
-            preferredModel: preferredGroqModel,
-            payload: {
-              phase: 'box_office',
-              day: nextStep,
-              title: lastReleasedProject.title,
-              genre: lastReleasedProject.primaryGenre,
-              leadActorName: lastReleasedProject.leadNames[0] || 'بطل العمل',
-              directorName: lastReleasedProject.directorName,
-              studioName,
-              ceoName,
-            },
-          }),
-        });
-        const data = await res.json();
-        const item: DailyAiNewsItem = {
-          id: `bo_news_${Date.now()}`,
-          day: gameDay,
-          headline:
-            data?.headline ||
-            `نمو متواصل لإيرادات «${lastReleasedProject.title}» في اليوم ${nextStep} لشباك التذاكر`,
-          detail:
-            data?.detail ||
-            `واصل الفيلم تحقيق عوائد قوية في شباك التذاكر وسط منافسة محتدمة على صدارة الموسم.`,
-          impactType: data?.impactType || 'positive',
-          hypeDelta: 2,
-        };
-        const playerMom =
-          typeof data?.daily_revenue_multiplier === 'number'
-            ? data.daily_revenue_multiplier
-            : 1.05;
-        const rivalMom =
-          typeof data?.rival_momentum === 'number' ? data.rival_momentum : 1.0;
-        advanceReleaseTrackingDay(item, playerMom, rivalMom);
-        pushBreakingNewsModal({
-          id: `modal_${item.id}`,
-          day: gameDay,
-          year: currentYear,
-          category: 'production_news',
-          badgeLabel: `نشرة شباك التذاكر · اليوم ${nextStep}`,
-          headline: item.headline,
-          detail: item.detail,
-          highlightName: lastReleasedProject.title,
-          extraStatBadge: `اليوم ${nextStep}`,
-          gameImpactLabel: `نمو إيرادات شباك التذاكر لفيلم «${lastReleasedProject.title}»`,
-        });
-      }
-    } catch {
-      advanceReleaseTrackingDay();
-    } finally {
-      setIsTrackingNext(false);
-    }
-  };
+  const releasedTitle = lastReleasedProject?.title || draft.title;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 pb-28" dir="rtl">
@@ -776,8 +700,8 @@ export function Stage5ReleaseSimulation() {
                     ? `إعداد التسويق وعقود البث والفضائيات: «${draft.title}»`
                     : `إعداد الحملة الترويجية وشاشات العرض: «${draft.title}»`
                   : isSeries
-                  ? `متابعة المشاهدات المليونية وتقييمات النقاد: «${draft.title}»`
-                  : `متابعة إيرادات شباك التذاكر ومنافسة الموسم: «${draft.title}»`}
+                  ? `متابعة المشاهدات المليونية وتقييمات النقاد: «${releasedTitle}»`
+                  : `متابعة إيرادات شباك التذاكر ومنافسة الموسم: «${releasedTitle}»`}
               </h2>
             </div>
           </div>
@@ -806,7 +730,7 @@ export function Stage5ReleaseSimulation() {
                     ميزانية الإعلانات والدعاية (Marketing)
                   </span>
                   <span className="font-mono text-xs font-black text-[#D91624]">
-                    {formatMoney(draft.marketingBudget)} ج.م
+                    {formatMoney(draft.marketingBudget)} {currencyLabel}
                   </span>
                 </div>
                 <input
@@ -857,7 +781,7 @@ export function Stage5ReleaseSimulation() {
                 </h3>
                 <div className="space-y-2">
                   {streamingPlatforms.map((plat) => {
-                    const selected = draft.selectedPlatformId === plat.id;
+                    const selected = effectiveSelectedPlatformId === plat.id;
                     const dealVal = Math.round(plat.budget_capacity * 320_000);
                     return (
                       <button
@@ -882,18 +806,27 @@ export function Stage5ReleaseSimulation() {
                               <img
                                 src={plat.logo_url}
                                 alt={plat.name}
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  const next = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                  if (next) next.style.display = 'inline';
+                                }}
                                 className="h-full w-full object-contain p-1"
                               />
-                            ) : (
-                              <span className="text-[10px] font-black text-[#D4AF37]">
-                                VOD
-                              </span>
-                            )}
+                            ) : null}
+                            <span
+                              style={{ display: plat.logo_url ? 'none' : 'inline' }}
+                              className="text-[10px] font-black text-[#D4AF37]"
+                            >
+                              VOD
+                            </span>
                           </div>
                           <div>
                             <div className="text-xs font-black">{plat.name}</div>
                             <div className="font-mono text-[10px] font-bold text-[#15803D]">
-                              عقد البث: {formatMoney(dealVal)} ج.م
+                              عقد البث: {formatMoney(dealVal)} {currencyLabel}
                             </div>
                           </div>
                         </div>
@@ -914,7 +847,7 @@ export function Stage5ReleaseSimulation() {
                 </h3>
                 <div className="space-y-2">
                   {tvChannels.map((tv) => {
-                    const selected = draft.selectedTvChannelId === tv.id;
+                    const selected = effectiveSelectedTvChannelId === tv.id;
                     const dealVal = Math.round(tv.budget_capacity * 260_000);
                     return (
                       <button
@@ -939,18 +872,27 @@ export function Stage5ReleaseSimulation() {
                               <img
                                 src={tv.logo_url}
                                 alt={tv.name}
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  const next = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                  if (next) next.style.display = 'inline';
+                                }}
                                 className="h-full w-full object-contain p-1"
                               />
-                            ) : (
-                              <span className="text-[10px] font-black text-[#D4AF37]">
-                                TV
-                              </span>
-                            )}
+                            ) : null}
+                            <span
+                              style={{ display: tv.logo_url ? 'none' : 'inline' }}
+                              className="text-[10px] font-black text-[#D4AF37]"
+                            >
+                              TV
+                            </span>
                           </div>
                           <div>
                             <div className="text-xs font-black">{tv.name}</div>
                             <div className="font-mono text-[10px] font-bold text-[#15803D]">
-                              حقوق العرض: {formatMoney(dealVal)} ج.م
+                              حقوق العرض: {formatMoney(dealVal)} {currencyLabel}
                             </div>
                           </div>
                         </div>
@@ -970,10 +912,10 @@ export function Stage5ReleaseSimulation() {
                 أسواق التوزيع الإقليمية والدولية
               </h3>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {MARKET_CONFIGS.map((m) => {
+                {marketConfigs.map((m) => {
                   const isUnlocked = unlockedRegions.includes(m.id);
                   const isSelected = (
-                    draft.selectedDistributionMarkets || ['egypt']
+                    draft.selectedDistributionMarkets || [primaryRegion]
                   ).includes(m.id);
                   return (
                     <div
@@ -989,7 +931,9 @@ export function Stage5ReleaseSimulation() {
                           {m.name}
                         </span>
                         <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-900">
-                          +{Math.round(m.revenueBonusFactor * 100)}% عوائد
+                          {m.id === primaryRegion
+                            ? 'السوق الأساسي'
+                            : `+${Math.round(m.revenueBonusFactor * 100)}% عوائد`}
                         </span>
                       </div>
                       <p className="mt-1 text-[10px] font-bold text-[#1A2530]/65">
@@ -1015,14 +959,14 @@ export function Stage5ReleaseSimulation() {
                               const ok = unlockMarketRegionWithCash(m.id);
                               if (!ok) {
                                 showToast(
-                                  `يتطلب فتح ${m.name} سيولة ${formatMoney(m.earlyLicenseCost)} ج.م`,
+                                  `يتطلب فتح ${m.name} سيولة ${formatMoney(m.earlyLicenseCost)} ${currencyLabel}`,
                                   'warning'
                                 );
                               }
                             }}
                             className="w-full rounded-lg border border-[#D4AF37] bg-[#1A2530] py-1.5 text-[11px] font-black text-[#D4AF37] hover:brightness-110"
                           >
-                            فتح ترخيص السوق ({formatMoney(m.earlyLicenseCost)} ج.م)
+                            فتح ترخيص السوق ({formatMoney(m.earlyLicenseCost)} {currencyLabel})
                           </button>
                         )}
                       </div>
@@ -1165,6 +1109,7 @@ export function Stage5ReleaseSimulation() {
               currentStep={lastReleasedProject.daysTracked || 1}
               maxSteps={isSeries ? lastReleasedProject.episodes || 15 : 10}
               liveRevenueFormatted={formatMoney(lastReleasedProject.totalGrossRevenue)}
+              currencyLabel={currencyLabel}
               rank={lastReleasedProject.boxOfficeRank}
               criticScore={lastReleasedProject.criticScore}
             />
@@ -1176,7 +1121,7 @@ export function Stage5ReleaseSimulation() {
                   {isSeries ? 'إجمالي عوائد البث والإعلانات' : 'إجمالي الإيرادات'}
                 </span>
                 <span className="font-typewriter text-sm font-black text-[#15803D]">
-                  {formatMoney(lastReleasedProject.totalGrossRevenue)} ج.م
+                  {formatMoney(lastReleasedProject.totalGrossRevenue)} {currencyLabel}
                 </span>
               </div>
 
@@ -1206,7 +1151,7 @@ export function Stage5ReleaseSimulation() {
                         : 'text-[#D91624]'
                     }`}
                   >
-                    {formatMoney(lastReleasedProject.netProfit)} ج.م
+                    {formatMoney(lastReleasedProject.netProfit)} {currencyLabel}
                   </span>
                 </div>
               )}
@@ -1230,127 +1175,202 @@ export function Stage5ReleaseSimulation() {
               </div>
             </div>
 
-            {/* Interactive Live Tracking & Viral Electronic Trolls Boost */}
-            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-3 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
-                    <TrendingUp className="h-4 w-4 text-[#D91624]" />
-                    {isSeries
-                      ? `متابعة عرض الحلقات: الحلقة ${lastReleasedProject.daysTracked || 1} من ${lastReleasedProject.episodes || 15}`
-                      : `متابعة أيام شباك التذاكر: اليوم ${lastReleasedProject.daysTracked || 1} من 10`}
-                  </span>
-                  <p className="mt-0.5 text-[10px] font-bold text-[#15803D]">
-                    تتزايد الإيرادات والمشاهدات تدريجياً مع مرور الأيام وحسب تفاعل الجمهور والنقاد
-                  </p>
-                  {episodeHighlight && (
-                    <p className="mt-1 text-xs font-bold text-[#1A2530]">
-                      {episodeHighlight}
-                    </p>
-                  )}
-                </div>
+            {/* Automatic Live Release Progression & Strategic Boosts */}
+            {(() => {
+              const totalSteps = isSeries
+                ? lastReleasedProject.episodes || 15
+                : 10;
+              const currentStep = Math.min(
+                totalSteps,
+                lastReleasedProject.daysTracked || 1
+              );
+              const isRunComplete = currentStep >= totalSteps;
+              const progressPct = Math.min(
+                100,
+                Math.round((currentStep / totalSteps) * 100)
+              );
+              const visualMarkers = isSeries
+                ? Math.min(10, totalSteps)
+                : totalSteps;
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTrackNextBroadcastStep}
-                    disabled={
-                      isTrackingNext ||
-                      (lastReleasedProject.daysTracked || 1) >=
-                        (isSeries ? lastReleasedProject.episodes || 15 : 10)
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-[#D4AF37] bg-[#1A2530] px-3.5 py-2 text-xs font-black text-[#F9F6F0] shadow-sm hover:brightness-110 disabled:opacity-50"
-                  >
-                    {isTrackingNext ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#D4AF37]" />
-                    ) : (
-                      <Newspaper className="h-3.5 w-3.5 text-[#D4AF37]" />
-                    )}
-                    <span>
-                      {(lastReleasedProject.daysTracked || 1) >=
-                      (isSeries ? lastReleasedProject.episodes || 15 : 10)
-                        ? isSeries
-                          ? 'اكتمل عرض جميع الحلقات ✓'
-                          : 'اكتمل موسم شباك التذاكر ✓'
-                        : isSeries
-                        ? 'بث الحلقة التالية ورصد التفاعل'
-                        : 'رصد إيرادات اليوم التالي'}
-                    </span>
-                  </button>
-
-                  {!lastReleasedProject.trollsCampaigned && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        triggerElectronicTrollsCampaign(lastReleasedProject.id);
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#D91624] bg-[#D91624] px-3 py-2 text-xs font-black text-white hover:brightness-110 cursor-pointer"
-                    >
-                      <Bot className="h-3.5 w-3.5 text-[#D4AF37]" />
-                      <span>إطلاق حملة تريند إلكترونية (+15% عوائد)</span>
-                    </button>
-                  )}
-
-                  {!lastReleasedProject.intlDistributionAdUsed && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        claimInternationalDistributionAdBonus(
-                          lastReleasedProject.id
-                        );
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3.5 py-2 text-xs font-black text-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
-                    >
-                      <Film className="h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        توزيع دولي إضافي (+25% أرباح · +
-                        {formatMoney(
-                          Math.round(lastReleasedProject.totalGrossRevenue * 0.25)
-                        )}{' '}
-                        ج.م) — إعلان
-                      </span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="h-2 w-full overflow-hidden rounded-full bg-[#1A2530]/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#15803D] via-[#D4AF37] to-[#D91624] transition-all duration-500"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      Math.round(
-                        ((lastReleasedProject.daysTracked || 1) /
-                          (isSeries ? lastReleasedProject.episodes || 15 : 10)) *
-                          100
-                      )
-                    )}%`,
-                  }}
-                />
-              </div>
-
-              {/* Daily Box Office / Broadcast News Feed */}
-              {Array.isArray(lastReleasedProject.dailyNews) &&
-                lastReleasedProject.dailyNews.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    {lastReleasedProject.dailyNews.slice(0, 3).map((n) => (
-                      <div
-                        key={n.id}
-                        className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] px-3 py-2 text-right"
-                      >
-                        <div className="text-[11px] font-black text-[#1A2530]">
-                          {n.headline}
-                        </div>
-                        <div className="text-[10px] font-bold text-[#1A2530]/70">
-                          {n.detail}
-                        </div>
+              return (
+                <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-3.5 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-[#1A2530]">
+                          <TrendingUp className="h-4 w-4 text-[#D91624]" />
+                          {isSeries
+                            ? `البث المباشر للحلقات: الحلقة ${currentStep} من ${totalSteps}`
+                            : `موسم شباك التذاكر الحي: اليوم ${currentStep} من ${totalSteps}`}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-black ${
+                            isRunComplete
+                              ? 'bg-[#15803D] text-white'
+                              : 'bg-[#1A2530] text-[#D4AF37] border border-[#D4AF37]/60'
+                          }`}
+                        >
+                          {isRunComplete ? (
+                            <>
+                              <Check className="h-3 w-3" />
+                              <span>اكتمل الموسم ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="h-3 w-3 animate-pulse" />
+                              <span>الأيام تمر تلقائياً مع ساعة اللعبة</span>
+                            </>
+                          )}
+                        </span>
                       </div>
-                    ))}
+                      <p className="mt-1 text-[11px] font-bold text-[#15803D]">
+                        {isRunComplete
+                          ? 'تم رصد كامل الإيرادات النهائية وترتيب الموسم وإضافتها لخزينة الاستوديو.'
+                          : 'تتزايد الإيرادات والمشاهدات ويتحرك ترتيبك أمام المنافسين تلقائياً مع كل يوم جديد في التقويم.'}
+                      </p>
+                    </div>
+
+                    {typeof lastReleasedProject.lastDailyRevenueDelta ===
+                      'number' &&
+                      lastReleasedProject.lastDailyRevenueDelta > 0 && (
+                        <div className="rounded-xl border border-[#15803D]/30 bg-[#15803D]/10 px-3 py-1.5 text-left shrink-0">
+                          <span className="block text-[9px] font-bold text-[#15803D]">
+                            إيراد آخر يوم مرّ
+                          </span>
+                          <span
+                            dir="ltr"
+                            className="font-typewriter text-xs font-black text-[#15803D]"
+                          >
+                            +{formatMoney(lastReleasedProject.lastDailyRevenueDelta)} {currencyLabel}
+                          </span>
+                        </div>
+                      )}
                   </div>
-                )}
-            </div>
+
+                  {/* Visual Day-by-Day Calendar Strip */}
+                  <div className="space-y-2">
+                    <div
+                      className="grid gap-1.5"
+                      style={{
+                        gridTemplateColumns: `repeat(${visualMarkers}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {Array.from({ length: visualMarkers }).map((_, idx) => {
+                        const stepVal = isSeries
+                          ? Math.round(((idx + 1) / visualMarkers) * totalSteps)
+                          : idx + 1;
+                        const prevVal = isSeries
+                          ? Math.round((idx / visualMarkers) * totalSteps)
+                          : idx;
+                        const isPassed = currentStep > stepVal;
+                        const isCurrent =
+                          currentStep <= stepVal && currentStep > prevVal;
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex flex-col items-center justify-center rounded-xl py-1.5 border transition-all ${
+                              isCurrent
+                                ? 'bg-[#1A2530] text-[#D4AF37] border-[#D4AF37] shadow-md scale-[1.03]'
+                                : isPassed
+                                ? 'bg-[#15803D]/15 text-[#15803D] border-[#15803D]/40'
+                                : 'bg-[#F9F6F0] text-[#1A2530]/45 border-[#1A2530]/10'
+                            }`}
+                          >
+                            <span className="font-typewriter text-[10px] font-black leading-none">
+                              {isSeries ? `ح${stepVal}` : `ي${stepVal}`}
+                            </span>
+                            <span
+                              className={`mt-1 h-1.5 w-1.5 rounded-full ${
+                                isCurrent
+                                  ? 'bg-[#D91624] animate-ping'
+                                  : isPassed
+                                  ? 'bg-[#15803D]'
+                                  : 'bg-[#1A2530]/20'
+                              }`}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#1A2530]/10">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#15803D] via-[#D4AF37] to-[#D91624] transition-all duration-500"
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Strategic Boost Buttons (Trend Campaign & International Ad Bonus) */}
+                  {(!lastReleasedProject.trollsCampaigned ||
+                    !lastReleasedProject.intlDistributionAdUsed) && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {!lastReleasedProject.trollsCampaigned && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            triggerElectronicTrollsCampaign(
+                              lastReleasedProject.id
+                            );
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#D91624] bg-[#D91624] px-3.5 py-2 text-xs font-black text-white hover:brightness-110 cursor-pointer"
+                        >
+                          <Bot className="h-3.5 w-3.5 text-[#D4AF37]" />
+                          <span>
+                            إطلاق حملة تريند إلكترونية (بتكلفة 2M {currencyLabel} · +15% عوائد)
+                          </span>
+                        </button>
+                      )}
+
+                      {!lastReleasedProject.intlDistributionAdUsed && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            claimInternationalDistributionAdBonus(
+                              lastReleasedProject.id
+                            );
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3.5 py-2 text-xs font-black text-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
+                        >
+                          <Film className="h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            توزيع دولي إضافي (+25% أرباح · +
+                            {formatMoney(
+                              Math.round(
+                                lastReleasedProject.totalGrossRevenue * 0.25
+                              )
+                            )}{' '}
+                            {currencyLabel}) — إعلان
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Daily Box Office / Broadcast News Feed */}
+                  {Array.isArray(lastReleasedProject.dailyNews) &&
+                    lastReleasedProject.dailyNews.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        {lastReleasedProject.dailyNews.slice(0, 3).map((n) => (
+                          <div
+                            key={n.id}
+                            className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] px-3 py-2 text-right"
+                          >
+                            <div className="text-[11px] font-black text-[#1A2530]">
+                              {n.headline}
+                            </div>
+                            <div className="text-[10px] font-bold text-[#1A2530]/70">
+                              {n.detail}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </div>
+              );
+            })()}
 
             {/* Season Box Office / Viewership Leaderboard vs Rivals (Dynamic Daily Rank Shifts!) */}
             <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
@@ -1437,7 +1457,7 @@ export function Stage5ReleaseSimulation() {
                         </div>
                         <div className="shrink-0 text-left">
                           <div className="font-mono text-xs font-black text-[#15803D]">
-                            {formatMoney(entry.boxOfficeRevenue)} ج.م
+                            {formatMoney(entry.boxOfficeRevenue)} {currencyLabel}
                           </div>
                           {typeof entry.lastDailyDelta === 'number' &&
                             entry.lastDailyDelta > 0 &&

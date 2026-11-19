@@ -7,6 +7,7 @@ import {
   formatGameDate,
 } from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
+import { getMarketAiContext } from '@/lib/market-profiles';
 import { AnimatedRedCarpetFestivalGraphic } from '@/components/CinematicGraphicsScene';
 import {
   Award,
@@ -41,9 +42,15 @@ export function Stage6FestivalsAwards() {
     showToast,
     groqApiKeyClient,
     preferredGroqModel,
+    worldMarket,
+    uiLanguage,
   } = useGameStore();
 
-  const db = useMemo(() => getResolvedDatabase(customDbPatch), [customDbPatch]);
+  const db = useMemo(
+    () => getResolvedDatabase(customDbPatch, worldMarket),
+    [customDbPatch, worldMarket]
+  );
+  const defaultFestivalName = getMarketAiContext(worldMarket).defaultFestival;
 
   const latestProject = lastReleasedProject || releasedProjects[0] || null;
   const daysUntilAnnualGala = getDaysRemainingUntilAnnualAwards(gameDay);
@@ -73,15 +80,17 @@ export function Stage6FestivalsAwards() {
             groqKeyOverride: groqApiKeyClient,
             preferredModel: preferredGroqModel,
             payload: {
-              festivalName:
-                db.festivals[0]?.name || 'مهرجان القاهرة السينمائي الدولي',
+              festivalName: db.festivals[0]?.name || defaultFestivalName,
               projectTitle: latestProject.title,
+              synopsis: latestProject.synopsis,
               criticScore: latestProject.criticScore,
               leadActors: latestProject.leadNames,
               directorName: latestProject.directorName,
               studioName,
               ceoName,
               wonAwards: latestProject.awardsWon,
+              worldMarket,
+              uiLanguage,
             },
           }),
         });
@@ -102,10 +111,13 @@ export function Stage6FestivalsAwards() {
   }, [
     latestProject,
     db.festivals,
+    defaultFestivalName,
     studioName,
     ceoName,
     groqApiKeyClient,
     preferredGroqModel,
+    worldMarket,
+    uiLanguage,
   ]);
 
   const projectsThisYear = useMemo(

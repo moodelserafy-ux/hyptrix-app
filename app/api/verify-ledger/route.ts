@@ -1,37 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import type {
-  LedgerVerificationRequest,
-  LedgerVerificationResponse,
-} from '@/lib/supabase';
+import {
+  computeLedgerSignature,
+  verifyLedgerSignature,
+  computePlausibleCashCeiling,
+  computePlausibleMarketValueCeiling,
+  LEDGER_MAX_DRIFT_TOLERANCE,
+  MAX_PLAUSIBLE_CASH,
+  MAX_PLAUSIBLE_MARKET_VALUE,
+  getServerMemoryWallet,
+  setServerMemoryWallet,
+} from '@/lib/ledger-security';
 
-const LEDGER_SECRET =
-  process.env.LEDGER_HMAC_SECRET ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  'hyptrix-cinema-tycoon-vault-hmac-2026';
+export const dynamic = 'force-dynamic';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServerKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  '';
-
-const isServerSupabaseReady = Boolean(
-  supabaseUrl &&
-    supabaseServerKey &&
-    supabaseUrl !== 'https://your-project.supabase.co' &&
-    supabaseUrl.startsWith('http')
-);
-
-const serverSupabase = isServerSupabaseReady
-  ? createClient(supabaseUrl, supabaseServerKey, {
-      auth: { persistSession: false },
-    })
-  : null;
-
-// Authoritative server-side catalog of Fixed Studio Assets & their official prices
-const OFFICIAL_STUDIO_ASSET_PRICES: Record<string, number> = {
+const ALLOWED_FIXED_ASSETS: Record<string, number> = {
   soundstage_complex: 28_000_000,
   vfx_post_suite: 22_000_000,
   cinema_camera_fleet: 16_000_000,
@@ -39,315 +22,602 @@ const OFFICIAL_STUDIO_ASSET_PRICES: Record<string, number> = {
   talent_academy: 19_000_000,
 };
 
-// Authoritative server-side catalog of PR & Electronic Committees campaigns
-const OFFICIAL_PR_CAMPAIGN_PRICES: Record<string, number> = {
-  tiktok_viral_wave: 4_500_000,
-  x_hashtag_storm: 6_000_000,
-  rival_smear_campaign: 8_500_000,
-  critics_vip_screening: 5_500_000,
+const MAX_POSITIVE_DELTA_BY_TYPE: Record<string, number> = {
+  INIT_STUDIO: 100_000_000,
+  PROJECT_BOX_OFFICE_REVENUE: 360_000_000,
+  VIP_PACKAGE_TOPUP: 65_000_000,
+  LAUNCH_PR_CAMPAIGN: 85_000_000,
+  SYNC_CHECKPOINT: 40_000_000,
+  PURCHASE_STUDIO_ASSET: 0,
+  UNLOCK_MARKET_REGION: 0,
+  PROJECT_PRODUCTION_SPEND: 0,
+  RESOLVE_CRISIS_SPEND: 0,
 };
 
-// In-memory server vault fallback when Supabase env vars are not yet connected
-const serverMemoryVault = new Map<
-  string,
-  {
-    cash: number;
-    marketValue: number;
-    reputation: number;
-    ownedAssets: string[];
-    signature: string;
-    updatedAt: string;
-  }
->();
-
-function computeLedgerSignature(
-  studioInstanceId: string,
-  cash: number,
-  ownedAssets: string[]
-): string {
-  const normalizedAssets = [...ownedAssets].sort().join(',');
-  const raw = `${studioInstanceId}:${Math.round(cash)}:${normalizedAssets}`;
-  return crypto
-    .createHmac('sha256', LEDGER_SECRET)
-    .update(raw)
-    .digest('hex')
-    .slice(0, 32);
+function getServerSupabase() {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    '';
+  if (!url || !serviceKey) return null;
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const studioInstanceId =
-    searchParams.get('studioInstanceId') || 'default_studio';
-  const clientCash = Number(searchParams.get('cash') || 75_000_000);
-  const clientMarketValue = Number(
-    searchParams.get('marketValue') || 110_000_000
-  );
-  const clientAssetsRaw = searchParams.get('assets') || '';
-  const clientAssets = clientAssetsRaw
-    ? clientAssetsRaw.split(',').filter(Boolean)
-    : [];
-  const clientSig = searchParams.get('sig') || '';
+function clampCash(val: number): number {
+  return Math.max(-500_000_000, Math.min(MAX_PLAUSIBLE_CASH, Math.round(val)));
+}
 
-  // 1. Check Supabase authoritative wallet if configured
-  if (serverSupabase) {
-    try {
-      const { data } = await serverSupabase
-        .from('hyptrix_studio_wallets')
-        .select('*')
-        .eq('studio_instance_id', studioInstanceId)
-        .maybeSingle();
-
-      if (data) {
-        const dbCash = Number(data.verified_cash ?? clientCash);
-        const dbMarketVal = Number(
-          data.verified_market_value ?? clientMarketValue
-        );
-        const dbAssets: string[] = Array.isArray(data.owned_assets)
-          ? data.owned_assets
-          : clientAssets;
-        const freshSig = computeLedgerSignature(
-          studioInstanceId,
-          dbCash,
-          dbAssets
-        );
-        const tamperDetected =
-          Boolean(clientSig) &&
-          Math.abs(clientCash - dbCash) > 50_000_000 &&
-          clientSig !== freshSig;
-
-        return NextResponse.json({
-          ok: true,
-          verified: true,
-          tamperDetected,
-          correctedCash: tamperDetected ? dbCash : clientCash,
-          correctedMarketValue: tamperDetected
-            ? dbMarketVal
-            : clientMarketValue,
-          ownedAssets: dbAssets,
-          ledgerSignature: computeLedgerSignature(
-            studioInstanceId,
-            tamperDetected ? dbCash : clientCash,
-            dbAssets
-          ),
-          serverTimestamp: new Date().toISOString(),
-        } satisfies LedgerVerificationResponse);
-      }
-    } catch {
-      // Fallback to HMAC signature check
-    }
-  }
-
-  // 2. Check in-memory server vault & HMAC signature
-  const cached = serverMemoryVault.get(studioInstanceId);
-  const expectedSigForClient = computeLedgerSignature(
-    studioInstanceId,
-    clientCash,
-    clientAssets
-  );
-
-  // If the client had a previous signature that doesn't match and jumped by > 150M without a server transaction, revert to cached
-  if (
-    cached &&
-    clientSig &&
-    clientSig !== expectedSigForClient &&
-    clientCash - cached.cash > 150_000_000
-  ) {
-    return NextResponse.json({
-      ok: true,
-      verified: true,
-      tamperDetected: true,
-      correctedCash: cached.cash,
-      correctedMarketValue: cached.marketValue,
-      ownedAssets: cached.ownedAssets,
-      ledgerSignature: cached.signature,
-      message:
-        'تم رصد تعديل غير مصرح به في الرصيد المحلي؛ تمت استعادة الرصيد الموثق من الخادم.',
-      serverTimestamp: new Date().toISOString(),
-    } satisfies LedgerVerificationResponse);
-  }
-
-  const newSig = computeLedgerSignature(
-    studioInstanceId,
-    clientCash,
-    clientAssets
-  );
-  serverMemoryVault.set(studioInstanceId, {
-    cash: clientCash,
-    marketValue: clientMarketValue,
-    reputation: 62,
-    ownedAssets: clientAssets,
-    signature: newSig,
-    updatedAt: new Date().toISOString(),
-  });
-
-  return NextResponse.json({
-    ok: true,
-    verified: true,
-    tamperDetected: false,
-    correctedCash: clientCash,
-    correctedMarketValue: clientMarketValue,
-    ownedAssets: clientAssets,
-    ledgerSignature: newSig,
-    serverTimestamp: new Date().toISOString(),
-  } satisfies LedgerVerificationResponse);
+function clampMarketValue(val: number): number {
+  return Math.max(0, Math.min(MAX_PLAUSIBLE_MARKET_VALUE, Math.round(val)));
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as LedgerVerificationRequest;
-    const studioInstanceId = body.studioInstanceId || 'default_studio';
-    const previousCash = Number(body.previousCash ?? 75_000_000);
-    let amountDelta = Number(body.amountDelta ?? 0);
-    const ownedAssets = Array.isArray(body.ownedAssets)
-      ? [...body.ownedAssets]
+    const body = await req.json();
+    const {
+      studioInstanceId,
+      studioName,
+      ceoName,
+      userEmail,
+      transactionType,
+      amountDelta,
+      previousCash,
+      expectedNewCash,
+      marketValue,
+      reputation,
+      ownedAssets,
+      releasedCount,
+      totalAwards,
+      itemId,
+      itemLabel,
+      previousSignature,
+    } = body || {};
+
+    if (!studioInstanceId || typeof studioInstanceId !== 'string') {
+      return NextResponse.json(
+        { ok: false, error: 'Missing studioInstanceId' },
+        { status: 400 }
+      );
+    }
+
+    const txType = String(transactionType || 'SYNC_CHECKPOINT').slice(0, 48);
+
+    const cleanOwnedAssets: string[] = Array.isArray(ownedAssets)
+      ? Array.from(
+          new Set(
+            ownedAssets.filter(
+              (id): id is string =>
+                typeof id === 'string' && id in ALLOWED_FIXED_ASSETS
+            )
+          )
+        )
       : [];
 
-    // Enforce authoritative server pricing on Fixed Studio Asset purchases
-    if (body.transactionType === 'PURCHASE_STUDIO_ASSET' && body.itemId) {
-      const officialPrice = OFFICIAL_STUDIO_ASSET_PRICES[body.itemId];
-      if (!officialPrice) {
-        return NextResponse.json(
-          {
-            ok: false,
-            verified: false,
-            correctedCash: previousCash,
-            correctedMarketValue: body.marketValue,
-            ownedAssets,
-            ledgerSignature: body.previousSignature || '',
-            message: 'أصل الاستوديو المطلوب غير مسجل في السجل الرسمي.',
-          } satisfies LedgerVerificationResponse,
-          { status: 400 }
-        );
-      }
-      if (previousCash < officialPrice) {
-        return NextResponse.json(
-          {
-            ok: false,
-            verified: false,
-            correctedCash: previousCash,
-            correctedMarketValue: body.marketValue,
-            ownedAssets,
-            ledgerSignature: computeLedgerSignature(
-              studioInstanceId,
-              previousCash,
-              ownedAssets
-            ),
-            message: 'الرصيد الموثق على الخادم لا يكفي لشراء هذا الأصل الثابت.',
-          } satisfies LedgerVerificationResponse,
-          { status: 400 }
-        );
-      }
-      amountDelta = -officialPrice;
-      if (!ownedAssets.includes(body.itemId)) {
-        ownedAssets.push(body.itemId);
-      }
-    }
+    const safeDelta = Number.isFinite(Number(amountDelta))
+      ? Math.round(Number(amountDelta))
+      : 0;
+    const safePrevCash = Number.isFinite(Number(previousCash))
+      ? clampCash(Number(previousCash))
+      : 75_000_000;
+    const safeExpectedCash = Number.isFinite(Number(expectedNewCash))
+      ? clampCash(Number(expectedNewCash))
+      : clampCash(safePrevCash + safeDelta);
+    const safeMarketValue = Number.isFinite(Number(marketValue))
+      ? clampMarketValue(Number(marketValue))
+      : 110_000_000;
+    const safeRep = Number.isFinite(Number(reputation))
+      ? Math.max(0, Math.min(100, Math.round(Number(reputation))))
+      : 62;
+    const safeReleasedCount = Number.isFinite(Number(releasedCount))
+      ? Math.max(0, Math.min(200, Math.round(Number(releasedCount))))
+      : 0;
+    const safeTotalAwards = Number.isFinite(Number(totalAwards))
+      ? Math.max(0, Math.min(500, Math.round(Number(totalAwards))))
+      : 0;
 
-    // Enforce authoritative server pricing on Social Media & PR Campaigns
-    if (body.transactionType === 'LAUNCH_PR_CAMPAIGN' && body.itemId) {
-      const officialPrPrice = OFFICIAL_PR_CAMPAIGN_PRICES[body.itemId];
-      if (officialPrPrice) {
-        if (previousCash < officialPrPrice) {
-          return NextResponse.json(
-            {
-              ok: false,
-              verified: false,
-              correctedCash: previousCash,
-              correctedMarketValue: body.marketValue,
-              ownedAssets,
-              ledgerSignature: computeLedgerSignature(
-                studioInstanceId,
-                previousCash,
-                ownedAssets
-              ),
-              message: 'الرصيد الموثق في الخزينة لا يكفي لتمويل هذه الحملة.',
-            } satisfies LedgerVerificationResponse,
-            { status: 400 }
-          );
-        }
-        amountDelta = -officialPrPrice;
-      }
-    }
-
-    const verifiedNewCash = Math.max(0, Math.round(previousCash + amountDelta));
-    const verifiedMarketValue = Math.max(
-      25_000_000,
-      Math.round(Number(body.marketValue || 110_000_000))
-    );
-    const ledgerSignature = computeLedgerSignature(
-      studioInstanceId,
-      verifiedNewCash,
-      ownedAssets
-    );
-
-    // Update in-memory server vault
-    serverMemoryVault.set(studioInstanceId, {
-      cash: verifiedNewCash,
-      marketValue: verifiedMarketValue,
-      reputation: Number(body.reputation || 62),
-      ownedAssets,
-      signature: ledgerSignature,
-      updatedAt: new Date().toISOString(),
+    const cashCeiling = computePlausibleCashCeiling({
+      releasedCount: safeReleasedCount,
+      totalAwards: safeTotalAwards,
+      reputation: safeRep,
     });
 
-    // Persist to Supabase if configured
-    if (serverSupabase) {
+    // Validate transaction delta bounds strictly server-side
+    let authoritativeDelta = safeDelta;
+    let nextAssets = [...cleanOwnedAssets];
+    let deltaTampered = false;
+
+    if (txType === 'PURCHASE_STUDIO_ASSET' && itemId) {
+      const realPrice = ALLOWED_FIXED_ASSETS[String(itemId)];
+      if (!realPrice) {
+        return NextResponse.json(
+          { ok: false, error: 'Invalid studio fixed asset ID' },
+          { status: 400 }
+        );
+      }
+      authoritativeDelta = -realPrice;
+      if (!nextAssets.includes(String(itemId))) {
+        nextAssets.push(String(itemId));
+      }
+    } else if (authoritativeDelta > 0) {
+      const maxPos = MAX_POSITIVE_DELTA_BY_TYPE[txType] ?? 40_000_000;
+      if (authoritativeDelta > maxPos) {
+        deltaTampered = true;
+        authoritativeDelta = maxPos;
+      }
+    }
+
+    const supabase = getServerSupabase();
+    let authoritativeCash = safeExpectedCash;
+    let tamperDetected = deltaTampered;
+    let storageMode: 'supabase' | 'server_memory' = 'server_memory';
+
+    // Shared resolution helper comparing client state vs server authoritative wallet
+    const resolveAuthoritativeState = (
+      serverCash: number | null,
+      serverAssets: string[]
+    ) => {
+      if (txType === 'INIT_STUDIO') {
+        return {
+          finalCash: 75_000_000,
+          finalAssets: [] as string[],
+          tampered: false,
+        };
+      }
+
+      if (serverCash === null) {
+        // First time seeing this studio on this server: allow up to plausible cash ceiling
+        const boundedPrev = Math.min(safePrevCash, cashCeiling);
+        const exceeded = safePrevCash > cashCeiling;
+        const computedCash = clampCash(
+          Math.min(cashCeiling, boundedPrev + authoritativeDelta)
+        );
+        return {
+          finalCash: computedCash,
+          finalAssets: nextAssets,
+          tampered: exceeded || deltaTampered,
+        };
+      }
+
+      const drift = Math.abs(safePrevCash - serverCash);
+      const prevSigValid = verifyLedgerSignature(
+        studioInstanceId,
+        serverCash,
+        serverAssets,
+        previousSignature
+      );
+
+      // If client is synchronized within tolerance, advance cleanly from serverCash + delta
+      if (drift <= LEDGER_MAX_DRIFT_TOLERANCE) {
+        const computed = clampCash(
+          Math.min(cashCeiling, serverCash + authoritativeDelta)
+        );
+        const mergedAssets =
+          txType === 'PURCHASE_STUDIO_ASSET' && itemId
+            ? Array.from(new Set([...serverAssets, String(itemId)]))
+            : Array.from(new Set([...serverAssets, ...cleanOwnedAssets]));
+        return {
+          finalCash: computed,
+          finalAssets: mergedAssets,
+          tampered: deltaTampered,
+        };
+      }
+
+      // If client exceeded plausible ceiling OR jumped upward with an invalid signature -> snap to server!
+      if (
+        safePrevCash > cashCeiling ||
+        safeExpectedCash > cashCeiling ||
+        (!prevSigValid && safePrevCash > serverCash)
+      ) {
+        const snapped = clampCash(serverCash + authoritativeDelta);
+        const safeAssets =
+          txType === 'PURCHASE_STUDIO_ASSET' && itemId && snapped >= 0
+            ? Array.from(new Set([...serverAssets, String(itemId)]))
+            : serverAssets;
+        return {
+          finalCash: snapped,
+          finalAssets: safeAssets,
+          tampered: true,
+        };
+      }
+
+      // Otherwise (e.g., player spent money locally or has valid signature within ceiling), accept smoothly
+      const accepted = clampCash(
+        Math.min(cashCeiling, safePrevCash + authoritativeDelta)
+      );
+      const mergedAssets =
+        txType === 'PURCHASE_STUDIO_ASSET' && itemId
+          ? Array.from(new Set([...serverAssets, String(itemId)]))
+          : Array.from(new Set([...serverAssets, ...cleanOwnedAssets]));
+      return {
+        finalCash: accepted,
+        finalAssets: mergedAssets,
+        tampered: deltaTampered,
+      };
+    };
+
+    if (supabase) {
       try {
-        await serverSupabase.from('hyptrix_studio_wallets').upsert(
-          {
-            studio_instance_id: studioInstanceId,
-            user_email: body.userEmail || null,
-            studio_name: body.studioName,
-            ceo_name: body.ceoName,
-            verified_cash: verifiedNewCash,
-            verified_market_value: verifiedMarketValue,
-            reputation: Number(body.reputation || 62),
-            owned_assets: ownedAssets,
-            ledger_signature: ledgerSignature,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'studio_instance_id' }
+        const { data: existingWallet } = await supabase
+          .from('hyptrix_studio_wallets')
+          .select('*')
+          .eq('studio_instance_id', studioInstanceId)
+          .maybeSingle();
+
+        const serverCash = existingWallet
+          ? Number(existingWallet.verified_cash ?? existingWallet.cash ?? safePrevCash)
+          : null;
+        const serverAssets: string[] =
+          existingWallet && Array.isArray(existingWallet.owned_assets)
+            ? existingWallet.owned_assets.filter(
+                (id: unknown): id is string =>
+                  typeof id === 'string' && id in ALLOWED_FIXED_ASSETS
+              )
+            : [];
+
+        const resolved = resolveAuthoritativeState(serverCash, serverAssets);
+        authoritativeCash = resolved.finalCash;
+        nextAssets = resolved.finalAssets;
+        tamperDetected = resolved.tampered;
+
+        const mvCeiling = computePlausibleMarketValueCeiling({
+          verifiedCash: authoritativeCash,
+          reputation: safeRep,
+          releasedCount: safeReleasedCount,
+          totalAwards: safeTotalAwards,
+          ownedAssetsCount: nextAssets.length,
+        });
+        const boundedMv = Math.min(safeMarketValue, mvCeiling);
+
+        const newSig = computeLedgerSignature(
+          studioInstanceId,
+          authoritativeCash,
+          nextAssets
         );
 
-        if (amountDelta !== 0 || body.transactionType !== 'SYNC_CHECKPOINT') {
-          await serverSupabase.from('hyptrix_ledger_transactions').insert({
+        // Canonical schema matching lib/supabase.ts: verified_cash, verified_market_value
+        const { error: upsertErr } = await supabase
+          .from('hyptrix_studio_wallets')
+          .upsert(
+            {
+              studio_instance_id: studioInstanceId,
+              studio_name: String(studioName || 'Neelyo Studio').slice(0, 80),
+              ceo_name: String(ceoName || 'المدير التنفيذي').slice(0, 80),
+              user_email: userEmail ? String(userEmail).slice(0, 120) : null,
+              verified_cash: authoritativeCash,
+              verified_market_value: boundedMv,
+              reputation: safeRep,
+              owned_assets: nextAssets,
+              ledger_signature: newSig,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'studio_instance_id' }
+          );
+
+        if (!upsertErr) {
+          storageMode = 'supabase';
+          await supabase.from('hyptrix_ledger_transactions').insert({
             studio_instance_id: studioInstanceId,
-            studio_name: body.studioName,
-            transaction_type: body.transactionType,
-            item_id: body.itemId || null,
-            item_label: body.itemLabel || null,
-            amount_delta: amountDelta,
-            balance_before: previousCash,
-            balance_after: verifiedNewCash,
-            ledger_signature: ledgerSignature,
+            studio_name: String(studioName || 'Neelyo Studio').slice(0, 80),
+            transaction_type: txType,
+            amount_delta: authoritativeDelta,
+            balance_after: authoritativeCash,
+            item_id: itemId ? String(itemId).slice(0, 64) : null,
+            item_label: itemLabel ? String(itemLabel).slice(0, 140) : null,
+            tamper_flagged: tamperDetected,
+            ledger_signature: newSig,
           });
         }
       } catch {
-        // Non-blocking if tables are not yet created by the user in Supabase
+        // Fall through to in-memory authoritative ledger
       }
     }
 
+    if (storageMode === 'server_memory') {
+      const prev = getServerMemoryWallet(studioInstanceId);
+      const resolved = resolveAuthoritativeState(
+        prev ? prev.cash : null,
+        prev ? prev.ownedAssets : []
+      );
+      authoritativeCash = resolved.finalCash;
+      nextAssets = resolved.finalAssets;
+      tamperDetected = resolved.tampered;
+
+      const mvCeiling = computePlausibleMarketValueCeiling({
+        verifiedCash: authoritativeCash,
+        reputation: safeRep,
+        releasedCount: safeReleasedCount,
+        totalAwards: safeTotalAwards,
+        ownedAssetsCount: nextAssets.length,
+      });
+      const boundedMv = Math.min(safeMarketValue, mvCeiling);
+
+      const memSig = computeLedgerSignature(
+        studioInstanceId,
+        authoritativeCash,
+        nextAssets
+      );
+      setServerMemoryWallet(studioInstanceId, {
+        cash: authoritativeCash,
+        marketValue: boundedMv,
+        reputation: safeRep,
+        ownedAssets: nextAssets,
+        signature: memSig,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    const mvCeilingFinal = computePlausibleMarketValueCeiling({
+      verifiedCash: authoritativeCash,
+      reputation: safeRep,
+      releasedCount: safeReleasedCount,
+      totalAwards: safeTotalAwards,
+      ownedAssetsCount: nextAssets.length,
+    });
+    const finalMarketValue = Math.min(safeMarketValue, mvCeilingFinal);
+    const finalSignature = computeLedgerSignature(
+      studioInstanceId,
+      authoritativeCash,
+      nextAssets
+    );
+
     return NextResponse.json({
       ok: true,
-      verified: true,
-      tamperDetected: false,
-      correctedCash: verifiedNewCash,
-      correctedMarketValue: verifiedMarketValue,
-      ownedAssets,
-      ledgerSignature,
-      serverTimestamp: new Date().toISOString(),
-    } satisfies LedgerVerificationResponse);
-  } catch {
+      verified: !tamperDetected,
+      storageMode,
+      tamperDetected,
+      correctedCash: authoritativeCash,
+      correctedMarketValue: finalMarketValue,
+      ownedAssets: nextAssets,
+      ledgerSignature: finalSignature,
+      message: tamperDetected
+        ? 'تم رصد اختلاف غير مطابق في رصيد الخزينة وإعادة المزامنة مع السجل المالي الموثق على الخادم.'
+        : 'تم توثيق العملية المالية بنجاح في خزينة الاستوديو.',
+    });
+  } catch (err) {
+    console.error('verify-ledger POST error:', err);
     return NextResponse.json(
-      {
-        ok: false,
-        verified: false,
-        correctedCash: 75_000_000,
-        correctedMarketValue: 110_000_000,
-        ownedAssets: [],
-        ledgerSignature: '',
-        message: 'خطأ في معالجة التحقق المالي.',
-      } satisfies LedgerVerificationResponse,
+      { ok: false, error: 'Failed to verify ledger transaction' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const studioInstanceId = searchParams.get('studioInstanceId') || '';
+    const clientCash = Number(
+      searchParams.get('cash') ?? searchParams.get('clientCash') ?? '75000000'
+    );
+    const clientMarketValue = Number(
+      searchParams.get('marketValue') ??
+        searchParams.get('clientMarketValue') ??
+        '110000000'
+    );
+    const clientSignature =
+      searchParams.get('sig') ?? searchParams.get('signature') ?? '';
+    const clientAssetsRaw = searchParams.get('assets') || '';
+    const clientAssets = clientAssetsRaw
+      ? clientAssetsRaw
+          .split(',')
+          .filter((a) => a && a in ALLOWED_FIXED_ASSETS)
+      : [];
+    const releasedCount = Math.max(
+      0,
+      Math.min(200, Math.round(Number(searchParams.get('releasedCount') || '0')))
+    );
+    const totalAwards = Math.max(
+      0,
+      Math.min(500, Math.round(Number(searchParams.get('totalAwards') || '0')))
+    );
+    const reputation = Math.max(
+      0,
+      Math.min(100, Math.round(Number(searchParams.get('reputation') || '62')))
+    );
+
+    if (!studioInstanceId) {
+      return NextResponse.json(
+        { ok: false, error: 'Missing studioInstanceId' },
+        { status: 400 }
+      );
+    }
+
+    const cashCeiling = computePlausibleCashCeiling({
+      releasedCount,
+      totalAwards,
+      reputation,
+    });
+    const mvCeiling = computePlausibleMarketValueCeiling({
+      verifiedCash: Math.min(clientCash, cashCeiling),
+      reputation,
+      releasedCount,
+      totalAwards,
+      ownedAssetsCount: clientAssets.length,
+    });
+
+    const evaluateGetCheck = (
+      serverCash: number,
+      serverMv: number,
+      serverAssets: string[]
+    ) => {
+      const sigValid = verifyLedgerSignature(
+        studioInstanceId,
+        clientCash,
+        clientAssets,
+        clientSignature
+      );
+
+      // Only flag tamper on GET when:
+      // 1) Client exceeds the realistic gameplay ceiling (e.g. edited localStorage to billions), OR
+      // 2) Client has an invalid signature AND jumped massively (> 35M) above server balance with 0 releases
+      const exceedsCeiling =
+        clientCash > cashCeiling || clientMarketValue > mvCeiling;
+      const suspiciousUnsignedJump =
+        !sigValid &&
+        releasedCount === 0 &&
+        clientCash > serverCash + LEDGER_MAX_DRIFT_TOLERANCE;
+
+      const tamperDetected = exceedsCeiling || suspiciousUnsignedJump;
+
+      if (tamperDetected) {
+        return {
+          tamperDetected: true,
+          finalCash: Math.min(serverCash, cashCeiling),
+          finalMv: Math.min(serverMv, mvCeiling),
+          finalAssets: serverAssets,
+        };
+      }
+
+      // Client cash is plausible (including legitimate earnings synced or earned offline)
+      return {
+        tamperDetected: false,
+        finalCash: clampCash(clientCash),
+        finalMv: clampMarketValue(clientMarketValue),
+        finalAssets: Array.from(new Set([...serverAssets, ...clientAssets])),
+      };
+    };
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        const { data: wallet } = await supabase
+          .from('hyptrix_studio_wallets')
+          .select('*')
+          .eq('studio_instance_id', studioInstanceId)
+          .maybeSingle();
+
+        if (wallet) {
+          const serverCash = Number(
+            wallet.verified_cash ?? wallet.cash ?? clientCash
+          );
+          const serverMv = Number(
+            wallet.verified_market_value ??
+              wallet.market_value ??
+              clientMarketValue
+          );
+          const serverAssets: string[] = Array.isArray(wallet.owned_assets)
+            ? wallet.owned_assets
+            : [];
+
+          const check = evaluateGetCheck(serverCash, serverMv, serverAssets);
+          const newSig = computeLedgerSignature(
+            studioInstanceId,
+            check.finalCash,
+            check.finalAssets
+          );
+
+          // If legitimate progress occurred since last sync, refresh server wallet silently
+          if (!check.tamperDetected && check.finalCash !== serverCash) {
+            await supabase
+              .from('hyptrix_studio_wallets')
+              .update({
+                verified_cash: check.finalCash,
+                verified_market_value: check.finalMv,
+                owned_assets: check.finalAssets,
+                ledger_signature: newSig,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('studio_instance_id', studioInstanceId);
+          }
+
+          return NextResponse.json({
+            ok: true,
+            verified: !check.tamperDetected,
+            source: 'supabase',
+            tamperDetected: check.tamperDetected,
+            correctedCash: check.finalCash,
+            correctedMarketValue: check.finalMv,
+            ownedAssets: check.finalAssets,
+            ledgerSignature: newSig,
+            message: check.tamperDetected
+              ? 'تمت استعادة رصيد الخزينة الموثق من الخادم حمايةً لنزاهة الترتيب العالمي.'
+              : 'خزينة الاستوديو متطابقة وموثقة بالكامل.',
+          });
+        }
+      } catch {
+        // Fallback to server memory
+      }
+    }
+
+    const mem = getServerMemoryWallet(studioInstanceId);
+    if (mem) {
+      const check = evaluateGetCheck(mem.cash, mem.marketValue, mem.ownedAssets);
+      const newSig = computeLedgerSignature(
+        studioInstanceId,
+        check.finalCash,
+        check.finalAssets
+      );
+
+      if (!check.tamperDetected && check.finalCash !== mem.cash) {
+        setServerMemoryWallet(studioInstanceId, {
+          ...mem,
+          cash: check.finalCash,
+          marketValue: check.finalMv,
+          ownedAssets: check.finalAssets,
+          signature: newSig,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        verified: !check.tamperDetected,
+        source: 'server_memory',
+        tamperDetected: check.tamperDetected,
+        correctedCash: check.finalCash,
+        correctedMarketValue: check.finalMv,
+        ownedAssets: check.finalAssets,
+        ledgerSignature: newSig,
+        message: check.tamperDetected
+          ? 'تمت مطابقة رصيدك مع السجل المالي الموثق على الخادم.'
+          : 'خزينة الاستوديو موثقة بالكامل.',
+      });
+    }
+
+    const initialTamper =
+      clientCash > cashCeiling || clientMarketValue > mvCeiling;
+    const safeInitialCash = initialTamper
+      ? cashCeiling
+      : clampCash(clientCash);
+    const safeInitialMv = initialTamper
+      ? mvCeiling
+      : clampMarketValue(clientMarketValue);
+    const initSig = computeLedgerSignature(
+      studioInstanceId,
+      safeInitialCash,
+      clientAssets
+    );
+
+    setServerMemoryWallet(studioInstanceId, {
+      cash: safeInitialCash,
+      marketValue: safeInitialMv,
+      reputation,
+      ownedAssets: clientAssets,
+      signature: initSig,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return NextResponse.json({
+      ok: true,
+      verified: !initialTamper,
+      source: 'initialized',
+      tamperDetected: initialTamper,
+      correctedCash: safeInitialCash,
+      correctedMarketValue: safeInitialMv,
+      ownedAssets: clientAssets,
+      ledgerSignature: initSig,
+      message: initialTamper
+        ? 'تم ضبط رصيد الخزينة ضمن الحد القانوني الموثق.'
+        : 'تم تفعيل سجل التوثيق المالي للاستوديو.',
+    });
+  } catch (err) {
+    console.error('verify-ledger GET error:', err);
+    return NextResponse.json(
+      { ok: false, error: 'Failed to read ledger' },
       { status: 500 }
     );
   }

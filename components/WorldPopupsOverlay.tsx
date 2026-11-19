@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   useGameStore,
   formatGameDate,
   SOCIAL_PR_CAMPAIGNS,
   SocialPrCampaignItem,
 } from '@/lib/store';
+import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
+import { getMarketAiContext, getCurrencyLabel } from '@/lib/market-profiles';
 import {
   Newspaper,
   Sparkles,
@@ -59,28 +61,47 @@ export function WorldPopupsOverlay() {
     isBankruptLiquidated,
     claimEmergencyInvestorBailoutWithAd,
     liquidateAndStartNewStudioInSameWorld,
+    worldMarket,
+    customDbPatch,
   } = useGameStore();
+
+  const currencyLabel = getCurrencyLabel(worldMarket);
+  const marketAiCtx = getMarketAiContext(worldMarket);
+  const db = useMemo(
+    () => getResolvedDatabase(customDbPatch, worldMarket),
+    [customDbPatch, worldMarket]
+  );
+
+  const rivalStudioOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...(lastReleasedProject?.rivalReleases?.map((r) => r.studioName) || []),
+          ...(yearlyRivalReleases?.map((r) => r.studioName) || []),
+          ...db.competitor_studios.slice(0, 4).map((s) => s.name),
+          ...marketAiCtx.fallbackRivalStudios,
+        ])
+      ).slice(0, 6),
+    [
+      lastReleasedProject?.rivalReleases,
+      yearlyRivalReleases,
+      db.competitor_studios,
+      marketAiCtx.fallbackRivalStudios,
+    ]
+  );
 
   const [launchingCampaignId, setLaunchingCampaignId] = useState<string | null>(
     null
   );
-  const [selectedRivalTarget, setSelectedRivalTarget] = useState<string>(
-    'المتحدون ميديا جروب'
-  );
+  const [selectedRivalTargetState, setSelectedRivalTarget] = useState<string>('');
   const [prActiveTab, setPrActiveTab] = useState<'campaigns' | 'feed'>(
     'campaigns'
   );
 
-  const rivalStudioOptions = Array.from(
-    new Set([
-      ...(lastReleasedProject?.rivalReleases?.map((r) => r.studioName) || []),
-      ...(yearlyRivalReleases?.map((r) => r.studioName) || []),
-      'المتحدون ميديا جروب',
-      'سيرجي للإنتاج الفني',
-      'العدلي جروب للدراما',
-      'نيو سينما للقرن الجديد',
-    ])
-  ).slice(0, 6);
+  const selectedRivalTarget =
+    selectedRivalTargetState && rivalStudioOptions.includes(selectedRivalTargetState)
+      ? selectedRivalTargetState
+      : rivalStudioOptions[0] || marketAiCtx.fallbackRivalStudios[0] || 'استوديو منافس';
 
   const currentFestival = festivalModalQueue[0] || null;
   const currentNews = !currentFestival ? breakingNewsQueue[0] || null : null;
@@ -240,7 +261,7 @@ export function WorldPopupsOverlay() {
                   <p className="text-xs font-bold text-[#F9F6F0]/90">
                     التاريخ الحالي: {formatGameDate(gameDay, currentYear)} · عجز الخزينة:{' '}
                     <span dir="ltr" className="font-typewriter font-black text-[#FFF3B0]">
-                      {formatMoney(cash)} ج.م
+                      {formatMoney(cash)} {currencyLabel}
                     </span>
                   </p>
                 </div>
@@ -254,7 +275,7 @@ export function WorldPopupsOverlay() {
                   </p>
                   <ul className="list-disc pr-5 space-y-1 text-[11px]">
                     <li>ستضطر لترك <strong>«{studioName}»</strong> وبيعها لمجموعة استثمارية تديرها كمنافس في السوق.</li>
-                    <li>ستبدأ فوراً بتأسيس شركة إنتاج جديدة برأس مال جديد (75M ج.م) <strong>في نفس العالم ونفس الزمن ({formatGameDate(gameDay, currentYear)})</strong> مع استمرار نفس النجوم وتطورهم ونفس الشركات المنافسة!</li>
+                    <li>ستبدأ فوراً بتأسيس شركة إنتاج جديدة برأس مال جديد (75M {currencyLabel}) <strong>في نفس العالم ونفس الزمن ({formatGameDate(gameDay, currentYear)})</strong> مع استمرار نفس النجوم وتطورهم ونفس الشركات المنافسة!</li>
                   </ul>
                 </div>
 
@@ -270,7 +291,7 @@ export function WorldPopupsOverlay() {
                       {formatMoney(
                         cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
                       )}{' '}
-                      ج.م) — مشاهدة إعلان
+                      {currencyLabel}) — مشاهدة إعلان
                     </span>
                   </button>
 
@@ -656,7 +677,7 @@ export function WorldPopupsOverlay() {
                             <span>موقف ساخن يستدعي تحركاً من المكتب الإعلامي</span>
                           </span>
                           <span className="rounded-lg bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-bold text-[#D4AF37]">
-                            تكلفة الحملة: 2.0M ج.م
+                            تكلفة الحملة: 2.0M {currencyLabel}
                           </span>
                         </div>
 
@@ -732,7 +753,7 @@ export function WorldPopupsOverlay() {
                     id: 'default_chatter_1',
                     platform: 'X' as const,
                     authorName: 'ناقد سينمائي مستقل',
-                    handle: '@CinemaPulseEG',
+                    handle: marketAiCtx.socialHandles[0],
                     content: `الجمهور مترقب بشدة خطوة شركة «${studioName}» القادمة أمام أفلام «${selectedRivalTarget}» هذا الموسم!`,
                     hashtag: '#سباق_الإيرادات',
                     likes: '18.4K',
@@ -744,9 +765,9 @@ export function WorldPopupsOverlay() {
                     id: 'default_chatter_2',
                     platform: 'TikTok' as const,
                     authorName: 'تريندات الشارع',
-                    handle: '@StreetVoxEG',
+                    handle: marketAiCtx.socialHandles[2],
                     content:
-                      'منافسة تكسير عظام على شباك التذاكر.. يا ترى مين هيكسب الصدارة الأسبوع ده؟',
+                      'منافسة تكسير عظام على شباك التذاكر.. يا ترى من سيحسم الصدارة هذا الأسبوع؟',
                     hashtag: '#شباك_التذاكر',
                     likes: '42.1K',
                     shares: '9.8K',
@@ -933,7 +954,7 @@ export function WorldPopupsOverlay() {
                               dir="ltr"
                               className="shrink-0 font-typewriter text-xs font-black bg-[#1A2530]/80 text-[#D4AF37] px-2.5 py-1.5 rounded-xl border border-[#D4AF37]/50"
                             >
-                              2.0M ج.م
+                              2.0M {currencyLabel}
                             </span>
                           </button>
 
@@ -965,7 +986,7 @@ export function WorldPopupsOverlay() {
                               dir="ltr"
                               className="shrink-0 font-typewriter text-xs font-black bg-[#1A2530]/85 text-[#D4AF37] px-2.5 py-1.5 rounded-xl border border-[#D4AF37]/50"
                             >
-                              5.0M ج.م
+                              5.0M {currencyLabel}
                             </span>
                           </button>
                         </div>
@@ -997,7 +1018,7 @@ export function WorldPopupsOverlay() {
                                   dir="ltr"
                                   className="font-typewriter text-[11px] font-black text-[#D4AF37]"
                                 >
-                                  {formatMoney(camp.cost)} ج.م
+                                  {formatMoney(camp.cost)} {currencyLabel}
                                 </div>
                               </button>
                             ))}

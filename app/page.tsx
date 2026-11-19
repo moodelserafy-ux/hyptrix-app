@@ -8,6 +8,8 @@ import {
 } from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
+import { getCurrencyLabel } from '@/lib/market-profiles';
+import { WelcomeMarketScreen } from '@/components/WelcomeMarketScreen';
 import { Stage1StudioCreation } from '@/components/Stage1StudioCreation';
 import { StudioHubView } from '@/components/StudioHubView';
 import { Stage2ProjectSetup } from '@/components/Stage2ProjectSetup';
@@ -20,17 +22,24 @@ import { SettingsModal } from '@/components/SettingsModal';
 import { WorldPopupsOverlay } from '@/components/WorldPopupsOverlay';
 import { GameFeelEffects } from '@/components/GameFeelEffects';
 import StarForgeModal from '@/components/StarForgeModal';
+import { StudioOnboardingTour } from '@/components/StudioOnboardingTour';
+import { TelegramMiniAppBridge } from '@/components/TelegramMiniAppBridge';
+import { NeelyoInfoModal, type NeelyoInfoTab } from '@/components/NeelyoInfoModal';
 import {
   DirectorChairIcon,
   FilmReelSettingsIcon,
 } from '@/components/CustomCinemaIcons';
-import { Coins, Calendar, Clock } from 'lucide-react';
+import { Coins, Calendar, Clock, BookOpen } from 'lucide-react';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 
 const DAY_DURATION_SECONDS = 18;
 
 export default function HomePage() {
   const {
+    uiLanguage,
+    worldMarket,
+    hasSelectedMarket,
+    selectLanguageAndMarket,
     studioCreated,
     studioName,
     ceoName,
@@ -56,15 +65,25 @@ export default function HomePage() {
     isPrWarRoomOpen,
     isStarForgeOpen,
     isBankruptLiquidated,
+    onboardingTourStatus,
     draft,
     groqApiKeyClient,
     preferredGroqModel,
   } = useGameStore();
+  const currencyLabel = getCurrencyLabel(worldMarket);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [infoModalState, setInfoModalState] = useState<{
+    open: boolean;
+    tab: NeelyoInfoTab;
+  }>({ open: false, tab: 'about' });
   const [secondsLeft, setSecondsLeft] = useState(DAY_DURATION_SECONDS);
   const [isPageActive, setIsPageActive] = useState(true);
   const [isClockDetached, setIsClockDetached] = useState(false);
+
+  const handleOpenInfo = (tab: NeelyoInfoTab = 'about') => {
+    setInfoModalState({ open: true, tab });
+  };
   const isPageActiveRef = useRef(true);
   const secondsRef = useRef(DAY_DURATION_SECONDS);
   const aiTickBusyRef = useRef(false);
@@ -82,14 +101,37 @@ export default function HomePage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Keep warm creamy viewport background unified across onboarding and Emperor's Desk
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.style.backgroundColor = '#F9F6F0';
+    document.documentElement.style.backgroundColor = '#F9F6F0';
+    return () => {
+      document.body.style.backgroundColor = '';
+      document.documentElement.style.backgroundColor = '';
+    };
+  }, []);
+
+  const isOnboardingChoiceOpen =
+    studioCreated &&
+    activeScreen === 'STUDIO_HUB' &&
+    onboardingTourStatus === 'pending_choice';
+  const isOnboardingSpotlightActive =
+    studioCreated &&
+    activeScreen === 'STUDIO_HUB' &&
+    onboardingTourStatus === 'active';
+
   const isTopOverlayOpen =
     settingsOpen ||
+    infoModalState.open ||
     isPrWarRoomOpen ||
     isStarForgeOpen ||
     isBankruptLiquidated ||
+    isOnboardingChoiceOpen ||
     breakingNewsQueue.length > 0 ||
     festivalModalQueue.length > 0;
   const isAnyModalOpen = isTopOverlayOpen || isChildModalOpen;
+  const isClockPausedByOverlay = isAnyModalOpen || isOnboardingSpotlightActive;
 
   // Centralized Background Scroll & Touch Lock whenever ANY modal is open
   useEffect(() => {
@@ -160,8 +202,8 @@ export default function HomePage() {
   }, [activeScreen]);
 
   const db = useMemo(
-    () => getResolvedDatabase(customDbPatch),
-    [customDbPatch]
+    () => getResolvedDatabase(customDbPatch, worldMarket),
+    [customDbPatch, worldMarket]
   );
 
   const liveActors = useMemo(
@@ -189,7 +231,7 @@ export default function HomePage() {
         !isPageActiveRef.current ||
         (typeof document !== 'undefined' && document.hidden);
 
-      if (isAnyModalOpen || isHiddenOrBlurred) {
+      if (isClockPausedByOverlay || isHiddenOrBlurred) {
         return;
       }
 
@@ -203,14 +245,14 @@ export default function HomePage() {
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [studioCreated, isAnyModalOpen, advanceGameDay]);
+  }, [studioCreated, isClockPausedByOverlay, advanceGameDay]);
 
   // Background AI World Evolution
   useEffect(() => {
     if (
       !studioCreated ||
       !isPageActive ||
-      isAnyModalOpen ||
+      isClockPausedByOverlay ||
       aiTickBusyRef.current ||
       lastAiHandledDayRef.current === gameDay
     ) {
@@ -238,6 +280,8 @@ export default function HomePage() {
           groqKeyOverride: groqApiKeyClient,
           preferredModel: preferredGroqModel,
           payload: {
+            worldMarket,
+            uiLanguage,
             studioName,
             ceoName,
             gameDay,
@@ -270,6 +314,8 @@ export default function HomePage() {
           groqKeyOverride: groqApiKeyClient,
           preferredModel: preferredGroqModel,
           payload: {
+            worldMarket,
+            uiLanguage,
             existingNames: liveActors.map((a) => a.name),
             studioName,
             ceoName,
@@ -300,6 +346,8 @@ export default function HomePage() {
           groqKeyOverride: groqApiKeyClient,
           preferredModel: preferredGroqModel,
           payload: {
+            worldMarket,
+            uiLanguage,
             studioName,
             ceoName,
             currentYear,
@@ -330,6 +378,8 @@ export default function HomePage() {
           groqKeyOverride: groqApiKeyClient,
           preferredModel: preferredGroqModel,
           payload: {
+            worldMarket,
+            uiLanguage,
             studioName,
             ceoName,
             gameDay,
@@ -354,8 +404,10 @@ export default function HomePage() {
   }, [
     gameDay,
     studioCreated,
+    worldMarket,
+    uiLanguage,
     isPageActive,
-    isAnyModalOpen,
+    isClockPausedByOverlay,
     activeScreen,
     liveActors,
     allCompetitors,
@@ -417,13 +469,13 @@ export default function HomePage() {
             <span
               dir="ltr"
               className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-typewriter text-[10px] font-black tabular-nums ${
-                isAnyModalOpen || !isPageActive
+                isClockPausedByOverlay || !isPageActive
                   ? 'bg-[#D4AF37]/25 text-[#FFF3B0] border border-[#D4AF37]/40'
                   : 'bg-[#15803D] text-white'
               }`}
             >
               <Clock className="w-2.5 h-2.5" />
-              {isAnyModalOpen || !isPageActive ? 'مؤقت' : `${secondsLeft}s`}
+              {isClockPausedByOverlay || !isPageActive ? 'مؤقت' : `${secondsLeft}s`}
             </span>
           </div>
           {/* Animated Daily Progress Bar */}
@@ -441,9 +493,23 @@ export default function HomePage() {
   return (
     <LayoutGroup>
       <div
-        className="relative min-h-screen w-full bg-[#F9F6F0] text-[#1A2530] pb-14"
+        className={`relative min-h-[100dvh] w-full bg-[#F9F6F0] text-[#1A2530] ${
+          studioCreated ? 'pb-14' : 'pb-0'
+        }`}
         dir="rtl"
       >
+        {/* Telegram Mini App Native Bridge (Safe No-op in Standard Browsers) */}
+        <TelegramMiniAppBridge
+          hasTopUiModalOpen={infoModalState.open || settingsOpen}
+          onCloseTopUiModal={() => {
+            if (infoModalState.open) {
+              setInfoModalState((prev) => ({ ...prev, open: false }));
+            } else if (settingsOpen) {
+              setSettingsOpen(false);
+            }
+          }}
+        />
+
         {/* Global Clapperboard Transitions, Flying Cash Deltas & Crisis Red Alert */}
         <GameFeelEffects />
 
@@ -489,8 +555,8 @@ export default function HomePage() {
                 )}
               </div>
 
-              {/* Zone 3: Cash Plaque & Film Reel Settings */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Zone 3: Cash Plaque, Neelyo Info Crest & Film Reel Settings */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <div className="hidden xs:flex sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#F9F6F0]/10 border border-[#D4AF37]/45">
                   <Coins className="w-3.5 h-3.5 text-[#D4AF37]" />
                   <span
@@ -499,8 +565,20 @@ export default function HomePage() {
                   >
                     {formatMoney(cash)}
                   </span>
-                  <span className="text-[10px] font-bold text-[#D4AF37]">ج.م</span>
+                  <span className="text-[10px] font-bold text-[#D4AF37]">
+                    {currencyLabel}
+                  </span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenInfo('about')}
+                  className="p-1.5 rounded-xl bg-[#F9F6F0]/12 hover:bg-[#F9F6F0]/22 text-[#D4AF37] border border-[#D4AF37]/60 shadow cursor-pointer transition"
+                  title="عن Neelyo والخصوصية والتواصل"
+                  aria-label="عن Neelyo والخصوصية والتواصل"
+                >
+                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
 
                 <button
                   type="button"
@@ -531,32 +609,52 @@ export default function HomePage() {
         {/* Main Content Container */}
         <main
           aria-hidden={isTopOverlayOpen}
-          className={`mx-auto px-3 sm:px-5 pt-4 sm:pt-6 transition-opacity ${
-            activeScreen === 'STUDIO_HUB' ? 'max-w-5xl' : 'max-w-4xl'
+          className={`transition-opacity ${
+            studioCreated
+              ? `mx-auto px-3 sm:px-5 pt-4 sm:pt-6 ${
+                  activeScreen === 'STUDIO_HUB' ? 'max-w-5xl' : 'max-w-4xl'
+                }`
+              : 'w-full min-h-[100dvh]'
           } ${isTopOverlayOpen ? 'pointer-events-none select-none opacity-40' : ''}`}
         >
         <AnimatePresence mode="wait">
-          {!studioCreated ? (
+          {!studioCreated && !hasSelectedMarket ? (
+            <motion.div
+              key="welcome-market"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <WelcomeMarketScreen
+                initialLanguage={uiLanguage}
+                initialMarket={worldMarket}
+                onComplete={selectLanguageAndMarket}
+                onOpenInfo={handleOpenInfo}
+              />
+            </motion.div>
+          ) : !studioCreated ? (
             <motion.div
               key="stage1"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
             >
-              <Stage1StudioCreation />
+              <Stage1StudioCreation onOpenInfo={handleOpenInfo} />
             </motion.div>
           ) : (
             <motion.div
               key={activeScreen}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
+              transition={{ duration: 0.28 }}
             >
               {activeScreen === 'STUDIO_HUB' && (
                 <StudioHubView
                   onOpenSettings={() => setSettingsOpen(true)}
+                  onOpenInfo={handleOpenInfo}
                   secondsLeft={secondsLeft}
                 />
               )}
@@ -571,12 +669,21 @@ export default function HomePage() {
         </AnimatePresence>
       </main>
 
-      {/* The Star Forge (غرفة صناعة النجوم / كاستينج الـ VIP) */}
+      {/* First-Time Studio Presentation Choice & Interactive Spotlight Tour */}
+      <StudioOnboardingTour />
+
+      {/* The Star Forge (غرفة صناعة النجوم) */}
       <StarForgeModal />
 
       {/* Global Popups & Smartphone PR War Room */}
       <WorldPopupsOverlay />
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <NeelyoInfoModal
+        isOpen={infoModalState.open}
+        activeTab={infoModalState.tab}
+        onTabChange={(tab) => setInfoModalState((prev) => ({ ...prev, tab }))}
+        onClose={() => setInfoModalState((prev) => ({ ...prev, open: false }))}
+      />
       </div>
     </LayoutGroup>
   );

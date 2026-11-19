@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useGameStore } from '@/lib/store';
 import { formatMoney } from '@/lib/game-engine';
+import { getCurrencyLabel } from '@/lib/market-profiles';
 import { ActorItem, GenreId } from '@/lib/db-resolver';
 import {
   HexagonalRadarChartSvg,
@@ -183,17 +184,39 @@ export default function StarForgeModal() {
   const spendForStarForgeUpgrade = useGameStore(
     (s) => s.spendForStarForgeUpgrade
   );
+  const refundStarForgeCash = useGameStore((s) => s.refundStarForgeCash);
   const createCustomVipStar = useGameStore((s) => s.createCustomVipStar);
   const showToast = useGameStore((s) => s.showToast);
+  const worldMarket = useGameStore((s) => s.worldMarket);
+  const currencyLabel = getCurrencyLabel(worldMarket);
 
-  // Mobile-friendly 3-Step Casting Wizard
+  const MAX_TRAINING_ADS_PER_STAR = 3;
+  const EMPTY_PAID_HISTORY: Record<keyof SixRadarStats, number[]> = {
+    charisma: [],
+    acting: [],
+    action: [],
+    comedy: [],
+    popularity: [],
+    boxOffice: [],
+  };
+
+  const DEFAULT_RADAR_STATS: SixRadarStats = {
+    charisma: 76,
+    acting: 74,
+    action: 78,
+    comedy: 70,
+    popularity: 75,
+    boxOffice: 77,
+  };
+
+  // Mobile-friendly 3-Step Casting Wizard — starts completely empty for every new star
   const [castingStep, setCastingStep] = useState<1 | 2 | 3>(1);
   const [watchingAdIndex, setWatchingAdIndex] = useState<number | null>(null);
   const [droppedLockIndex, setDroppedLockIndex] = useState<number | null>(null);
 
   const [starGender, setStarGender] = useState<'male' | 'female'>('male');
-  const [starName, setStarName] = useState('فارس الدهبي');
-  const [starAge, setStarAge] = useState<number>(28);
+  const [starName, setStarName] = useState('');
+  const [starAgeInput, setStarAgeInput] = useState<string>('');
   const [primaryGenre, setPrimaryGenre] = useState<GenreId>('action');
   const [photoUrl, setPhotoUrl] = useState<string>('');
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
@@ -201,15 +224,12 @@ export default function StarForgeModal() {
   const [hoveredStatKey, setHoveredStatKey] =
     useState<keyof SixRadarStats>('charisma');
   const [trainingAdLoading, setTrainingAdLoading] = useState(false);
+  const [trainingAdsUsed, setTrainingAdsUsed] = useState(0);
+  const [paidCostHistory, setPaidCostHistory] =
+    useState<Record<keyof SixRadarStats, number[]>>(EMPTY_PAID_HISTORY);
 
-  const [radarStats, setRadarStats] = useState<SixRadarStats>({
-    charisma: 76,
-    acting: 74,
-    action: 78,
-    comedy: 70,
-    popularity: 75,
-    boxOffice: 77,
-  });
+  const [radarStats, setRadarStats] =
+    useState<SixRadarStats>(DEFAULT_RADAR_STATS);
 
   const [revealedStar, setRevealedStar] = useState<ActorItem | null>(null);
   const [isStampingReveal, setIsStampingReveal] = useState(false);
@@ -220,13 +240,16 @@ export default function StarForgeModal() {
   const allLocksOpened = starForgeLocksOpened >= 5;
   const statMetaList = getStatMetaForGender(starGender);
 
+  const parsedAge = Number.parseInt(starAgeInput, 10);
+  const isAgeValid =
+    starAgeInput.trim().length > 0 &&
+    Number.isFinite(parsedAge) &&
+    parsedAge >= 18 &&
+    parsedAge <= 70;
+  const effectiveStarAge = isAgeValid ? parsedAge : 25;
+
   const handleSwitchGender = (nextGender: 'male' | 'female') => {
     setStarGender(nextGender);
-    if (nextGender === 'female' && starName === 'فارس الدهبي') {
-      setStarName('ليلى الشامي');
-    } else if (nextGender === 'male' && starName === 'ليلى الشامي') {
-      setStarName('فارس الدهبي');
-    }
   };
 
   const handleSwitchGenre = (nextGenre: GenreId) => {
@@ -295,6 +318,10 @@ export default function StarForgeModal() {
     }
 
     playCashRegisterChaChing();
+    setPaidCostHistory((prev) => ({
+      ...prev,
+      [key]: [...prev[key], cashCost],
+    }));
     setRadarStats((prev) => ({
       ...prev,
       [key]: Math.min(99, prev[key] + 2),
@@ -304,6 +331,21 @@ export default function StarForgeModal() {
   const handleDecrementStat = (key: keyof SixRadarStats) => {
     const currentVal = radarStats[key];
     if (currentVal <= 60) return;
+
+    const historyForStat = paidCostHistory[key] || [];
+    if (historyForStat.length > 0) {
+      const refundedAmount = historyForStat[historyForStat.length - 1];
+      setPaidCostHistory((prev) => ({
+        ...prev,
+        [key]: prev[key].slice(0, -1),
+      }));
+      refundStarForgeCash(refundedAmount);
+      showToast(
+        `تم استرداد ${formatMoney(refundedAmount)} ${currencyLabel} إلى خزينة الاستوديو`,
+        'info'
+      );
+    }
+
     setRadarStats((prev) => ({
       ...prev,
       [key]: Math.max(60, prev[key] - 2),
@@ -312,6 +354,14 @@ export default function StarForgeModal() {
 
   const handleAdTrainingCampBoost = () => {
     if (trainingAdLoading) return;
+    if (trainingAdsUsed >= MAX_TRAINING_ADS_PER_STAR) {
+      showToast(
+        `اكتمل الحد الأقصى لمعسكرات التدريب المجانية (${MAX_TRAINING_ADS_PER_STAR}/${MAX_TRAINING_ADS_PER_STAR}) لهذا النجم!`,
+        'warning',
+        'يمكنك استكمال رفع باقي الطاقات من خزينة الاستوديو.'
+      );
+      return;
+    }
     const upgradableKeys = (
       Object.keys(radarStats) as (keyof SixRadarStats)[]
     ).filter((k) => radarStats[k] < 99);
@@ -338,11 +388,12 @@ export default function StarForgeModal() {
         }
         return next;
       });
+      setTrainingAdsUsed((c) => c + 1);
       setTrainingAdLoading(false);
       showToast(
         'اكتمل معسكر التدريب المكثف! (+4 نقاط طاقة مجاناً)',
         'success',
-        'ارتفعت مهارات نجمك الجاهز للكاستينج بدون خصم من الخزينة.'
+        `متبقي ${Math.max(0, MAX_TRAINING_ADS_PER_STAR - (trainingAdsUsed + 1))} من ${MAX_TRAINING_ADS_PER_STAR} معسكرات مجانية لهذا النجم.`
       );
     }, 600);
   };
@@ -369,12 +420,43 @@ export default function StarForgeModal() {
     photoUrl ||
     buildRoyalMonogramPortraitDataUrl(starName, starGender, overallRating);
 
-  const handleCertifyDiamondStar = () => {
-    if (!starName.trim()) {
-      showToast('اكتب اسم النجم أولاً ليتم توقيع الكارت الألماظ!', 'warning');
-      setCastingStep(1);
-      return;
+  const resetFormFields = () => {
+    setStarName('');
+    setStarAgeInput('');
+    setPhotoUrl('');
+    setPrimaryGenre('action');
+    setStarGender('male');
+    setRadarStats(DEFAULT_RADAR_STATS);
+    setTrainingAdsUsed(0);
+    setPaidCostHistory(EMPTY_PAID_HISTORY);
+    setCastingStep(1);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
+  };
+
+  const validateStep1BeforeContinue = (): boolean => {
+    if (!starName.trim()) {
+      showToast(
+        `اكتب الاسم الفني لـ${starGender === 'female' ? 'لنجمة' : 'لنجم'} أولاً!`,
+        'warning'
+      );
+      setCastingStep(1);
+      return false;
+    }
+    if (!isAgeValid) {
+      showToast(
+        'اكتب عمراً صحيحاً للنجم بين 18 و 70 سنة!',
+        'warning'
+      );
+      setCastingStep(1);
+      return false;
+    }
+    return true;
+  };
+
+  const handleCertifyDiamondStar = () => {
+    if (!validateStep1BeforeContinue()) return;
 
     setIsStampingReveal(true);
     playHeavyIronStamp();
@@ -383,7 +465,7 @@ export default function StarForgeModal() {
       id: `custom_star_${Date.now()}`,
       name: starName.trim(),
       gender: starGender,
-      age: starAge,
+      age: effectiveStarAge,
       tier: 'S',
       image_url: previewPortraitUrl,
       base_salary: estimatedBaseSalary,
@@ -396,7 +478,7 @@ export default function StarForgeModal() {
         acting: radarStats.acting,
         charisma: radarStats.charisma,
         box_office_pull: radarStats.boxOffice,
-        ego: 22,
+        ego: Math.min(88, Math.max(46, Math.round(overallRating * 0.84))),
       },
       genre_mastery: {
         [primaryGenre]: Math.min(99, overallRating + 5),
@@ -415,6 +497,9 @@ export default function StarForgeModal() {
   };
 
   const handleClose = () => {
+    if (revealedStar) {
+      resetFormFields();
+    }
     setRevealedStar(null);
     setCastingStep(1);
     setStarForgeOpen(false);
@@ -482,7 +567,7 @@ export default function StarForgeModal() {
                 غرفة صناعة النجوم
               </h2>
               <p className="text-xs sm:text-sm font-bold text-[#F9F6F0]/90 mt-1.5 leading-relaxed">
-                «اكتشف نجمك الخاص.. افتح الأقفال الذهبية الـ 5 لتبدأ رحلة صناعة أسطورة سينمائية خالدة»
+                «اكتشف نجمك الخاص.. افتح الأقفال الذهبية الـ 5 عبر الإعلانات في كل مرة لصناعة أسطورة سينمائية جديدة»
               </p>
             </div>
 
@@ -767,15 +852,28 @@ export default function StarForgeModal() {
                             </>
                           ) : (
                             <div className="text-center px-4 py-5 flex flex-col items-center">
-                              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] flex items-center justify-center shadow-[0_0_28px_rgba(212,175,55,0.35)] mb-3 group-hover:scale-105 transition-transform">
-                                <ImagePlus className="w-8 h-8" />
-                              </div>
-                              <p className="font-display text-base text-[#F9F6F0] leading-snug">
-                                اضغط لرفع صورة{' '}
-                                {starGender === 'female' ? 'النجمة' : 'النجم'}
+                              {starName.trim() ? (
+                                <div className="w-20 h-20 rounded-full bg-[#111921] border-4 border-[#D4AF37] shadow-[0_0_28px_rgba(212,175,55,0.4)] flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform">
+                                  <span className="font-display text-4xl text-[#D4AF37] leading-none">
+                                    {starName.trim().charAt(0)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] flex items-center justify-center shadow-[0_0_28px_rgba(212,175,55,0.35)] mb-3 group-hover:scale-105 transition-transform">
+                                  <ImagePlus className="w-8 h-8" />
+                                </div>
+                              )}
+                              <p className="font-display text-sm sm:text-base text-[#F9F6F0] leading-snug">
+                                {starName.trim()
+                                  ? 'صورة الحرف التلقائية جاهزة'
+                                  : `اضغط لرفع صورة ${
+                                      starGender === 'female' ? 'النجمة' : 'النجم'
+                                    }`}
                               </p>
-                              <p className="text-[11px] font-bold text-[#D4AF37]/90 mt-1">
-                                اختر صورة من الاستوديو أو اسحبها هنا
+                              <p className="text-[11px] font-bold text-[#D4AF37]/90 mt-1 leading-relaxed">
+                                {starName.trim()
+                                  ? 'إذا لم ترفع صورة، ستعتمد اللعبة تلقائياً بورتريه بحرف الاسم'
+                                  : 'اختياري — لو لم تختر صورة سيتم توليد بورتريه بحرف الاسم تلقائياً'}
                               </p>
                               <span className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#D91624] text-white text-[11px] font-black border border-[#D4AF37]/70 shadow-sm group-hover:brightness-110 transition">
                                 <Upload className="w-3.5 h-3.5" />
@@ -812,29 +910,39 @@ export default function StarForgeModal() {
                               value={starName}
                               onChange={(e) => setStarName(e.target.value)}
                               placeholder="اكتب الاسم الفني..."
-                              className="w-full min-h-[44px] px-3.5 py-2 rounded-xl bg-[#F9F6F0] border-2 border-[#1A2530]/20 focus:border-[#D91624] outline-none font-extrabold text-sm text-[#1A2530]"
+                              className="w-full min-h-[44px] px-3.5 py-2 rounded-xl bg-[#F9F6F0] border-2 border-[#1A2530]/20 focus:border-[#D91624] outline-none font-extrabold text-base text-[#1A2530]"
                             />
                           </div>
 
                           <div className="col-span-4">
                             <label className="block text-[11px] font-extrabold text-[#1A2530]/80 mb-1.5">
-                              العمر (سنة)
+                              العمر (18–70)
                             </label>
                             <input
-                              type="number"
-                              min={18}
-                              max={70}
-                              value={starAge}
-                              onChange={(e) =>
-                                setStarAge(
-                                  Math.max(
-                                    18,
-                                    Math.min(70, Number(e.target.value))
-                                  )
-                                )
-                              }
-                              className="w-full min-h-[44px] px-2 py-2 rounded-xl bg-[#F9F6F0] border-2 border-[#1A2530]/20 focus:border-[#D91624] outline-none text-sm font-typewriter font-black text-center text-[#1A2530]"
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={2}
+                              value={starAgeInput}
+                              placeholder="مثال: 28"
+                              onChange={(e) => {
+                                const digitsOnly = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  ''
+                                );
+                                setStarAgeInput(digitsOnly.slice(0, 2));
+                              }}
+                              className={`w-full min-h-[44px] px-2 py-2 rounded-xl bg-[#F9F6F0] border-2 outline-none text-base font-typewriter font-black text-center text-[#1A2530] ${
+                                starAgeInput.length > 0 && !isAgeValid
+                                  ? 'border-[#D91624] bg-[#D91624]/5'
+                                  : 'border-[#1A2530]/20 focus:border-[#D91624]'
+                              }`}
                             />
+                            {starAgeInput.length > 0 && !isAgeValid && (
+                              <span className="mt-1 block text-[10px] font-bold text-[#D91624] text-center">
+                                بين 18 و 70
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -881,7 +989,7 @@ export default function StarForgeModal() {
                             dir="ltr"
                             className="font-typewriter text-sm font-black text-[#15803D] bg-white px-3 py-1.5 rounded-xl border border-[#15803D]/25 shrink-0"
                           >
-                            {formatMoney(estimatedBaseSalary)} ج.م
+                            {formatMoney(estimatedBaseSalary)} {currencyLabel}
                           </div>
                         </div>
                       </div>
@@ -932,23 +1040,30 @@ export default function StarForgeModal() {
                       </div>
 
                       <div className="rounded-xl bg-[#F9F6F0] border border-[#1A2530]/15 px-3 py-2 text-[11px] font-bold text-[#1A2530]/85 flex flex-wrap items-center justify-between gap-1">
-                        <span>من 60 إلى 80: 1.5M ج.م</span>
+                        <span>من 60 إلى 80: 1.5M {currencyLabel}</span>
                         <span className="text-[#D91624] font-extrabold">
-                          نخبة (80–99): 3.5M ج.م
+                          نخبة (80–99): 3.5M {currencyLabel}
                         </span>
                       </div>
 
                       <button
                         type="button"
-                        disabled={trainingAdLoading}
+                        disabled={
+                          trainingAdLoading ||
+                          trainingAdsUsed >= MAX_TRAINING_ADS_PER_STAR
+                        }
                         onClick={handleAdTrainingCampBoost}
-                        className="w-full min-h-[42px] py-2 px-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-black text-xs border border-[#1A2530]/25 shadow-xs hover:brightness-105 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+                        className="w-full min-h-[42px] py-2 px-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-black text-xs border border-[#1A2530]/25 shadow-xs hover:brightness-105 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed"
                       >
                         <Zap className="w-4 h-4 text-[#D91624]" />
                         <span>
                           {trainingAdLoading
                             ? 'جاري تجهيز معسكر التدريب...'
-                            : 'معسكر تدريب مكثف (+4 نقاط عشوائية مجاناً — إعلان)'}
+                            : trainingAdsUsed >= MAX_TRAINING_ADS_PER_STAR
+                            ? `اكتملت معسكرات التدريب المجانية (${MAX_TRAINING_ADS_PER_STAR}/${MAX_TRAINING_ADS_PER_STAR})`
+                            : `معسكر تدريب مكثف (+4 نقاط عشوائية — إعلان · المتبقي ${
+                                MAX_TRAINING_ADS_PER_STAR - trainingAdsUsed
+                              }/${MAX_TRAINING_ADS_PER_STAR})`}
                         </span>
                       </button>
                     </div>
@@ -980,8 +1095,8 @@ export default function StarForgeModal() {
                                 {val >= 99
                                   ? 'أسطورة خالدة (99 MAX)'
                                   : isEliteNext
-                                  ? 'تدريب نخبة (3.5M ج.م)'
-                                  : 'تطوير أساسي (1.5M ج.م)'}
+                                  ? `تدريب نخبة (3.5M ${currencyLabel})`
+                                  : `تطوير أساسي (1.5M ${currencyLabel})`}
                               </span>
                             </div>
 
@@ -1029,7 +1144,7 @@ export default function StarForgeModal() {
                       <Fut3DTiltCard tier="DIAMOND" className="p-4 text-[#F9F6F0]">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-extrabold text-[#D4AF37]">
-                            {archetypeTitle} · {starAge} سنة
+                            {archetypeTitle} · {effectiveStarAge} سنة
                           </span>
                           <span className="font-typewriter text-xl font-black text-[#D4AF37]">
                             {overallRating} OVR
@@ -1096,7 +1211,7 @@ export default function StarForgeModal() {
                             dir="ltr"
                             className="font-typewriter font-black text-[#15803D]"
                           >
-                            {formatMoney(estimatedBaseSalary)} ج.م
+                            {formatMoney(estimatedBaseSalary)} {currencyLabel}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -1140,9 +1255,12 @@ export default function StarForgeModal() {
               {castingStep < 3 ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    setCastingStep((prev) => (prev === 1 ? 2 : 3))
-                  }
+                  onClick={() => {
+                    if (castingStep === 1 && !validateStep1BeforeContinue()) {
+                      return;
+                    }
+                    setCastingStep((prev) => (prev === 1 ? 2 : 3));
+                  }}
                   className="min-h-[44px] px-5 sm:px-6 py-2 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-sm sm:text-base border border-[#D4AF37] shadow flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>

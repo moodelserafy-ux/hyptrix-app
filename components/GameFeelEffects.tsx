@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useGameStore } from '@/lib/store';
 import { formatMoney } from '@/lib/game-engine';
+import { getCurrencyLabel } from '@/lib/market-profiles';
 import {
   playCashRegisterChaChing,
   playClapperboardSnap,
@@ -31,6 +32,9 @@ const SCREEN_TITLES: Record<string, string> = {
 };
 
 export function GameFeelEffects() {
+  const worldMarket = useGameStore((s) => s.worldMarket);
+  const currencyLabel = getCurrencyLabel(worldMarket);
+
   const [clapperTransition, setClapperTransition] = useState<{
     active: boolean;
     sceneName: string;
@@ -161,7 +165,7 @@ export function GameFeelEffects() {
                 }`}
               >
                 {isNegative ? '' : '+'}
-                {formatMoney(item.delta)} ج.م
+                {formatMoney(item.delta)} {currencyLabel}
               </motion.div>
             );
           })}

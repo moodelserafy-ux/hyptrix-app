@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { useGameStore } from '@/lib/store';
 import { GENRES } from '@/lib/db-resolver';
+import { getMarketProfile } from '@/lib/market-profiles';
 import {
   AgeRating,
   GenreId,
-  FilmReleaseSeason,
   SeriesEpisodes,
   SeriesSeason,
 } from '@/lib/game-engine';
@@ -51,41 +51,7 @@ const GENRE_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>
   Shield,
 };
 
-const FILM_SEASONS: { id: FilmReleaseSeason; label: string; desc: string }[] = [
-  {
-    id: 'eid_adha',
-    label: 'موسم عيد الأضحى',
-    desc: 'أعلى إقبال جماهيري على شباك التذاكر ومنافسة شرسة مع الكبار',
-  },
-  {
-    id: 'eid_fitr',
-    label: 'موسم عيد الفطر',
-    desc: 'موسم عائلي وشبابي سريع الإيقاع بإيرادات افتتاحية قوية',
-  },
-  {
-    id: 'summer',
-    label: 'موسم الصيف السينمائي',
-    desc: 'فترة عرض طويلة في السينمات تمنح الأفلام نفساً أطول لحصد الإيرادات',
-  },
-  {
-    id: 'mid_year',
-    label: 'إجازة نصف العام',
-    desc: 'موسم متوازن بمنافسة هادئة وفرصة ممتازة لتصدر شباك التذاكر',
-  },
-];
-
-const SERIES_SEASONS: { id: SeriesSeason; label: string; desc: string }[] = [
-  {
-    id: 'ramadan',
-    label: 'الموسم الرمضاني الكبير',
-    desc: 'أعلى نسب مشاهدات بالملايين وعوائد إعلانات ضخمة عبر القنوات والمنصات',
-  },
-  {
-    id: 'off_season',
-    label: 'موسم المنصات (Off-Season)',
-    desc: 'مناسب للمسلسلات القصيرة المركزة ويتيح تصدر قوائم المشاهدة الرقمية',
-  },
-];
+// Dynamic seasons are loaded from getMarketProfile(worldMarket) inside Stage2ProjectSetup.
 
 const AGE_RATINGS: { id: AgeRating; label: string; desc: string }[] = [
   {
@@ -120,10 +86,32 @@ export function Stage2ProjectSetup() {
     showToast,
     groqApiKeyClient,
     preferredGroqModel,
+    worldMarket,
+    uiLanguage,
   } = useGameStore();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [genrePickMode, setGenrePickMode] = useState<'primary' | 'secondary'>('primary');
   const [aiGeneratingIdea, setAiGeneratingIdea] = useState(false);
+
+  const marketProfile = getMarketProfile(worldMarket);
+  const currencyLabel = marketProfile.currencyLabel;
+  const filmSeasons = marketProfile.filmSeasons.map((s) => ({
+    id: s.id,
+    label: s.label,
+    desc: `${s.bonus} · ${s.risk}`,
+  }));
+  const seriesSeasons: { id: SeriesSeason; label: string; desc: string }[] = [
+    {
+      id: 'ramadan',
+      label: marketProfile.seriesSeasonPrimaryLabel,
+      desc: marketProfile.seriesSeasonPrimarySub,
+    },
+    {
+      id: 'off_season',
+      label: marketProfile.seriesSeasonOffLabel,
+      desc: marketProfile.seriesSeasonOffSub,
+    },
+  ];
 
   const isSeries = draft.format === 'series';
 
@@ -147,6 +135,8 @@ export function Stage2ProjectSetup() {
             secondaryGenreName: secondaryGenreObj?.name || '',
             ageRating: draft.ageRating,
             currentTitle: draft.title,
+            worldMarket,
+            uiLanguage,
           },
         }),
       });
@@ -180,6 +170,8 @@ export function Stage2ProjectSetup() {
           format: draft.format,
           primaryGenre: draft.primaryGenre,
           primaryGenreName: primaryGenreObj?.name || 'دراما',
+          worldMarket,
+          uiLanguage,
         },
       }),
     })
@@ -323,7 +315,7 @@ export function Stage2ProjectSetup() {
                   </div>
                   <p className="text-xs font-black text-[#1A2530]">فيلم سينمائي</p>
                   <p className="text-[10px] leading-relaxed font-bold text-[#1A2530]/75">
-                    يقاس بـ <strong className="text-[#D91624]">إيرادات شباك التذاكر (ج.م)</strong> وعدد شاشات السينما
+                    يقاس بـ <strong className="text-[#D91624]">إيرادات شباك التذاكر ({currencyLabel})</strong> وعدد شاشات السينما
                   </p>
                 </button>
 
@@ -402,7 +394,7 @@ export function Stage2ProjectSetup() {
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {!isSeries
-                  ? FILM_SEASONS.map((s) => (
+                  ? filmSeasons.map((s) => (
                       <button
                         key={s.id}
                         type="button"
@@ -417,7 +409,7 @@ export function Stage2ProjectSetup() {
                         <p className="mt-0.5 text-[11px] text-[#1A2530]/70">{s.desc}</p>
                       </button>
                     ))
-                  : SERIES_SEASONS.map((s) => (
+                  : seriesSeasons.map((s) => (
                       <button
                         key={s.id}
                         type="button"
@@ -633,10 +625,14 @@ export function Stage2ProjectSetup() {
                   onChange={(e) => updateDraft({ title: e.target.value })}
                   placeholder={
                     isSeries
-                      ? 'مثال: العهد السري / ليالي المحروسة'
+                      ? worldMarket === 'saudi'
+                        ? 'مثال: حارة البجيري / ليالي الدرعية'
+                        : 'مثال: العهد السري / ليالي المحروسة'
+                      : worldMarket === 'saudi'
+                      ? 'مثال: طريق العلا المفقود / ليلة في بوليفارد'
                       : 'مثال: شفرة باب الخلق / ليلة سقوط القناع'
                   }
-                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] px-4 py-3 text-sm font-bold text-[#1A2530] placeholder:text-[#1A2530]/40 focus:border-[#D4AF37] focus:bg-white focus:outline-hidden"
+                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] px-4 py-3 text-base font-bold text-[#1A2530] placeholder:text-[#1A2530]/40 focus:border-[#D4AF37] focus:bg-white focus:outline-hidden"
                 />
               </div>
 
@@ -649,7 +645,7 @@ export function Stage2ProjectSetup() {
                   value={draft.scriptSynopsis}
                   onChange={(e) => updateDraft({ scriptSynopsis: e.target.value })}
                   placeholder="اكتب بداية الأحداث، الصراع الرئيسي الذي يواجه البطل، والمفاجأة الدرامية في النهاية..."
-                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] p-3.5 text-xs leading-relaxed font-bold text-[#1A2530] placeholder:text-[#1A2530]/40 focus:border-[#D4AF37] focus:bg-white focus:outline-hidden"
+                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] p-3.5 text-base leading-relaxed font-bold text-[#1A2530] placeholder:text-[#1A2530]/40 focus:border-[#D4AF37] focus:bg-white focus:outline-hidden"
                 />
               </div>
             </div>

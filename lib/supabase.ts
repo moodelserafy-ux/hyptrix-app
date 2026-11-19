@@ -20,15 +20,22 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
  */
 export function getOrCreateStudioInstanceId(): string {
   if (typeof window === 'undefined') return 'server_studio_instance';
-  const STORAGE_KEY = 'hyptrix_studio_instance_uuid_v1';
+  const STORAGE_KEY = 'neelyo_studio_instance_uuid_v1';
+  const LEGACY_KEY = 'hyptrix_studio_instance_uuid_v1';
   try {
     let existing = window.localStorage.getItem(STORAGE_KEY);
     if (!existing || existing.length < 12) {
-      existing =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `st_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-      window.localStorage.setItem(STORAGE_KEY, existing);
+      const legacy = window.localStorage.getItem(LEGACY_KEY);
+      if (legacy && legacy.length >= 12) {
+        existing = legacy;
+        window.localStorage.setItem(STORAGE_KEY, existing);
+      } else {
+        existing =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `st_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        window.localStorage.setItem(STORAGE_KEY, existing);
+      }
     }
     return existing;
   } catch {
@@ -48,6 +55,7 @@ export interface GlobalStudioScore {
   total_awards: number;
   owned_assets_count?: number;
   ledger_verified?: boolean;
+  isCurrentPlayer?: boolean;
   updated_at?: string;
 }
 
@@ -88,6 +96,8 @@ export interface LedgerVerificationRequest {
   marketValue: number;
   reputation: number;
   ownedAssets: string[];
+  releasedCount?: number;
+  totalAwards?: number;
   itemId?: string;
   itemLabel?: string;
   previousSignature?: string;
@@ -148,7 +158,8 @@ export async function fetchAuthoritativeStudioWallet(
   currentCash: number,
   currentMarketValue: number,
   ownedAssets: string[],
-  ledgerSignature: string
+  ledgerSignature: string,
+  meta?: { releasedCount?: number; totalAwards?: number; reputation?: number }
 ): Promise<LedgerVerificationResponse | null> {
   try {
     const params = new URLSearchParams({
@@ -157,6 +168,9 @@ export async function fetchAuthoritativeStudioWallet(
       marketValue: String(currentMarketValue),
       assets: ownedAssets.join(','),
       sig: ledgerSignature || '',
+      releasedCount: String(meta?.releasedCount ?? 0),
+      totalAwards: String(meta?.totalAwards ?? 0),
+      reputation: String(meta?.reputation ?? 62),
     });
     const res = await fetch(`/api/verify-ledger?${params.toString()}`, {
       method: 'GET',
@@ -254,9 +268,10 @@ export async function syncStudioSaveToCloud(payload: {
   }
 
   try {
-    // 1. Upsert leaderboard entry
+    // 1. Upsert leaderboard entry keyed by studio_instance_id to avoid studio_name collisions
     await supabase.from('hyptrix_leaderboard').upsert(
       {
+        studio_instance_id: studioInstanceId,
         studio_name: payload.studioName,
         ceo_name: payload.ceoName,
         market_value: safeMarketValue,
@@ -265,10 +280,10 @@ export async function syncStudioSaveToCloud(payload: {
         released_count: payload.releasedCount,
         total_awards: payload.totalAwards,
         owned_assets_count: (payload.ownedAssets || []).length,
-        ledger_verified: true,
+        ledger_verified: Boolean(serverCheck.verified),
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'studio_name' }
+      { onConflict: 'studio_instance_id' }
     );
 
     // 2. Upsert cloud save if email provided
@@ -326,12 +341,14 @@ export async function fetchGlobalLeaderboard(): Promise<GlobalStudioScore[]> {
 
 export interface RealPlayersLeaderboardResponse {
   ok: boolean;
-  source: 'cloud' | 'server';
+  source: 'cloud' | 'server' | 'supabase' | 'local_fallback';
   top15: GlobalStudioScore[];
   totalPlayers: number;
   currentPlayerRank: number | null;
   currentPlayerEntry: GlobalStudioScore | null;
   fifteenthMarketValue: number;
+  tamperClamped?: boolean;
+  verified?: boolean;
 }
 
 export async function syncAndFetchRealPlayersLeaderboard(payload: {
@@ -342,6 +359,8 @@ export async function syncAndFetchRealPlayersLeaderboard(payload: {
   reputation: number;
   releasedCount: number;
   totalAwards: number;
+  ledgerSignature?: string;
+  ownedStudioAssets?: string[];
 }): Promise<RealPlayersLeaderboardResponse | null> {
   try {
     const studioInstanceId = getOrCreateStudioInstanceId();

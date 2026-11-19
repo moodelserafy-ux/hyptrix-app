@@ -4,11 +4,14 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useGameStore, getDaysRemainingUntilAnnualAwards } from '@/lib/store';
 import { formatMoney } from '@/lib/game-engine';
 import { getResolvedDatabase } from '@/lib/db-resolver';
+import { getMarketProfile } from '@/lib/market-profiles';
 import {
   syncAndFetchRealPlayersLeaderboard,
   RealPlayersLeaderboardResponse,
+  getOrCreateStudioInstanceId,
 } from '@/lib/supabase';
 import { StudioLogoSvg } from './StudioLogoSvg';
+import { WorldFlagArt } from './WorldFlagArt';
 import {
   Trophy,
   RotateCcw,
@@ -34,13 +37,21 @@ export function LeaderboardAndSettingsView() {
     emergingCompetitors,
     competitorNetWorthDelta,
     customDbPatch,
+    ledgerSignature,
+    ownedStudioAssets,
     resetEntireGameAndStartFresh,
+    worldMarket,
+    openMarketSelector,
   } = useGameStore();
+
+  const marketProfile = getMarketProfile(worldMarket);
+  const currencyLabel = marketProfile.currencyLabel;
 
   const [subTab, setSubTab] = useState<'real_players' | 'world_studios' | 'system'>(
     'real_players'
   );
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmSwitchMarket, setConfirmSwitchMarket] = useState(false);
   const [page, setPage] = useState(0);
 
   // Real Players Top 15 Global Leaderboard State
@@ -49,8 +60,8 @@ export function LeaderboardAndSettingsView() {
   const [loadingReal, setLoadingReal] = useState(false);
 
   const db = useMemo(
-    () => getResolvedDatabase(customDbPatch),
-    [customDbPatch]
+    () => getResolvedDatabase(customDbPatch, worldMarket),
+    [customDbPatch, worldMarket]
   );
 
   const daysUntilAnnualAwards = getDaysRemainingUntilAnnualAwards(gameDay);
@@ -64,13 +75,15 @@ export function LeaderboardAndSettingsView() {
     setLoadingReal(true);
     try {
       const data = await syncAndFetchRealPlayersLeaderboard({
-        studioName: studioName || 'العقرب ستوديوز',
+        studioName: studioName || marketProfile.defaultStudioName,
         ceoName: ceoName || 'المدير التنفيذي',
         marketValue,
         cash,
         reputation,
         releasedCount: releasedProjects.length,
         totalAwards: playerTotalAwards,
+        ledgerSignature,
+        ownedStudioAssets,
       });
       if (data) {
         setRealLeaderboard(data);
@@ -80,12 +93,15 @@ export function LeaderboardAndSettingsView() {
     }
   }, [
     studioName,
+    marketProfile.defaultStudioName,
     ceoName,
     marketValue,
     cash,
     reputation,
     releasedProjects.length,
     playerTotalAwards,
+    ledgerSignature,
+    ownedStudioAssets,
   ]);
 
   useEffect(() => {
@@ -93,13 +109,15 @@ export function LeaderboardAndSettingsView() {
     let active = true;
 
     syncAndFetchRealPlayersLeaderboard({
-      studioName: studioName || 'العقرب ستوديوز',
+      studioName: studioName || marketProfile.defaultStudioName,
       ceoName: ceoName || 'المدير التنفيذي',
       marketValue,
       cash,
       reputation,
       releasedCount: releasedProjects.length,
       totalAwards: playerTotalAwards,
+      ledgerSignature,
+      ownedStudioAssets,
     }).then((data) => {
       if (active && data) {
         setRealLeaderboard(data);
@@ -112,18 +130,21 @@ export function LeaderboardAndSettingsView() {
   }, [
     subTab,
     studioName,
+    marketProfile.defaultStudioName,
     ceoName,
     marketValue,
     cash,
     reputation,
     releasedProjects.length,
     playerTotalAwards,
+    ledgerSignature,
+    ownedStudioAssets,
   ]);
 
   const combinedWorldLeaderboard = useMemo(() => {
     const playerEntry = {
       id: 'player_studio',
-      name: studioName || 'العقرب ستوديوز',
+      name: studioName || marketProfile.defaultStudioName,
       ceo: ceoName || 'المدير التنفيذي',
       netWorth: marketValue,
       reputation,
@@ -157,6 +178,7 @@ export function LeaderboardAndSettingsView() {
     return [playerEntry, ...allRivals].sort((a, b) => b.netWorth - a.netWorth);
   }, [
     studioName,
+    marketProfile.defaultStudioName,
     ceoName,
     marketValue,
     reputation,
@@ -178,7 +200,7 @@ export function LeaderboardAndSettingsView() {
     (safePage + 1) * pageSize
   );
 
-  const normalizedMyStudio = (studioName || '').trim().toLowerCase();
+  const myStudioInstanceId = useMemo(() => getOrCreateStudioInstanceId(), []);
   const top15RealPlayers = (realLeaderboard?.top15 || []).slice(0, 15);
   const myRealRank = realLeaderboard?.currentPlayerRank ?? null;
   const isPlayerBelowTop15 = myRealRank !== null && myRealRank > 15;
@@ -308,7 +330,9 @@ export function LeaderboardAndSettingsView() {
               {top15RealPlayers.map((entry, idx) => {
                 const rankNum = idx + 1;
                 const isMe =
-                  entry.studio_name.trim().toLowerCase() === normalizedMyStudio;
+                  entry.isCurrentPlayer === true ||
+                  (Boolean(entry.studio_instance_id) &&
+                    entry.studio_instance_id === myStudioInstanceId);
                 return (
                   <div
                     key={`${entry.studio_instance_id || entry.studio_name}_${idx}`}
@@ -373,7 +397,7 @@ export function LeaderboardAndSettingsView() {
                           القيمة السوقية
                         </span>
                         <span className="font-typewriter text-xs font-black text-[#F9F6F0]">
-                          {formatMoney(entry.market_value)} ج.م
+                          {formatMoney(entry.market_value)} {currencyLabel}
                         </span>
                       </div>
                     </div>
@@ -406,13 +430,13 @@ export function LeaderboardAndSettingsView() {
                   </div>
                   <div>
                     <h4 className="font-display text-sm sm:text-base text-[#F9F6F0]">
-                      {studioName || 'العقرب ستوديوز'}
+                      {studioName || marketProfile.defaultStudioName}
                     </h4>
                     <p className="text-[11px] font-bold text-[#F9F6F0]/80">
                       أنت حالياً في المركز{' '}
                       <strong className="text-[#D4AF37]">#{myRealRank}</strong> عالمياً
                       {gapToTop15 > 0
-                        ? ` · تحتاج +${formatMoney(gapToTop15)} ج.م قيمة سوقية لدخول قائمة أفضل 15!`
+                        ? ` · تحتاج +${formatMoney(gapToTop15)} ${currencyLabel} قيمة سوقية لدخول قائمة أفضل 15!`
                         : ''}
                     </p>
                   </div>
@@ -423,7 +447,7 @@ export function LeaderboardAndSettingsView() {
                     قيمتك السوقية
                   </span>
                   <span className="font-typewriter text-xs font-black text-[#15803D] tabular-nums">
-                    {formatMoney(marketValue)} ج.م
+                    {formatMoney(marketValue)} {currencyLabel}
                   </span>
                 </div>
               </div>
@@ -498,7 +522,7 @@ export function LeaderboardAndSettingsView() {
                       القيمة السوقية
                     </span>
                     <span className="font-typewriter text-xs font-black text-[#F9F6F0]">
-                      {formatMoney(studio.netWorth)} ج.م
+                      {formatMoney(studio.netWorth)} {currencyLabel}
                     </span>
                   </div>
                 </div>
@@ -538,50 +562,102 @@ export function LeaderboardAndSettingsView() {
         </div>
       )}
 
-      {/* TAB 3: SYSTEM & RESET */}
+      {/* TAB 3: SYSTEM, WORLD MARKET SWITCH & RESET */}
       {subTab === 'system' && (
-        <div className="flex flex-col items-center justify-between gap-3 rounded-3xl border-2 border-[#D91624] bg-white p-5 shadow-md sm:flex-row">
-          <div>
-            <h3 className="flex items-center gap-1.5 font-display text-sm font-black text-[#D91624]">
-              <AlertTriangle className="h-4 w-4 text-[#D91624]" />
-              <span>إعادة تأسيس الاستوديو من الصفر</span>
-            </h3>
-            <p className="mt-1 text-xs font-bold text-[#1A2530]/75">
-              يتم حفظ تقدمك تلقائياً. إذا أردت البدء باستوديو جديد تماماً يمكنك مسح البيانات الحالية.
-            </p>
+        <div className="space-y-3">
+          {/* Active World Market Switcher */}
+          <div className="flex flex-col items-center justify-between gap-3 rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] p-5 text-[#F9F6F0] shadow-md sm:flex-row">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl border border-[#D4AF37]/60 bg-white/10 p-2 shrink-0">
+                <WorldFlagArt market={worldMarket} className="h-8 w-12 rounded" />
+              </div>
+              <div>
+                <h3 className="font-display text-sm font-black text-[#D4AF37]">
+                  عالم الإنتاج النشط: {marketProfile.nativeTitle}
+                </h3>
+                <p className="mt-0.5 text-xs font-bold text-[#F9F6F0]/75">
+                  العملة: {marketProfile.currencyFullName} ({currencyLabel}) · يمكنك الانتقال لعالم إنتاج جديد (مثل السعودية والخليج أو مصر) بمسيرة مستقلة.
+                </p>
+              </div>
+            </div>
+
+            <div className="shrink-0">
+              {!confirmSwitchMarket ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmSwitchMarket(true)}
+                  className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-[#D4AF37] px-4 py-2 text-xs font-black text-[#1A2530] shadow hover:brightness-110 cursor-pointer"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  <span>تغيير الدولة / السوق</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openMarketSelector();
+                      setConfirmSwitchMarket(false);
+                    }}
+                    className="min-h-[40px] rounded-xl bg-[#D91624] border border-[#D4AF37] px-3.5 py-2 text-xs font-black text-white cursor-pointer"
+                  >
+                    نعم، فتح اختيار الدول
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmSwitchMarket(false)}
+                    className="min-h-[40px] rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-xs font-black text-white cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="shrink-0">
-            {!confirmReset ? (
-              <button
-                type="button"
-                onClick={() => setConfirmReset(true)}
-                className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-[#D91624] border border-[#D4AF37] px-4 py-2 text-xs font-black text-white shadow hover:brightness-110 cursor-pointer"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>إعادة ضبط اللعبة</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
+          <div className="flex flex-col items-center justify-between gap-3 rounded-3xl border-2 border-[#D91624] bg-white p-5 shadow-md sm:flex-row">
+            <div>
+              <h3 className="flex items-center gap-1.5 font-display text-sm font-black text-[#D91624]">
+                <AlertTriangle className="h-4 w-4 text-[#D91624]" />
+                <span>إعادة تأسيس الاستوديو من الصفر</span>
+              </h3>
+              <p className="mt-1 text-xs font-bold text-[#1A2530]/75">
+                يتم حفظ تقدمك تلقائياً. إذا أردت البدء باستوديو جديد تماماً يمكنك مسح البيانات الحالية.
+              </p>
+            </div>
+
+            <div className="shrink-0">
+              {!confirmReset ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    resetEntireGameAndStartFresh();
-                    setConfirmReset(false);
-                  }}
-                  className="min-h-[40px] rounded-xl bg-[#D91624] px-3.5 py-2 text-xs font-black text-white cursor-pointer"
+                  onClick={() => setConfirmReset(true)}
+                  className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-[#D91624] border border-[#D4AF37] px-4 py-2 text-xs font-black text-white shadow hover:brightness-110 cursor-pointer"
                 >
-                  تأكيد المسح النهائي
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>إعادة ضبط اللعبة</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmReset(false)}
-                  className="min-h-[40px] rounded-xl border-2 border-[#1A2530] bg-[#F9F6F0] px-3.5 py-2 text-xs font-black text-[#1A2530] cursor-pointer"
-                >
-                  إلغاء
-                </button>
-              </div>
-            )}
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetEntireGameAndStartFresh();
+                      setConfirmReset(false);
+                    }}
+                    className="min-h-[40px] rounded-xl bg-[#D91624] px-3.5 py-2 text-xs font-black text-white cursor-pointer"
+                  >
+                    تأكيد المسح النهائي
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmReset(false)}
+                    className="min-h-[40px] rounded-xl border-2 border-[#1A2530] bg-[#F9F6F0] px-3.5 py-2 text-xs font-black text-[#1A2530] cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

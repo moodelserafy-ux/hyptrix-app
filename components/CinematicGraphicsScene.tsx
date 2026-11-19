@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { GenreId } from '@/lib/db-resolver';
 import { Clapperboard, Film, Sparkles, Trophy, Tv } from 'lucide-react';
@@ -37,28 +37,28 @@ export function AnimatedStudioLotGraphic({
       >
         <defs>
           <linearGradient id="skyBeamGold" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#FDE047" stopOpacity="0.02" />
-            <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.32" />
+            <stop offset="0%" stopColor="#FFF3B0" stopOpacity="0.03" />
+            <stop offset="100%" stopColor="#D4AF37" stopOpacity="0.34" />
           </linearGradient>
-          <linearGradient id="skyBeamCyan" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.02" />
-            <stop offset="100%" stopColor="#06B6D4" stopOpacity="0.3" />
+          <linearGradient id="skyBeamCrimson" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#F9F6F0" stopOpacity="0.03" />
+            <stop offset="100%" stopColor="#D91624" stopOpacity="0.26" />
           </linearGradient>
           <linearGradient id="buildingGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#312E81" />
-            <stop offset="100%" stopColor="#1E1B4B" />
+            <stop offset="0%" stopColor="#263544" />
+            <stop offset="100%" stopColor="#121B24" />
           </linearGradient>
         </defs>
 
         {/* Stars */}
-        <circle cx="80" cy="34" r="1.5" fill="#FDE047" opacity="0.8" />
-        <circle cx="165" cy="24" r="1.2" fill="#FFFFFF" opacity="0.6" />
-        <circle cx="430" cy="28" r="1.6" fill="#FDE047" opacity="0.7" />
-        <circle cx="520" cy="40" r="1.3" fill="#38BDF8" opacity="0.8" />
+        <circle cx="80" cy="34" r="1.5" fill="#FFF3B0" opacity="0.8" />
+        <circle cx="165" cy="24" r="1.2" fill="#F9F6F0" opacity="0.6" />
+        <circle cx="430" cy="28" r="1.6" fill="#D4AF37" opacity="0.75" />
+        <circle cx="520" cy="40" r="1.3" fill="#FFF3B0" opacity="0.7" />
 
         {/* Sweeping Searchlights */}
         <polygon points="40,0 160,0 130,165 95,165" fill="url(#skyBeamGold)" />
-        <polygon points="440,0 560,0 505,165 470,165" fill="url(#skyBeamCyan)" />
+        <polygon points="440,0 560,0 505,165 470,165" fill="url(#skyBeamCrimson)" />
 
         {/* Flanking Soundstages */}
         <rect
@@ -68,15 +68,16 @@ export function AnimatedStudioLotGraphic({
           height="80"
           rx="8"
           fill="url(#buildingGrad)"
-          stroke="#6366F1"
+          stroke="#D4AF37"
+          strokeOpacity="0.55"
           strokeWidth="1.5"
         />
-        <rect x="65" y="82" width="115" height="6" rx="3" fill="#F59E0B" />
+        <rect x="65" y="82" width="115" height="6" rx="3" fill="#D4AF37" />
         <text
           x="122"
           y="124"
           textAnchor="middle"
-          fill="#C7D2FE"
+          fill="#F9F6F0"
           fontSize="11"
           fontWeight="900"
         >
@@ -90,15 +91,16 @@ export function AnimatedStudioLotGraphic({
           height="80"
           rx="8"
           fill="url(#buildingGrad)"
-          stroke="#6366F1"
+          stroke="#D4AF37"
+          strokeOpacity="0.55"
           strokeWidth="1.5"
         />
-        <rect x="420" y="82" width="115" height="6" rx="3" fill="#F59E0B" />
+        <rect x="420" y="82" width="115" height="6" rx="3" fill="#D4AF37" />
         <text
           x="477"
           y="124"
           textAnchor="middle"
-          fill="#C7D2FE"
+          fill="#F9F6F0"
           fontSize="11"
           fontWeight="900"
         >
@@ -108,8 +110,8 @@ export function AnimatedStudioLotGraphic({
         {/* Central Grand Studio HQ */}
         <path
           d="M200 72 Q300 32 400 72 L400 165 L200 165 Z"
-          fill="#1E1B4B"
-          stroke="#F59E0B"
+          fill="#1A2530"
+          stroke="#D4AF37"
           strokeWidth="2"
         />
         <rect
@@ -118,13 +120,13 @@ export function AnimatedStudioLotGraphic({
           width="176"
           height="18"
           rx="6"
-          fill="#F59E0B"
+          fill="#D4AF37"
         />
         <text
           x="300"
           y="79"
           textAnchor="middle"
-          fill="#0F172A"
+          fill="#1A2530"
           fontSize="10"
           fontWeight="900"
         >
@@ -132,35 +134,35 @@ export function AnimatedStudioLotGraphic({
         </text>
 
         {/* Illuminated Windows & Entrance */}
-        <rect x="230" y="96" width="28" height="22" rx="4" fill="#38BDF8" fillOpacity="0.35" />
-        <rect x="342" y="96" width="28" height="22" rx="4" fill="#38BDF8" fillOpacity="0.35" />
+        <rect x="230" y="96" width="28" height="22" rx="4" fill="#FFF3B0" fillOpacity="0.28" />
+        <rect x="342" y="96" width="28" height="22" rx="4" fill="#FFF3B0" fillOpacity="0.28" />
         <rect
           x="275"
           y="112"
           width="50"
           height="53"
           rx="6"
-          fill="#0F172A"
-          stroke="#F59E0B"
+          fill="#0F171E"
+          stroke="#D4AF37"
           strokeWidth="1.5"
         />
 
         {/* Red Carpet */}
-        <polygon points="278,165 322,165 352,200 248,200" fill="#E11D48" />
-        <line x1="278" y1="165" x2="248" y2="200" stroke="#F59E0B" strokeWidth="2" />
-        <line x1="322" y1="165" x2="352" y2="200" stroke="#F59E0B" strokeWidth="2" />
+        <polygon points="278,165 322,165 352,200 248,200" fill="#D91624" />
+        <line x1="278" y1="165" x2="248" y2="200" stroke="#D4AF37" strokeWidth="2" />
+        <line x1="322" y1="165" x2="352" y2="200" stroke="#D4AF37" strokeWidth="2" />
 
         {/* Ground Lot Line */}
-        <line x1="0" y1="165" x2="600" y2="165" stroke="#818CF8" strokeWidth="1.5" />
+        <line x1="0" y1="165" x2="600" y2="165" stroke="#D4AF37" strokeOpacity="0.55" strokeWidth="1.5" />
       </svg>
 
-      <div className="pointer-events-none absolute inset-x-3 bottom-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D4AF37]/40 bg-[#0F171E]/85 px-3 py-1.5 text-[11px] font-bold text-[#F9F6F0] backdrop-blur-md">
-        <span className="leading-snug text-amber-300">
+      <div className="pointer-events-none absolute inset-x-3 bottom-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D4AF37]/40 bg-[#0F171E]/88 px-3 py-1.5 text-[11px] font-bold text-[#F9F6F0] backdrop-blur-md">
+        <span className="leading-snug text-[#FFF3B0]">
           {hasActiveProject
             ? `${studioName} · البلاتوه الرئيسي: «${activeProjectTitle}»`
             : `${studioName} · مدينة الإنتاج جاهزة لانطلاق مشروعك القادم`}
         </span>
-        <span className="shrink-0 text-[10px] font-black text-cyan-300">
+        <span className="shrink-0 text-[10px] font-black text-[#D4AF37]">
           {isFilming ? 'ON AIR · جاري التصوير' : 'المقر الرئيسي'}
         </span>
       </div>
@@ -169,7 +171,65 @@ export function AnimatedStudioLotGraphic({
 }
 
 /**
- * 2. Illustrated Character Portrait SVG for Actors, Directors & Technical Crew
+ * 2a. Talent Portrait with real image_url support (Custom Stars + External Mod Packs)
+ * and automatic onError fallback to illustrated SVG portrait.
+ */
+export function TalentPortrait({
+  imageUrl,
+  name,
+  gender = 'male',
+  role = 'actor',
+  tier = 'B',
+  age = 35,
+  isRising = false,
+  imgClassName = 'h-full w-full object-cover',
+}: {
+  imageUrl?: string | null;
+  name: string;
+  gender?: 'male' | 'female' | 'M' | 'F';
+  role?: string;
+  tier?: string;
+  age?: number;
+  isRising?: boolean;
+  imgClassName?: string;
+}) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const cleanUrl = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+  const isValidUrl =
+    cleanUrl.length > 0 &&
+    (cleanUrl.startsWith('https://') ||
+      cleanUrl.startsWith('http://') ||
+      cleanUrl.startsWith('data:image/') ||
+      cleanUrl.startsWith('/'));
+
+  if (isValidUrl && failedUrl !== cleanUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={cleanUrl}
+        alt={name}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setFailedUrl(cleanUrl)}
+        className={imgClassName}
+      />
+    );
+  }
+
+  return (
+    <TalentCharacterPortraitSvg
+      name={name}
+      gender={gender}
+      role={role}
+      tier={tier}
+      age={age}
+      isRising={isRising}
+    />
+  );
+}
+
+/**
+ * 2b. Illustrated Character Portrait SVG for Actors, Directors & Technical Crew
  */
 export function TalentCharacterPortraitSvg({
   name,
@@ -190,14 +250,14 @@ export function TalentCharacterPortraitSvg({
   const isFemale = gender === 'female' || gender === 'F';
 
   const skinTones = ['#F5CBA7', '#F0B27A', '#E59866', '#FAD7A0', '#D4AC6E'];
-  const hairColors = ['#1E293B', '#0F172A', '#3E2723', '#4A2311', '#334155'];
+  const hairColors = ['#1A2530', '#0F171E', '#3E2723', '#4A2311', '#263544'];
   const suitColors = [
-    '#16161D',
-    '#311042',
-    '#0F172A',
+    '#1A2530',
+    '#263544',
+    '#0F171E',
     '#7F1D1D',
-    '#1E1B4B',
-    '#064E3B',
+    '#3B2614',
+    '#14532D',
   ];
 
   const skin = skinTones[seed % skinTones.length];
@@ -212,18 +272,18 @@ export function TalentCharacterPortraitSvg({
     tier === 'S'
       ? '#451A03'
       : tier === 'A'
-      ? '#2E1065'
+      ? '#5C1119'
       : isRising
-      ? '#7C2D12'
-      : '#0F172A';
+      ? '#3B2614'
+      : '#0F171E';
   const bottomColor =
     tier === 'S'
       ? '#D4AF37'
       : tier === 'A'
-      ? '#7C3AED'
+      ? '#D91624'
       : isRising
-      ? '#EA580C'
-      : '#1E293B';
+      ? '#B8860B'
+      : '#263544';
 
   return (
     <svg viewBox="0 0 80 80" className="h-full w-full" aria-label={name}>
@@ -402,6 +462,7 @@ export function AnimatedCinemaPremiereGraphic({
   currentStep,
   maxSteps,
   liveRevenueFormatted,
+  currencyLabel = 'ج.م',
   rank,
   criticScore,
 }: {
@@ -410,6 +471,7 @@ export function AnimatedCinemaPremiereGraphic({
   currentStep: number;
   maxSteps: number;
   liveRevenueFormatted: string;
+  currencyLabel?: string;
   rank: number;
   criticScore: number;
 }) {
@@ -429,7 +491,7 @@ export function AnimatedCinemaPremiereGraphic({
       </h3>
 
       <div className="font-display mt-2 text-2xl font-black text-emerald-400 tabular-nums sm:text-3xl">
-        {liveRevenueFormatted} ج.م
+        {liveRevenueFormatted} {currencyLabel}
       </div>
 
       <div className="mt-2 flex items-center justify-center gap-3 text-xs font-bold text-amber-200">

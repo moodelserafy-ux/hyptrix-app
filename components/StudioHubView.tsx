@@ -12,10 +12,15 @@ import {
 import { GENRES } from '@/lib/db-resolver';
 import {
   MarketRegion,
-  MARKET_CONFIGS,
   formatMoney,
 } from '@/lib/game-engine';
+import {
+  getMarketProfile,
+  getMarketConfigsForWorld,
+  getPrimaryMarketRegion,
+} from '@/lib/market-profiles';
 import { StudioLogoSvg } from './StudioLogoSvg';
+import { WorldFlagArt } from './WorldFlagArt';
 import { LeaderboardAndSettingsView } from './LeaderboardAndSettingsView';
 import {
   DirectorChairIcon,
@@ -43,12 +48,22 @@ import {
   FileText,
   Pin,
   Coins,
+  Star,
+  Clapperboard,
+  Radar,
+  BookOpen,
+  Shield,
+  Scale,
+  Mail,
 } from 'lucide-react';
+import type { NeelyoInfoTab } from './NeelyoInfoModal';
 
 export function StudioHubView({
   onOpenSettings,
+  onOpenInfo,
 }: {
   onOpenSettings?: () => void;
+  onOpenInfo?: (tab: NeelyoInfoTab) => void;
   secondsLeft?: number;
 } = {}) {
   const {
@@ -74,11 +89,18 @@ export function StudioHubView({
     setStarForgeOpen,
     starForgeLocksOpened,
     claimEmergencyInvestorBailoutWithAd,
+    lastEmergencyBailoutDay,
     bankruptcyDeadlineDay,
     ownedStudioAssets,
     purchaseStudioAsset,
     showToast,
+    worldMarket,
   } = useGameStore();
+
+  const marketProfile = getMarketProfile(worldMarket);
+  const marketConfigs = getMarketConfigsForWorld(worldMarket);
+  const primaryRegion = getPrimaryMarketRegion(worldMarket);
+  const currencyLabel = marketProfile.currencyLabel;
 
   const [activeSheet, setActiveSheet] = useState<
     null | 'markets' | 'archive' | 'history' | 'leaderboard' | 'assets'
@@ -87,11 +109,30 @@ export function StudioHubView({
   const [purchasingAssetId, setPurchasingAssetId] = useState<string | null>(null);
 
   const assetBenefits = getStudioAssetBenefits(ownedStudioAssets);
+  const isInLiquidityEmergency =
+    cash <= 10_000_000 || bankruptcyDeadlineDay !== null;
+  const bailoutCooldownRemaining =
+    lastEmergencyBailoutDay !== null
+      ? Math.max(0, 30 - (gameDay - lastEmergencyBailoutDay))
+      : 0;
+  const canUseEmergencyBailout =
+    isInLiquidityEmergency && bailoutCooldownRemaining === 0;
 
   useEffect(() => {
     setChildModalOpen(Boolean(activeSheet));
     return () => setChildModalOpen(false);
   }, [activeSheet, setChildModalOpen]);
+
+  useEffect(() => {
+    if (!activeSheet) return;
+    const handleTelegramBack = () => {
+      setActiveSheet(null);
+    };
+    window.addEventListener('neelyo:telegram-back', handleTelegramBack);
+    return () => {
+      window.removeEventListener('neelyo:telegram-back', handleTelegramBack);
+    };
+  }, [activeSheet]);
 
   const totalAwards = releasedProjects.reduce(
     (sum, p) => sum + p.awardsWon.length,
@@ -115,8 +156,15 @@ export function StudioHubView({
       ? 'قطب الإنتاج الإقليمي'
       : 'منتج سينمائي صاعد';
 
-  const hasActiveProject = Boolean(draft.title.trim());
   const offerList = Object.values(draft.talentOffers || {});
+  const isUntouchedLegacyDefault =
+    releasedProjects.length === 0 &&
+    draft.title.trim() === 'الفرعون الأخير' &&
+    draft.filmingStartDay === null &&
+    offerList.length === 0 &&
+    !draft.directorId &&
+    draft.leadActorIds.length === 0;
+  const hasActiveProject = Boolean(draft.title.trim()) && !isUntouchedLegacyDefault;
   const pendingOffersCount = offerList.filter(
     (n) => n.status === 'pending'
   ).length;
@@ -129,7 +177,7 @@ export function StudioHubView({
     Array.isArray(draft.selectedDistributionMarkets) &&
     draft.selectedDistributionMarkets.length > 0
       ? draft.selectedDistributionMarkets
-      : ['egypt'];
+      : [primaryRegion];
 
   const handleResumeActiveProject = () => {
     if (
@@ -204,6 +252,10 @@ export function StudioHubView({
                     <Crown className="w-3.5 h-3.5 text-[#D4AF37]" />
                     <span>{studioRankTitle}</span>
                   </span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 text-[#F9F6F0] text-[11px] font-bold border border-[#D4AF37]/40">
+                    <WorldFlagArt market={worldMarket} className="w-4 h-3 rounded-[2px] shrink-0" />
+                    <span>{marketProfile.countryNameAr}</span>
+                  </span>
                   <span className="text-xs font-bold text-[#D4AF37]">
                     · {formatGameDate(gameDay, currentYear)}
                   </span>
@@ -232,7 +284,10 @@ export function StudioHubView({
             </div>
 
             {/* Left: Brass Financial Plaques + Film Reel Settings */}
-            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
+            <div
+              data-tour-id="tour-finance"
+              className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-between lg:justify-end"
+            >
               <div
                 onClick={() => openModalSheet('assets')}
                 className="px-4 py-2 rounded-2xl bg-[#F9F6F0] text-[#1A2530] border-2 border-[#D4AF37] cursor-pointer hover:scale-[1.02] transition"
@@ -246,7 +301,7 @@ export function StudioHubView({
                   className="font-typewriter text-base sm:text-lg font-black text-[#1A2530]"
                 >
                   <span dir="ltr">{formatMoney(cash)}</span>{' '}
-                  <span className="text-xs">ج.م</span>
+                  <span className="text-xs">{currencyLabel}</span>
                 </div>
               </div>
 
@@ -260,7 +315,7 @@ export function StudioHubView({
                   className="font-typewriter text-base sm:text-lg font-black text-[#F9F6F0]"
                 >
                   <span dir="ltr">{formatMoney(marketValue)}</span>{' '}
-                  <span className="text-xs text-[#D4AF37]">ج.م</span>
+                  <span className="text-xs text-[#D4AF37]">{currencyLabel}</span>
                 </div>
               </div>
 
@@ -300,7 +355,7 @@ export function StudioHubView({
               </div>
               <h3 className="font-display text-lg sm:text-xl text-[#F9F6F0]">
                 {cash <= 0
-                  ? `عجز الخزينة الحالي (${formatMoney(cash)} ج.م) — أنقذ شركتك من التصفية الآن!`
+                  ? `عجز الخزينة الحالي (${formatMoney(cash)} ${currencyLabel}) — أنقذ شركتك من التصفية الآن!`
                   : 'احصل على تمويل إنقاذ عاجل من مستثمر سينمائي لتفادي الإفلاس'}
               </h3>
               <p className="text-xs font-bold text-[#F9F6F0]/85">
@@ -321,7 +376,7 @@ export function StudioHubView({
                 {formatMoney(
                   cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
                 )}{' '}
-                ج.م) — مشاهدة إعلان
+                {currencyLabel}) — مشاهدة إعلان
               </span>
             </button>
           </motion.div>
@@ -329,78 +384,151 @@ export function StudioHubView({
 
         {/* THE STUDIO WALL (الحائط الخلفي للمكتب: سبورة الفلين Corkboard + الخزنة الحديدية في الحائط) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* 1. سبورة الفلين (Corkboard) بصور الممثلين والدبابيس -> تفتح "طاقم العمل والمواهب" */}
+          {/* 1. سبورة الفلين المعلقة على الحائط (Authentic Corkboard with Polaroids, Glossy Push-Pins & Red Twine) */}
           <motion.div
-            whileHover={{ y: -4, scale: 1.01 }}
+            data-tour-id="tour-corkboard"
+            whileHover={{ y: -4, scale: 1.008 }}
             onClick={() => setActiveScreen('CREW_CAST_CARDS')}
-            className="lg:col-span-7 relative rounded-3xl bg-[#C89D66] border-8 border-[#6B4423] p-5 sm:p-6 shadow-[inset_0_4px_25px_rgba(0,0,0,0.35),0_16px_35px_rgba(26,37,48,0.18)] cursor-pointer overflow-hidden group"
+            className="lg:col-span-7 relative rounded-[28px] border-[10px] border-[#5B371C] p-4 sm:p-5 shadow-[inset_0_6px_26px_rgba(32,16,4,0.45),0_18px_38px_rgba(26,37,48,0.22)] cursor-pointer overflow-hidden group"
+            style={{
+              backgroundColor: '#C4925A',
+              backgroundImage:
+                'radial-gradient(rgba(91,55,28,0.22) 1.2px, transparent 1.2px), radial-gradient(rgba(255,236,196,0.22) 1px, transparent 1px), linear-gradient(135deg, rgba(160,108,58,0.35) 0%, rgba(196,146,90,0.12) 50%, rgba(124,78,38,0.3) 100%)',
+              backgroundSize: '14px 14px, 21px 21px, 100% 100%',
+              backgroundPosition: '0 0, 7px 7px, 0 0',
+            }}
           >
-            {/* Corkboard Texture Overlay */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-md bg-[#1A2530] text-[#F9F6F0] border border-[#D4AF37] text-xs font-extrabold shadow">
-                <Pin className="w-3.5 h-3.5 text-[#D91624]" />
-                <span>سبورة الفلين المعلقة على الحائط (Corkboard)</span>
+            {/* Brass Frame Corner Rivets */}
+            <span className="pointer-events-none absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#FFF3B0] to-[#9A7210] shadow-xs" />
+            <span className="pointer-events-none absolute top-2 left-2 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#FFF3B0] to-[#9A7210] shadow-xs" />
+            <span className="pointer-events-none absolute bottom-2 right-2 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#FFF3B0] to-[#9A7210] shadow-xs" />
+            <span className="pointer-events-none absolute bottom-2 left-2 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#FFF3B0] to-[#9A7210] shadow-xs" />
+
+            {/* Corkboard Brass Plaque Header */}
+            <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#1A2530] text-[#F9F6F0] border-2 border-[#D4AF37] text-xs font-extrabold shadow-md">
+                <Pin className="w-3.5 h-3.5 text-[#D91624] fill-[#D91624]" />
+                <span>سبورة الكاستينج والنجوم</span>
               </div>
-              <span className="px-3 py-1 rounded-md bg-[#D91624] text-white font-display text-xs tracking-wide shadow">
-                اضغط لفتح كروت الممثلين والمواهب ←
+              <span className="px-3 py-1 rounded-lg bg-[#D91624] text-white border border-[#D4AF37]/80 font-display text-xs tracking-wide shadow-md group-hover:brightness-110 transition">
+                افتح ملفات الممثلين والمخرجين ←
               </span>
             </div>
 
-            {/* Pinned Polaroids on the Corkboard */}
-            <div className="grid grid-cols-3 gap-3 sm:gap-4 my-2">
-              {[
-                {
-                  title: 'نجوم الصف الأول',
-                  sub: 'كروت ذهبية وألماظ FUT',
-                  rot: '-rotate-2',
-                  badge: 'S-TIER · نخبة',
-                },
-                {
-                  title: 'المخرجين والكتاب',
-                  sub: 'تعاقد حتى مخرجين للعمل',
-                  rot: 'rotate-2',
-                  badge: 'CREW',
-                },
-                {
-                  title: 'الرادار السداسي',
-                  sub: 'توقيعات خط الرقعة',
-                  rot: '-rotate-1',
-                  badge: 'RADAR 99',
-                },
-              ].map((card, i) => (
-                <div
-                  key={i}
-                  className={`relative bg-[#F9F6F0] p-3 pb-4 rounded-xl shadow-lg border border-[#1A2530]/20 ${card.rot} group-hover:rotate-0 transition-transform`}
-                >
-                  {/* Red Push-Pin */}
-                  <div className="w-4 h-4 rounded-full bg-[#D91624] border-2 border-white shadow mx-auto -mt-5 mb-2" />
-                  <div className="text-[10px] font-typewriter font-black text-[#D91624] mb-1">
-                    {card.badge}
-                  </div>
-                  <div className="font-display text-sm sm:text-base text-[#1A2530]">
-                    {card.title}
-                  </div>
-                  <div className="text-[11px] font-bold text-[#1A2530]/70 mt-0.5">
-                    {card.sub}
-                  </div>
-                </div>
-              ))}
+            {/* Pinned Polaroid Talent Snapshots Connected with Red Casting Twine */}
+            <div className="relative my-2 pt-2">
+              {/* Red Casting String SVG connecting the 3 push-pins */}
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 600 90"
+                className="pointer-events-none absolute -top-2 inset-x-0 w-full h-16 z-20 hidden sm:block"
+                preserveAspectRatio="none"
+              >
+                <path
+                  d="M 105 16 Q 210 56 300 18 Q 395 52 495 15"
+                  fill="none"
+                  stroke="#B91C1C"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  opacity="0.85"
+                />
+              </svg>
+
+              <div className="relative z-10 grid grid-cols-3 gap-2.5 sm:gap-4">
+                {[
+                  {
+                    title: 'نجوم الشباك',
+                    sub:
+                      worldMarket === 'saudi'
+                        ? '100+ نجم ونجمة خليجية'
+                        : '180+ ممثل وممثلة',
+                    note: 'فئة S الذهبية',
+                    rot: '-rotate-2',
+                    pinColor: 'from-[#FF5C67] via-[#D91624] to-[#7A0912]',
+                    frameBg: 'from-[#1E2C3A] to-[#111921]',
+                    icon: Star,
+                    iconColor: 'text-[#D4AF37]',
+                  },
+                  {
+                    title: 'المخرجين والطاقم',
+                    sub: 'مخرجين + تصوير وموسيقى',
+                    note: 'قيادة البلاتوه',
+                    rot: 'rotate-2',
+                    pinColor: 'from-[#FFF3B0] via-[#D4AF37] to-[#8C670C]',
+                    frameBg: 'from-[#2A1D1F] to-[#1A2530]',
+                    icon: Clapperboard,
+                    iconColor: 'text-[#FFF3B0]',
+                  },
+                  {
+                    title: 'الرادار والنجوم الخاصة',
+                    sub: 'كروت الألماظ 99',
+                    note: 'عقود حصرية',
+                    rot: '-rotate-1',
+                    pinColor: 'from-[#FF5C67] via-[#D91624] to-[#7A0912]',
+                    frameBg: 'from-[#162735] to-[#0D1821]',
+                    icon: Radar,
+                    iconColor: 'text-[#4ADE80]',
+                  },
+                ].map((card, i) => {
+                  const Icon = card.icon;
+                  return (
+                    <div
+                      key={i}
+                      className={`relative bg-[#FDFBF7] p-2 sm:p-2.5 pb-3 rounded-md shadow-[0_10px_18px_rgba(32,16,4,0.34)] border border-[#E5DEC9] ${card.rot} group-hover:rotate-0 transition-transform duration-300`}
+                    >
+                      {/* Realistic 3D Glossy Push-Pin + Cast Shadow */}
+                      <div className="relative mx-auto -mt-4 mb-1.5 flex items-center justify-center">
+                        <span className="absolute top-2.5 h-2.5 w-2.5 rounded-full bg-black/35 blur-[2px]" />
+                        <span
+                          className={`relative z-10 block h-4 w-4 rounded-full bg-gradient-to-br ${card.pinColor} border border-white/75 shadow-sm`}
+                        >
+                          <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-white/70" />
+                        </span>
+                      </div>
+
+                      {/* Authentic Polaroid Dark Photo Window */}
+                      <div
+                        className={`relative h-16 sm:h-20 w-full rounded-xs bg-gradient-to-br ${card.frameBg} border border-[#1A2530]/20 flex flex-col items-center justify-center overflow-hidden mb-2`}
+                      >
+                        <Icon className={`w-6 h-6 sm:w-7 sm:h-7 ${card.iconColor} drop-shadow`} />
+                        <span className="mt-1 px-1.5 py-0.5 rounded bg-black/45 text-[9px] font-typewriter font-black text-[#D4AF37]">
+                          {card.note}
+                        </span>
+                      </div>
+
+                      {/* Handwritten Polaroid Caption Strip */}
+                      <div className="text-center">
+                        <div className="font-display text-xs sm:text-sm text-[#1A2530] leading-tight truncate">
+                          {card.title}
+                        </div>
+                        <div className="font-ruqaa text-[12px] sm:text-sm text-[#D91624] leading-tight mt-0.5 truncate">
+                          {card.sub}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            {(pendingOffersCount > 0 || awaitingChoiceCount > 0) && (
-              <div className="mt-3 px-3.5 py-2 rounded-xl bg-[#FFF6B3] border border-[#E2C96B] text-[#1A2530] text-xs font-extrabold flex items-center justify-between">
-                <span>
-                  {awaitingChoiceCount > 0
-                    ? `⚠️ لديك ${awaitingChoiceCount} عروض مقبولة تنتظر اختيارك النهائي على السبورة!`
-                    : `⏳ بانتظار رد ${pendingOffersCount} من النجوم على عقودك...`}
-                </span>
-                <span className="underline">فحص العقود</span>
-              </div>
-            )}
+            {/* Pinned Yellow Sticky Note for Active Contracts or Quick Status */}
+            <div className="relative z-10 mt-3.5 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#FEF08A] border border-[#CA8A04]/70 px-3.5 py-2 text-[#1A2530] text-xs font-extrabold shadow-[2px_4px_10px_rgba(32,16,4,0.22)] -rotate-[0.4deg]">
+              <span>
+                {awaitingChoiceCount > 0
+                  ? `⚠️ لديك ${awaitingChoiceCount} عروض مقبولة تنتظر اختيارك النهائي على السبورة!`
+                  : pendingOffersCount > 0
+                  ? `⏳ بانتظار رد ${pendingOffersCount} من النجوم على عقودك المرسلة...`
+                  : '📌 اضغط لتصفح كروت الممثلين والمخرجين وإرسال عروض التعاقد لفيلمك القادم'}
+              </span>
+              <span className="font-display text-[#D91624] underline shrink-0">
+                فحص الكاستينج
+              </span>
+            </div>
           </motion.div>
 
           {/* 2. الخزنة الحديدية في الحائط (Wall Safe) -> تفتح الميزانية والبلاتوهات والأصول الثابتة */}
           <motion.div
+            data-tour-id="tour-vault-shelf"
             whileHover={{ y: -4, scale: 1.01 }}
             onClick={() => openModalSheet('assets')}
             className="lg:col-span-5 relative rounded-3xl bg-gradient-to-br from-[#2C3A47] via-[#1A2530] to-[#111921] border-8 border-[#D4AF37] p-5 sm:p-6 text-[#F9F6F0] shadow-[0_18px_40px_rgba(26,37,48,0.3)] cursor-pointer flex flex-col justify-between group"
@@ -459,6 +587,7 @@ export function StudioHubView({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* PROP 1: ورق السيناريو على المكتب (Script Paper Stack -> Project Setup / Active Film) */}
             <motion.div
+              data-tour-id="tour-script"
               whileHover={{ y: -6, rotate: -1 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => {
@@ -505,6 +634,7 @@ export function StudioHubView({
 
             {/* PROP 2: الملف السري الأحمر المقفول بـ 5 أقفال ذهبية (Top Secret Folder -> The Star Forge) */}
             <motion.div
+              data-tour-id="tour-starforge"
               whileHover={{ y: -6, scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setStarForgeOpen(true)}
@@ -566,6 +696,7 @@ export function StudioHubView({
 
             {/* PROP 3: الموبايل على المكتب (Smartphone -> Electronic Committees & Trend War Room) */}
             <motion.div
+              data-tour-id="tour-phone"
               whileHover={{ y: -6, rotate: 1 }}
               whileTap={{ scale: 0.98 }}
               animate={
@@ -646,7 +777,7 @@ export function StudioHubView({
                 أرشيف الأفلام ({releasedProjects.length})
               </div>
               <div className="font-typewriter text-[11px] font-bold text-[#1A2530]/70">
-                {formatMoney(lifetimeBoxOffice)} ج.م
+                {formatMoney(lifetimeBoxOffice)} {currencyLabel}
               </div>
             </div>
           </button>
@@ -687,6 +818,64 @@ export function StudioHubView({
             </div>
           </button>
         </div>
+
+        {/* OFFICIAL NEELYO STUDIO FOOTER (معلومات عنا · سياسة الخصوصية · شروط الاستخدام · التواصل) */}
+        {onOpenInfo && (
+          <footer className="rounded-2xl bg-[#1A2530] text-[#F9F6F0] border-2 border-[#D4AF37]/60 px-4 py-3.5 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37] to-[#9A7210] text-[#1A2530] shadow">
+                <Crown className="w-4 h-4" />
+              </span>
+              <div>
+                <span className="font-display text-sm text-[#D4AF37] block leading-tight">
+                  Neelyo — Cinema &amp; TV Tycoon
+                </span>
+                <a
+                  href="mailto:neelyotycoon@gmail.com"
+                  dir="ltr"
+                  className="font-typewriter text-[11px] font-bold text-[#F9F6F0]/75 hover:text-[#D4AF37] transition"
+                >
+                  neelyotycoon@gmail.com
+                </a>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenInfo('about')}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 border border-[#D4AF37]/40 text-xs font-extrabold text-[#F9F6F0] cursor-pointer transition"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <span>معلومات عنا</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenInfo('privacy')}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 border border-[#D4AF37]/40 text-xs font-extrabold text-[#F9F6F0] cursor-pointer transition"
+              >
+                <Shield className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <span>سياسة الخصوصية</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenInfo('terms')}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 border border-[#D4AF37]/40 text-xs font-extrabold text-[#F9F6F0] cursor-pointer transition"
+              >
+                <Scale className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <span>شروط الاستخدام</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenInfo('contact')}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#D91624] hover:brightness-110 border border-[#D4AF37] text-xs font-extrabold text-white cursor-pointer transition"
+              >
+                <Mail className="w-3.5 h-3.5 text-[#FFF3B0]" />
+                <span>تواصل معنا</span>
+              </button>
+            </div>
+          </footer>
+        )}
       </div>
 
       {/* Modal Sheets (Wall Safe / Assets / Markets / Archive / Leaderboard) */}
@@ -741,29 +930,44 @@ export function StudioHubView({
                           <strong dir="ltr" className="font-typewriter text-[#D4AF37]">
                             {formatMoney(cash)}
                           </strong>{' '}
-                          ج.م · خصم الأصول الثابتة:{' '}
+                          {currencyLabel} · خصم الأصول الثابتة:{' '}
                           <strong className="text-emerald-400">
                             -{assetBenefits.totalDiscountPercent}%
                           </strong>
                         </p>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => claimEmergencyInvestorBailoutWithAd()}
-                        className="shrink-0 px-4 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] hover:brightness-105 font-black text-xs transition cursor-pointer text-center shadow"
-                      >
-                        <div className="font-display text-sm text-[#1A2530]">
-                          تمويل إنقاذ من مستثمر (إعلان)
+                      {canUseEmergencyBailout ? (
+                        <button
+                          type="button"
+                          onClick={() => claimEmergencyInvestorBailoutWithAd()}
+                          className="shrink-0 px-4 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] hover:brightness-105 font-black text-xs transition cursor-pointer text-center shadow"
+                        >
+                          <div className="font-display text-sm text-[#1A2530]">
+                            تمويل إنقاذ من مستثمر (إعلان)
+                          </div>
+                          <div>
+                            +
+                            {formatMoney(
+                              cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
+                            )}{' '}
+                            {currencyLabel} سيولة فورية
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="shrink-0 rounded-xl border border-[#D4AF37]/35 bg-white/5 px-3.5 py-2.5 text-center sm:text-right max-w-[230px]">
+                          <div className="text-[11px] font-black text-[#D4AF37]">
+                            {bailoutCooldownRemaining > 0
+                              ? `الإنقاذ متاح بعد ${bailoutCooldownRemaining} يوماً`
+                              : 'خزينة الاستوديو مستقرة'}
+                          </div>
+                          <p className="text-[10px] font-bold text-[#F9F6F0]/75 mt-0.5 leading-snug">
+                            {bailoutCooldownRemaining > 0
+                              ? 'تمويل الإنقاذ العاجل يُستخدم مرة واحدة كل 30 يوماً.'
+                              : `يُفتح تمويل الإنقاذ الطارئ تلقائياً فقط عند انخفاض السيولة إلى 10M ${currencyLabel} أو أقل.`}
+                          </p>
                         </div>
-                        <div>
-                          +
-                          {formatMoney(
-                            cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
-                          )}{' '}
-                          ج.م سيولة فورية
-                        </div>
-                      </button>
+                      )}
                     </div>
                   </div>
 
@@ -791,7 +995,7 @@ export function StudioHubView({
                               </h3>
                             </div>
                             <span className="shrink-0 rounded-xl bg-[#1A2530] px-3 py-1 font-typewriter text-xs font-black text-[#D4AF37]">
-                              {formatMoney(asset.price)} ج.م
+                              {formatMoney(asset.price)} {currencyLabel}
                             </span>
                           </div>
 
@@ -830,7 +1034,7 @@ export function StudioHubView({
                                   <>
                                     <Building2 className="h-4 w-4" />
                                     <span>
-                                      شراء وتوثيق الأصل ({formatMoney(asset.price)} ج.م)
+                                      شراء وتوثيق الأصل ({formatMoney(asset.price)} {currencyLabel})
                                     </span>
                                   </>
                                 )}
@@ -846,7 +1050,7 @@ export function StudioHubView({
 
               {activeSheet === 'markets' && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {MARKET_CONFIGS.map((cfg) => {
+                  {marketConfigs.map((cfg) => {
                     const regId = cfg.id;
                     const unlocked = unlockedRegions.includes(regId);
                     const isSelectedForNextProject = activeDistMarkets.includes(regId);
@@ -863,7 +1067,7 @@ export function StudioHubView({
                               {unlocked ? 'سوق مفتوح ✓' : 'سوق إقليمي'}
                             </span>
                             <span className="rounded bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-black text-[#D4AF37]">
-                              {regId === 'egypt' ? '100% أساسي' : `+${bonusPct}% إيرادات`}
+                              {regId === primaryRegion ? '100% أساسي' : `+${bonusPct}% إيرادات`}
                             </span>
                           </div>
                           <div className="font-display mt-1.5 text-base text-[#1A2530]">
@@ -878,11 +1082,11 @@ export function StudioHubView({
                           {unlocked ? (
                             <button
                               type="button"
-                              disabled={regId === 'egypt'}
+                              disabled={regId === primaryRegion}
                               onClick={() => toggleDraftDistributionMarket(regId)}
                               className="w-full rounded-xl py-2 px-3 text-xs font-black bg-[#1A2530] text-[#F9F6F0] cursor-pointer"
                             >
-                              {regId === 'egypt'
+                              {regId === primaryRegion
                                 ? 'مفعل دائماً كسوق أساسي ✓'
                                 : isSelectedForNextProject
                                 ? 'مفعل لتوزيع عملك القادم ✓'
@@ -894,7 +1098,7 @@ export function StudioHubView({
                               onClick={() => unlockMarketRegionWithCash(regId)}
                               className="w-full rounded-xl bg-[#D91624] py-2 px-3 text-xs font-black text-white cursor-pointer"
                             >
-                              فتح مكتب مبكر ({formatMoney(cfg.earlyLicenseCost)} ج.م)
+                              فتح مكتب مبكر ({formatMoney(cfg.earlyLicenseCost)} {currencyLabel})
                             </button>
                           )}
                         </div>
@@ -933,7 +1137,7 @@ export function StudioHubView({
                               </div>
                               <div className="mt-1.5 flex items-center justify-between text-xs font-typewriter font-bold">
                                 <span className="text-[#15803D]">
-                                  الإيرادات: {formatMoney(proj.totalGrossRevenue)} ج.م
+                                  الإيرادات: {formatMoney(proj.totalGrossRevenue)} {currencyLabel}
                                 </span>
                                 <span>
                                   النقاد: {proj.criticScore}/10 · الجمهور: {proj.audienceScore}/10

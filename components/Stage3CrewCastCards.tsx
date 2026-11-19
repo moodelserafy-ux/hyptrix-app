@@ -25,7 +25,8 @@ import {
   evaluateTalentOfferDeep,
   formatMoney,
 } from '@/lib/game-engine';
-import { TalentCharacterPortraitSvg } from '@/components/CinematicGraphicsScene';
+import { getCurrencyLabel } from '@/lib/market-profiles';
+import { TalentPortrait } from '@/components/CinematicGraphicsScene';
 import {
   Fut3DTiltCard,
   HexagonalRadarChartSvg,
@@ -120,14 +121,21 @@ export function Stage3CrewCastCards() {
     talentRejectionCounts,
     syndicateMediationUnlocked,
     unlockSyndicateMediationWithAd,
+    worldMarket,
+    uiLanguage,
   } = useGameStore();
+
+  const currencyLabel = getCurrencyLabel(worldMarket);
 
   const studioAssetBenefits = useMemo(
     () => getStudioAssetBenefits(ownedStudioAssets),
     [ownedStudioAssets]
   );
 
-  const db = useMemo(() => getResolvedDatabase(customDbPatch), [customDbPatch]);
+  const db = useMemo(
+    () => getResolvedDatabase(customDbPatch, worldMarket),
+    [customDbPatch, worldMarket]
+  );
 
   const liveActors = useMemo(
     () =>
@@ -167,6 +175,18 @@ export function Stage3CrewCastCards() {
     setChildModalOpen(Boolean(negotiatingTarget));
     return () => setChildModalOpen(false);
   }, [negotiatingTarget, setChildModalOpen]);
+
+  // Close negotiation modal cleanly when Telegram BackButton dispatches neelyo:telegram-back
+  useEffect(() => {
+    if (!negotiatingTarget) return;
+    const handleTelegramBack = () => {
+      setNegotiatingTarget(null);
+    };
+    window.addEventListener('neelyo:telegram-back', handleTelegramBack);
+    return () => {
+      window.removeEventListener('neelyo:telegram-back', handleTelegramBack);
+    };
+  }, [negotiatingTarget]);
 
   const primaryGenreObj = useMemo(
     () => GENRES.find((g) => g.id === draft.primaryGenre),
@@ -345,7 +365,7 @@ export function Stage3CrewCastCards() {
 
     if (vipDinner && cash < VIP_DINNER_COST) {
       showToast(
-        `السيولة الحالية لا تكفي لإقامة عشاء عمل خاص (${formatMoney(VIP_DINNER_COST)} ج.م)!`,
+        `السيولة الحالية لا تكفي لإقامة عشاء عمل خاص (${formatMoney(VIP_DINNER_COST)} ${currencyLabel})!`,
         'warning'
       );
       return;
@@ -407,6 +427,7 @@ export function Stage3CrewCastCards() {
         : reputation,
       directorOverall: selectedDirector?.stats.overall || null,
       directorName: selectedDirector?.name || null,
+      currencyLabel,
     });
 
     let willAccept =
@@ -453,6 +474,8 @@ export function Stage3CrewCastCards() {
             directorName: selectedDirector?.name || null,
             directorOverall: selectedDirector?.stats.overall || null,
             aiMemoryLog,
+            worldMarket,
+            uiLanguage,
           },
         }),
       });
@@ -596,7 +619,7 @@ export function Stage3CrewCastCards() {
     const totalEstimated = calculateTotalEstimatedBudget();
     if (totalEstimated > cash) {
       showToast(
-        `إجمالي تكلفة العقود والإنتاج (${formatMoney(totalEstimated)} ج.م) يتجاوز سيولة الخزينة الحالية (${formatMoney(cash)} ج.م)!`,
+        `إجمالي تكلفة العقود والإنتاج (${formatMoney(totalEstimated)} ${currencyLabel}) يتجاوز سيولة الخزينة الحالية (${formatMoney(cash)} ${currencyLabel})!`,
         'warning'
       );
       return;
@@ -646,7 +669,7 @@ export function Stage3CrewCastCards() {
             </span>
           </div>
           <p className="mt-1 text-[11px] font-bold text-amber-900">
-            العرض المقدم: {formatMoney(offer.offeredSalary)} ج.م
+            العرض المقدم: {formatMoney(offer.offeredSalary)} {currencyLabel}
             {offer.backendPoints > 0 ? ` + ${offer.backendPoints}% من الأرباح` : ''}
             {offer.customRoleName ? ` · الدور: «${offer.customRoleName}»` : ''}
           </p>
@@ -669,7 +692,7 @@ export function Stage3CrewCastCards() {
               <span>تم قبول العرض ومعتمد في الفريق ✓</span>
             </span>
             <span className="font-mono text-[11px] font-black text-emerald-800 tabular-nums">
-              {formatMoney(offer.offeredSalary)} ج.م
+              {formatMoney(offer.offeredSalary)} {currencyLabel}
             </span>
           </div>
           {offer.aiReason && (
@@ -693,7 +716,7 @@ export function Stage3CrewCastCards() {
               <span>وافق على العرض — بانتظار اختيارك النهائي ضمن العدد المسموح</span>
             </span>
             <span className="font-mono text-[11px] font-black text-[#1A2530] tabular-nums">
-              {formatMoney(offer.offeredSalary)} ج.م
+              {formatMoney(offer.offeredSalary)} {currencyLabel}
             </span>
           </div>
           {offer.aiReason && (
@@ -946,7 +969,7 @@ export function Stage3CrewCastCards() {
                     ? 'ابحث عن مهندس مونتاج ومؤثرات بصرية...'
                     : `ابحث في قائمة الـ ${activeActorsPool.length} ممثل وممثلة بالاسم أو اللون الفني...`
                 }
-                className="w-full rounded-xl border border-[#D4AF37]/60 bg-[#F9F6F0] py-2.5 pr-9 pl-3 text-xs font-bold text-[#1A2530] placeholder:text-[#1A2530]/45 focus:border-[#D4AF37] focus:bg-white focus:outline-none"
+                className="w-full rounded-xl border border-[#D4AF37]/60 bg-[#F9F6F0] py-2.5 pr-9 pl-3 text-base font-bold text-[#1A2530] placeholder:text-[#1A2530]/45 focus:border-[#D4AF37] focus:bg-white focus:outline-none"
               />
             </div>
           </div>
@@ -1002,8 +1025,9 @@ export function Stage3CrewCastCards() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37] shadow-xs">
-                        <TalentCharacterPortraitSvg
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-[#F9F6F0] shadow-xs">
+                        <TalentPortrait
+                          imageUrl={crewMember.image_url}
                           name={crewMember.name}
                           role={crewMember.role}
                           tier={crewMember.stats.overall >= 90 ? 'S' : 'A'}
@@ -1043,7 +1067,7 @@ export function Stage3CrewCastCards() {
                         الأجر المتوقع
                       </span>
                       <span className="font-mono text-xs font-black text-[#15803D] tabular-nums">
-                        {formatMoney(crewMember.base_salary)} ج.م
+                        {formatMoney(crewMember.base_salary)} {currencyLabel}
                       </span>
                     </div>
                     <div className="rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-2">
@@ -1273,23 +1297,20 @@ export function Stage3CrewCastCards() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37] shadow-md bg-[#F9F6F0]">
-                          {actor.isCustomStar && actor.image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={actor.image_url}
-                              alt={actor.name}
-                              className="w-full h-full object-cover sepia-[0.12] contrast-110"
-                            />
-                          ) : (
-                            <TalentCharacterPortraitSvg
-                              name={actor.name}
-                              gender={actor.gender}
-                              role="actor"
-                              tier={actor.tier}
-                              age={actor.age}
-                              isRising={actor.isRisingDiscovery || actor.isAiGenerated}
-                            />
-                          )}
+                          <TalentPortrait
+                            imageUrl={actor.image_url}
+                            name={actor.name}
+                            gender={actor.gender}
+                            role="actor"
+                            tier={actor.tier}
+                            age={actor.age}
+                            isRising={actor.isRisingDiscovery || actor.isAiGenerated}
+                            imgClassName={
+                              actor.isCustomStar
+                                ? 'h-full w-full object-cover sepia-[0.12] contrast-110'
+                                : 'h-full w-full object-cover'
+                            }
+                          />
                         </div>
                         <div>
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -1349,7 +1370,7 @@ export function Stage3CrewCastCards() {
                             الأجر الأساسي:
                           </span>
                           <span className="font-typewriter text-xs font-black text-[#15803D]">
-                            {formatMoney(actor.base_salary)} ج.م
+                            {formatMoney(actor.base_salary)} {currencyLabel}
                           </span>
                         </div>
                         <div>
@@ -1585,7 +1606,7 @@ export function Stage3CrewCastCards() {
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className="text-xs font-black text-[#1A2530]">{dept.label}</span>
                       <span className="font-mono text-xs font-black text-[#D91624] tabular-nums">
-                        {formatMoney(val)} ج.م
+                        {formatMoney(val)} {currencyLabel}
                       </span>
                     </div>
                     <input
@@ -1614,7 +1635,7 @@ export function Stage3CrewCastCards() {
                     إجمالي تكلفة العقود والإنتاج
                   </span>
                   <span className="font-mono text-lg font-black text-[#D4AF37] tabular-nums">
-                    {formatMoney(calculateTotalEstimatedBudget())} ج.م
+                    {formatMoney(calculateTotalEstimatedBudget())} {currencyLabel}
                   </span>
                 </div>
                 <div className="text-left">
@@ -1622,7 +1643,7 @@ export function Stage3CrewCastCards() {
                     السيولة المتاحة بالخزينة
                   </span>
                   <span className="font-mono text-base font-black text-emerald-400 tabular-nums">
-                    {formatMoney(cash)} ج.م
+                    {formatMoney(cash)} {currencyLabel}
                   </span>
                 </div>
               </div>
@@ -1651,9 +1672,15 @@ export function Stage3CrewCastCards() {
             >
               <div className="flex items-center justify-between border-b border-[#1A2530]/15 pb-3">
                 <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37]">
-                    <TalentCharacterPortraitSvg
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-[#F9F6F0]">
+                    <TalentPortrait
+                      imageUrl={negotiatingTarget.item.image_url}
                       name={negotiatingTarget.item.name}
+                      gender={
+                        negotiatingTarget.kind === 'actor'
+                          ? negotiatingTarget.item.gender
+                          : undefined
+                      }
                       role={
                         negotiatingTarget.kind === 'actor'
                           ? 'actor'
@@ -1664,6 +1691,11 @@ export function Stage3CrewCastCards() {
                           ? negotiatingTarget.item.tier
                           : 'A'
                       }
+                      age={
+                        negotiatingTarget.kind === 'actor'
+                          ? negotiatingTarget.item.age
+                          : 45
+                      }
                     />
                   </div>
                   <div>
@@ -1671,7 +1703,7 @@ export function Stage3CrewCastCards() {
                       مفاوضات التعاقد: {negotiatingTarget.item.name}
                     </h3>
                     <p className="text-xs font-bold text-[#15803D]">
-                      الأجر المعتاد في السوق: {formatMoney(negotiatingTarget.item.base_salary)} ج.م
+                      الأجر المعتاد في السوق: {formatMoney(negotiatingTarget.item.base_salary)} {currencyLabel}
                     </p>
                   </div>
                 </div>
@@ -1693,7 +1725,7 @@ export function Stage3CrewCastCards() {
                   <select
                     value={roleBillingSize}
                     onChange={(e) => setRoleBillingSize(e.target.value as RoleBillingSize)}
-                    className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-white px-3 py-2.5 text-xs font-black text-[#1A2530] focus:border-[#D4AF37] focus:outline-none"
+                    className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-white px-3 py-2.5 text-base font-black text-[#1A2530] focus:border-[#D4AF37] focus:outline-none"
                   >
                     {Object.values(ROLE_BILLING_META).map((meta) => (
                       <option key={meta.id} value={meta.id}>
@@ -1710,7 +1742,7 @@ export function Stage3CrewCastCards() {
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-xs font-bold text-[#1A2530]/70">الأجر المعروض</span>
                     <span className="font-mono text-xs font-black text-[#15803D] tabular-nums">
-                      {formatMoney(offeredSalary)} ج.م
+                      {formatMoney(offeredSalary)} {currencyLabel}
                     </span>
                   </div>
                   <input
@@ -1765,7 +1797,7 @@ export function Stage3CrewCastCards() {
                   </div>
                 </div>
                 <span className="font-mono text-xs font-black text-[#B8860B] tabular-nums">
-                  {formatMoney(VIP_DINNER_COST)} ج.م
+                  {formatMoney(VIP_DINNER_COST)} {currencyLabel}
                 </span>
               </button>
 
@@ -1787,7 +1819,7 @@ export function Stage3CrewCastCards() {
                       ? 'اكتب اسم الشخصية وملامح الدور بنفسك لإقناع الممثل...'
                       : 'تفاصيل المهام الفنية...'
                   }
-                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-white px-3 py-2.5 text-xs font-bold text-[#1A2530] focus:border-[#D4AF37] focus:outline-none"
+                  className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-white px-3 py-2.5 text-base font-bold text-[#1A2530] focus:border-[#D4AF37] focus:outline-none"
                 />
               </div>
 
@@ -1844,7 +1876,7 @@ export function Stage3CrewCastCards() {
 
           <div className="text-center">
             <span className="font-mono text-xs font-black text-[#D4AF37] tabular-nums">
-              التكلفة: {formatMoney(calculateTotalEstimatedBudget())} ج.م
+              التكلفة: {formatMoney(calculateTotalEstimatedBudget())} {currencyLabel}
             </span>
           </div>
 

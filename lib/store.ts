@@ -31,9 +31,80 @@ import {
   verifyAndRecordServerTransaction,
   fetchAuthoritativeStudioWallet,
   getOrCreateStudioInstanceId,
+  LedgerVerificationRequest,
 } from './supabase';
+import {
+  WorldMarketId,
+  UiLanguageId,
+  getMarketProfile,
+  getMarketConfigsForWorld,
+  getPrimaryMarketRegion,
+  getCurrencyLabel,
+  getMarketAiContext,
+} from './market-profiles';
 
 export const DAYS_PER_GAME_YEAR = 120; // 10 game days per month × 12 months
+
+// Serialized FIFO queue for server ledger synchronization so rapid sequential
+// cash actions (e.g., film release -> daily revenue -> asset purchase) always
+// reach /api/verify-ledger in exact order with the latest HMAC signature.
+let ledgerSyncChain: Promise<void> = Promise.resolve();
+
+function countStudioTotalAwards(projects: { awardsWon?: string[] }[]): number {
+  return projects.reduce((sum, p) => sum + (p.awardsWon?.length || 0), 0);
+}
+
+function enqueueServerLedgerSync(
+  getState: () => HyptrixGameState,
+  setState: (partial: Partial<HyptrixGameState>) => void,
+  tx: {
+    transactionType: LedgerVerificationRequest['transactionType'];
+    amountDelta: number;
+    previousCash: number;
+    expectedNewCash: number;
+    itemId?: string;
+    itemLabel?: string;
+  }
+) {
+  if (typeof window === 'undefined') return;
+  ledgerSyncChain = ledgerSyncChain
+    .then(async () => {
+      const current = getState();
+      const res = await verifyAndRecordServerTransaction({
+        studioInstanceId: getOrCreateStudioInstanceId(),
+        studioName: current.studioName,
+        ceoName: current.ceoName,
+        userEmail: current.supabaseUserEmail,
+        transactionType: tx.transactionType,
+        amountDelta: tx.amountDelta,
+        previousCash: tx.previousCash,
+        expectedNewCash: tx.expectedNewCash,
+        marketValue: current.marketValue,
+        reputation: current.reputation,
+        releasedCount: current.releasedProjects.length,
+        totalAwards: countStudioTotalAwards(current.releasedProjects),
+        ownedAssets: current.ownedStudioAssets || [],
+        itemId: tx.itemId,
+        itemLabel: tx.itemLabel,
+        previousSignature: current.ledgerSignature,
+      });
+
+      if (res && res.ok) {
+        if (res.tamperDetected) {
+          setState({
+            cash: res.correctedCash,
+            marketValue: res.correctedMarketValue,
+            ledgerSignature: res.ledgerSignature,
+          });
+        } else if (res.ledgerSignature) {
+          setState({ ledgerSignature: res.ledgerSignature });
+        }
+      }
+    })
+    .catch(() => {
+      // Keep client gameplay smooth if network temporarily hiccups
+    });
+}
 
 export interface StudioFixedAssetItem {
   id: string;
@@ -170,7 +241,7 @@ export const SOCIAL_PR_CAMPAIGNS: SocialPrCampaignItem[] = [
     platform: 'Mix',
     cost: 2_000_000,
     type: 'boost_player',
-    badgeLabel: 'لجان الدعم السريع · 2 مليون ج.م',
+    badgeLabel: 'لجان الدعم السريع · 2 مليون',
     impactSummary: '+12 ضجة جماهيرية · قلب تعليقات السوشيال لإشادات حماسية فورية',
     description:
       'ضخ آلاف الحسابات والتعليقات الإيجابية على X وتيك توك للإشادة بفيلمك وتحويل دفة الجمهور لصالحك فوراً.',
@@ -181,7 +252,7 @@ export const SOCIAL_PR_CAMPAIGNS: SocialPrCampaignItem[] = [
     platform: 'X',
     cost: 5_000_000,
     type: 'attack_rival',
-    badgeLabel: 'حرب الإشاعات · 5 مليون ج.م',
+    badgeLabel: 'حرب الإشاعات · 5 مليون',
     impactSummary: '-18% إيرادات المنافس · -35M من قيمة الشركة المنافسة · تصدر التريند',
     description:
       'إطلاق شائعات مسربة عن مشاكل داخل بلاتوه الفيلم المنافس وضعف قصته لسحب الجمهور نحو قاعات عرضك.',
@@ -206,7 +277,7 @@ export const SOCIAL_PR_CAMPAIGNS: SocialPrCampaignItem[] = [
     badgeLabel: 'منصة X · تصدر النقاشات الفنية',
     impactSummary: '+18 ضجة جماهيرية · +14M قيمة سوقية · +15% دفعة شباك تذاكر',
     description:
-      'إطلاق حملة حسابات ترويجية واسعة على إكس لتصدير اسم عملك واستوديوك في المركز الأول بالتريند المصري والعربي.',
+      'إطلاق حملة حسابات ترويجية واسعة على إكس لتصدير اسم عملك واستوديوك في المركز الأول بالتريند المحلي والعربي.',
   },
   {
     id: 'rival_smear_campaign',
@@ -245,7 +316,10 @@ export interface LiveSocialFeedPost {
   timestampLabel: string;
 }
 
-// Hybrid IndexedDB + localStorage storage adapter
+const LEGACY_STORAGE_KEY = 'hyptrix_tycoon_state_v2';
+const PRIMARY_STORAGE_KEY = 'neelyo_tycoon_state_v1';
+
+// Hybrid IndexedDB + localStorage storage adapter with seamless one-time legacy save migration
 const hybridStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
     if (typeof window === 'undefined') return null;
@@ -253,7 +327,24 @@ const hybridStorage: StateStorage = {
       const localVal = window.localStorage.getItem(name);
       if (localVal) return localVal;
       const idbVal = await idbGet<string>(name);
-      return idbVal || null;
+      if (idbVal) return idbVal;
+
+      // One-time seamless migration from legacy key so existing players keep their studio
+      if (name === PRIMARY_STORAGE_KEY) {
+        const legacyLocal = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacyLocal) {
+          window.localStorage.setItem(name, legacyLocal);
+          idbSet(name, legacyLocal).catch(() => {});
+          return legacyLocal;
+        }
+        const legacyIdb = await idbGet<string>(LEGACY_STORAGE_KEY);
+        if (legacyIdb) {
+          window.localStorage.setItem(name, legacyIdb);
+          idbSet(name, legacyIdb).catch(() => {});
+          return legacyIdb;
+        }
+      }
+      return null;
     } catch {
       return null;
     }
@@ -296,7 +387,13 @@ export type CoreEmblemId =
   | 'sphinx_monument'
   | 'oscar_torch'
   | 'griffin_royal'
-  | 'sunburst_eye';
+  | 'sunburst_eye'
+  | 'royal_crescent'
+  | 'lotus_crown'
+  | 'spotlight_tower'
+  | 'director_megaphone'
+  | 'golden_scarab'
+  | 'cinema_ribbon';
 
 export type LogoFrameId =
   | 'royal_shield'
@@ -306,9 +403,21 @@ export type LogoFrameId =
   | 'no_frame'
   | 'art_deco_arch'
   | 'octagon_crest'
-  | 'double_diamond';
+  | 'double_diamond'
+  | 'starburst_seal'
+  | 'film_strip_frame'
+  | 'crest_banner'
+  | 'vintage_oval';
 
 export type LogoPaletteId =
+  | 'obsidian_gold'
+  | 'velvet_crimson'
+  | 'midnight_navy'
+  | 'pharaoh_turquoise'
+  | 'emerald_empire'
+  | 'ivory_bronze'
+  | 'silver_noir'
+  | 'sunset_amber'
   | 'gold_black'
   | 'crimson_silver'
   | 'cyber_purple'
@@ -325,6 +434,8 @@ export interface StudioLogoConfig {
   frame: LogoFrameId;
   palette: LogoPaletteId;
 }
+
+export type OnboardingTourStatus = 'pending_choice' | 'active' | 'completed';
 
 export type OfferRoleSlot =
   | 'director'
@@ -1060,6 +1171,7 @@ export function buildAnnualAwardsGalaForYear(params: {
   studioName: string;
   year: number;
   db: MasterDatabase;
+  worldMarket?: WorldMarketId;
 }): {
   ceremonies: AutomaticFestivalCeremonyItem[];
   awardsByProjectId: Record<string, string[]>;
@@ -1073,13 +1185,23 @@ export function buildAnnualAwardsGalaForYear(params: {
   // Ensure strong rival contenders exist for both Film and Series in the annual pool
   const rivalFilms = activeRivals.filter((r) => r.format !== 'series');
   const rivalSeries = activeRivals.filter((r) => r.format === 'series');
+  const marketId = params.worldMarket || (db.meta?.targetMarket as WorldMarketId) || 'egypt';
+  const marketProfile = getMarketProfile(marketId);
+  const compList = db.competitor_studios || [];
+  const starList = db.actors || [];
+  const dirList = (db.crew || []).filter((c) => c.role === 'director');
+  const fallbackDir1 = dirList[0]?.name || 'مخرج الموسم الأول';
+  const fallbackDir2 = dirList[1]?.name || fallbackDir1;
+  const fallbackDir3 = dirList[2]?.name || fallbackDir2;
+  const fallbackFilmTitle3 = marketProfile.rivalFilmTitles[2] || marketProfile.rivalFilmTitles[0] || 'ملحمة الموسم';
+  const fallbackSeriesTitle3 = marketProfile.rivalSeriesTitles[2] || marketProfile.rivalSeriesTitles[0] || 'دراما الموسم';
 
   const topRivalFilm1: RivalRelease = rivalFilms[0] || {
     id: `annual_rf1_${year}`,
-    title: 'شفرة العقرب',
-    studioName: 'الإمبراطورية للإنتاج السينمائي',
-    leadStarName: 'كريم العزاوي',
-    directorName: 'مروان حافظ',
+    title: marketProfile.rivalFilmTitles[0] || 'شفرة العقرب',
+    studioName: compList[0]?.name || marketProfile.aiContext.fallbackRivalStudios[0],
+    leadStarName: starList[0]?.name || marketProfile.aiContext.fallbackStars[0],
+    directorName: dirList[0]?.name || 'مخرج الموسم',
     format: 'film',
     genre: 'action',
     criticScore: 8.1,
@@ -1090,10 +1212,10 @@ export function buildAnnualAwardsGalaForYear(params: {
 
   const topRivalFilm2: RivalRelease = rivalFilms[1] || {
     id: `annual_rf2_${year}`,
-    title: 'فرسان المحروسة',
-    studioName: 'مجموعة سينما تاج للترفيه',
-    leadStarName: 'أحمد عزمي النجار',
-    directorName: 'شريف علام',
+    title: marketProfile.rivalFilmTitles[1] || 'فرسان الشاشة',
+    studioName: compList[1]?.name || marketProfile.aiContext.fallbackRivalStudios[1] || marketProfile.aiContext.fallbackRivalStudios[0],
+    leadStarName: starList[1]?.name || marketProfile.aiContext.fallbackStars[1] || marketProfile.aiContext.fallbackStars[0],
+    directorName: dirList[1]?.name || dirList[0]?.name || 'مخرج كبير',
     format: 'film',
     genre: 'historical',
     criticScore: 7.8,
@@ -1104,10 +1226,10 @@ export function buildAnnualAwardsGalaForYear(params: {
 
   const topRivalSeries1: RivalRelease = rivalSeries[0] || {
     id: `annual_rs1_${year}`,
-    title: 'لغز جريمة الزمالك',
-    studioName: 'الرواد جروب للدراما والسينما',
-    leadStarName: 'منى زاهر',
-    directorName: 'تامر محسن الزيادي',
+    title: marketProfile.rivalSeriesTitles[0] || 'ملف الغموض',
+    studioName: compList[2]?.name || compList[0]?.name || marketProfile.aiContext.fallbackRivalStudios[0],
+    leadStarName: starList[2]?.name || marketProfile.aiContext.fallbackStars[2] || marketProfile.aiContext.fallbackStars[0],
+    directorName: dirList[2]?.name || dirList[0]?.name || 'مخرج دراما',
     format: 'series',
     genre: 'crime_mystery',
     criticScore: 8.2,
@@ -1118,10 +1240,10 @@ export function buildAnnualAwardsGalaForYear(params: {
 
   const topRivalSeries2: RivalRelease = rivalSeries[1] || {
     id: `annual_rs2_${year}`,
-    title: 'ملوك الحارة القديمة',
-    studioName: 'نيو فيجن بيكتشرز',
-    leadStarName: 'أمير الكراري',
-    directorName: 'نديم العسكري',
+    title: marketProfile.rivalSeriesTitles[1] || 'ليالي الدراما',
+    studioName: compList[3]?.name || compList[1]?.name || marketProfile.aiContext.fallbackRivalStudios[0],
+    leadStarName: starList[3]?.name || marketProfile.aiContext.fallbackStars[3] || marketProfile.aiContext.fallbackStars[0],
+    directorName: dirList[3]?.name || dirList[0]?.name || 'مخرج الموسم',
     format: 'series',
     genre: 'popular_drama',
     criticScore: 7.6,
@@ -1208,7 +1330,7 @@ export function buildAnnualAwardsGalaForYear(params: {
         category: 'جائزة أفضل فيلم سينمائي للعام',
         nominees: bestPlayerFilm
           ? [bestPlayerFilm.title, topRivalFilm1.title, topRivalFilm2.title]
-          : [topRivalFilm1.title, topRivalFilm2.title, 'العملية 99'],
+          : [topRivalFilm1.title, topRivalFilm2.title, fallbackFilmTitle3],
         winner: playerWinsBestFilm && bestPlayerFilm ? bestPlayerFilm.title : winningRivalFilm.title,
         winningProjectTitle:
           playerWinsBestFilm && bestPlayerFilm ? bestPlayerFilm.title : winningRivalFilm.title,
@@ -1220,7 +1342,7 @@ export function buildAnnualAwardsGalaForYear(params: {
         category: 'جائزة أفضل مسلسل درامي للعام',
         nominees: bestPlayerSeries
           ? [bestPlayerSeries.title, topRivalSeries1.title, topRivalSeries2.title]
-          : [topRivalSeries1.title, topRivalSeries2.title, 'ليالي المحروسة'],
+          : [topRivalSeries1.title, topRivalSeries2.title, fallbackSeriesTitle3],
         winner:
           playerWinsBestSeries && bestPlayerSeries
             ? bestPlayerSeries.title
@@ -1240,14 +1362,18 @@ export function buildAnnualAwardsGalaForYear(params: {
         nominees: bestPlayerOverall
           ? [
               bestPlayerOverall.directorName,
-              topRivalFilm1.directorName || 'مروان حافظ',
-              topRivalSeries1.directorName || 'تامر محسن الزيادي',
+              topRivalFilm1.directorName || fallbackDir1,
+              topRivalSeries1.directorName || fallbackDir2,
             ]
-          : ['مروان حافظ', 'شريف علام', 'تامر محسن الزيادي'],
+          : [
+              topRivalFilm1.directorName || fallbackDir1,
+              topRivalFilm2.directorName || fallbackDir2,
+              topRivalSeries1.directorName || fallbackDir3,
+            ],
         winner:
           playerWinsDirector && bestPlayerOverall
             ? bestPlayerOverall.directorName
-            : topRivalFilm1.directorName || 'مروان حافظ',
+            : topRivalFilm1.directorName || fallbackDir1,
         winningProjectTitle:
           playerWinsDirector && bestPlayerOverall
             ? bestPlayerOverall.title
@@ -1313,8 +1439,8 @@ export function buildAnnualAwardsGalaForYear(params: {
           : [topRivalFilm1.title, topRivalFilm2.title],
         winner:
           playerWinsBoxOffice && playerTopBoxOffice
-            ? `${playerTopBoxOffice.title} (${formatMoney(playerTopBoxOffice.totalGrossRevenue)} ج.م)`
-            : `${topRivalFilm1.title} (${formatMoney(topRivalFilm1.boxOfficeRevenue)} ج.م)`,
+            ? `${playerTopBoxOffice.title} (${formatMoney(playerTopBoxOffice.totalGrossRevenue)} ${marketProfile.currencyLabel})`
+            : `${topRivalFilm1.title} (${formatMoney(topRivalFilm1.boxOfficeRevenue)} ${marketProfile.currencyLabel})`,
         winningProjectTitle:
           playerWinsBoxOffice && playerTopBoxOffice
             ? playerTopBoxOffice.title
@@ -1411,6 +1537,9 @@ export function buildThreeSeasonFestivals(params: {
 }
 
 export interface HyptrixGameState {
+  uiLanguage: UiLanguageId;
+  worldMarket: WorldMarketId;
+  hasSelectedMarket: boolean;
   studioCreated: boolean;
   studioName: string;
   ceoName: string;
@@ -1460,11 +1589,14 @@ export interface HyptrixGameState {
   bankruptcyDeadlineDay: number | null;
   bankruptcyDebtAmount: number;
   isBankruptLiquidated: boolean;
+  lastEmergencyBailoutDay: number | null;
+  onboardingTourStatus: OnboardingTourStatus;
 
   // Actions
   setChildModalOpen: (open: boolean) => void;
   setPrWarRoomOpen: (open: boolean) => void;
   setStarForgeOpen: (open: boolean) => void;
+  setOnboardingTourStatus: (status: OnboardingTourStatus) => void;
   unlockNextStarForgeLockWithAd: () => void;
   watchRewardedAdForVipCoins: () => void;
   resolveCrisisWithCash8M: (crisisId: string) => void;
@@ -1474,6 +1606,7 @@ export interface HyptrixGameState {
   claimEmergencyInvestorBailoutWithAd: (customNeededAmount?: number) => void;
   liquidateAndStartNewStudioInSameWorld: () => void;
   spendForStarForgeUpgrade: (cashCost: number, gemCost: number) => boolean;
+  refundStarForgeCash: (cashAmount: number) => void;
   createCustomVipStar: (actor: ActorItem) => void;
   purchaseStudioAsset: (assetId: string) => Promise<boolean>;
   resolveCrisisWithStudioAsset: (crisisId: string) => void;
@@ -1493,12 +1626,14 @@ export interface HyptrixGameState {
     subtext?: string
   ) => void;
   dismissToast: () => void;
+  selectLanguageAndMarket: (language: UiLanguageId, market: WorldMarketId) => void;
+  openMarketSelector: () => void;
   initializeStudio: (params: {
     studioName: string;
     ceoName: string;
     logo: StudioLogoConfig;
     founderPerk: FounderPerk;
-    region: MarketRegion;
+    region?: MarketRegion;
   }) => void;
   quickStartDemoStudio: () => void;
   setActiveScreen: (screen: ActiveStageScreen) => void;
@@ -1560,9 +1695,8 @@ const DEFAULT_DRAFT: ActiveDraftProject = {
   primaryGenre: 'action',
   secondaryGenre: 'popular_drama',
   ageRating: '+12',
-  title: 'الفرعون الأخير',
-  scriptSynopsis:
-    'ضابط عمليات خاصة سابق يكتشف شبكة دولية لتهريب الآثار تحت شوارع القاهرة القديمة، فيخوض معركة شرسة ضد إمبراطور الجريمة لإنقاذ كنز فرعوني مفقود قبل فوات الأوان.',
+  title: '',
+  scriptSynopsis: '',
   directorId: null,
   directorIds: [],
   writerIds: [],
@@ -1589,7 +1723,7 @@ const DEFAULT_DRAFT: ActiveDraftProject = {
   platformDealAmount: 28_000_000,
   selectedTvChannelId: 'tv_1',
   tvChannelDealAmount: 22_000_000,
-  hypeScore: 68,
+  hypeScore: 30,
   qualityModifier: 0,
   crises: [],
   juryBribed: false,
@@ -1600,16 +1734,38 @@ const DEFAULT_DRAFT: ActiveDraftProject = {
   productionNews: [],
 };
 
+function getDefaultDistributionForMarket(
+  worldMarket: WorldMarketId,
+  customDbPatch?: Partial<MasterDatabase> | null
+): { selectedPlatformId: string; selectedTvChannelId: string } {
+  const marketDb = getResolvedDatabase(customDbPatch, worldMarket);
+  const firstVod = marketDb.streaming_platforms.find(
+    (p) => p.platform_type !== 'tv_channel' && !p.id.startsWith('tv_')
+  );
+  const firstTv = marketDb.streaming_platforms.find(
+    (p) => p.platform_type === 'tv_channel' || p.id.startsWith('tv_')
+  );
+  return {
+    selectedPlatformId:
+      firstVod?.id || (worldMarket === 'saudi' ? 'sa_plat_shashat' : 'plat_1'),
+    selectedTvChannelId:
+      firstTv?.id || (worldMarket === 'saudi' ? 'tv_sa_riyadh1' : 'tv_1'),
+  };
+}
+
 export const useGameStore = create<HyptrixGameState>()(
   persist(
     (set, get) => ({
+      uiLanguage: 'ar',
+      worldMarket: 'egypt',
+      hasSelectedMarket: false,
       studioCreated: false,
       studioName: 'العقرب ستوديوز',
       ceoName: 'محمود الصيرفي',
       logo: {
-        emblem: 'golden_scorpion',
+        emblem: 'winged_lion',
         frame: 'royal_shield',
-        palette: 'amethyst_pearl',
+        palette: 'obsidian_gold',
       },
       founderPerk: 'visionary_director',
       currentRegion: 'egypt',
@@ -1664,10 +1820,13 @@ export const useGameStore = create<HyptrixGameState>()(
       bankruptcyDeadlineDay: null,
       bankruptcyDebtAmount: 0,
       isBankruptLiquidated: false,
+      lastEmergencyBailoutDay: null,
+      onboardingTourStatus: 'pending_choice',
 
       setChildModalOpen: (open) => set({ isChildModalOpen: open }),
       setPrWarRoomOpen: (open) => set({ isPrWarRoomOpen: open }),
       setStarForgeOpen: (open) => set({ isStarForgeOpen: open }),
+      setOnboardingTourStatus: (status) => set({ onboardingTourStatus: status }),
 
       unlockNextStarForgeLockWithAd: () =>
         set((state) => {
@@ -1717,8 +1876,17 @@ export const useGameStore = create<HyptrixGameState>()(
             ),
           },
         }));
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'RESOLVE_CRISIS_SPEND',
+          amountDelta: -cost,
+          previousCash: state.cash,
+          expectedNewCash: nextCash,
+          itemId: crisisId,
+          itemLabel: 'حسم أزمة بلاتوه عاجلة (8M)',
+        });
+        const curLabel = getCurrencyLabel(state.worldMarket);
         get().showToast(
-          'تم حسم أزمة البلاتوه فورياً مقابل 8 مليون ج.م من الخزينة!',
+          `تم حسم أزمة البلاتوه فورياً مقابل 8 مليون ${curLabel} من الخزينة!`,
           'success',
           '+3 جودة فنية · +3 ضجة جماهيرية'
         );
@@ -1728,6 +1896,7 @@ export const useGameStore = create<HyptrixGameState>()(
         const state = get();
         const crisis = state.draft.crises.find((c) => c.id === crisisId);
         if (!crisis || crisis.resolved) return;
+        const curLabel = getCurrencyLabel(state.worldMarket);
         set((cur) => ({
           draft: {
             ...cur.draft,
@@ -1739,9 +1908,9 @@ export const useGameStore = create<HyptrixGameState>()(
           },
         }));
         get().showToast(
-          'تمت التسوية الإعلامية المجانية لأزمة البلاتوه بنجاح (وفّرت 8 مليون ج.م)!',
+          `تمت التسوية الإعلامية المجانية لأزمة البلاتوه بنجاح (وفّرت 8 مليون ${curLabel})!`,
           'magic',
-          'تكلفة 0 ج.م · +4 جودة فنية · +5 ضجة جماهيرية'
+          `تكلفة 0 ${curLabel} · +4 جودة فنية · +5 ضجة جماهيرية`
         );
       },
 
@@ -1827,19 +1996,58 @@ export const useGameStore = create<HyptrixGameState>()(
           isBankruptLiquidated: false,
         }));
 
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'PROJECT_BOX_OFFICE_REVENUE',
+          amountDelta: bonusAmount,
+          previousCash: state.cash,
+          expectedNewCash: nextCash,
+          itemId: target.id,
+          itemLabel: `توزيع دولي إضافي (+25%): ${target.title}`,
+        });
+
+        const curLabel = getCurrencyLabel(state.worldMarket);
         get().showToast(
           `تم تفعيل صفقة التوزيع الدولي الإضافي (+25% أرباح) لـ «${target.title}»!`,
           'magic',
-          `+${formatMoney(bonusAmount)} ج.م أرباح توزيع دولي دخلت خزينة الاستوديو فوراً`
+          `+${formatMoney(bonusAmount)} ${curLabel} أرباح توزيع دولي دخلت خزينة الاستوديو فوراً`
         );
       },
 
       claimEmergencyInvestorBailoutWithAd: (customNeededAmount) => {
         const state = get();
+        const curLabel = getCurrencyLabel(state.worldMarket);
+        const isInLiquidityEmergency =
+          state.cash <= 10_000_000 || state.bankruptcyDeadlineDay !== null;
+
+        if (!isInLiquidityEmergency) {
+          state.showToast(
+            'تمويل الإنقاذ متاح فقط في حالات السيولة الحرجة!',
+            'warning',
+            `يُفتح هذا الخيار تلقائياً عندما ينخفض رصيد الخزينة إلى 10 مليون ${curLabel} أو أقل.`
+          );
+          return;
+        }
+
+        const BAILOUT_COOLDOWN_DAYS = 30;
+        if (
+          state.lastEmergencyBailoutDay !== null &&
+          state.gameDay - state.lastEmergencyBailoutDay < BAILOUT_COOLDOWN_DAYS
+        ) {
+          const remaining =
+            BAILOUT_COOLDOWN_DAYS -
+            (state.gameDay - state.lastEmergencyBailoutDay);
+          state.showToast(
+            `تمويل الإنقاذ تحت فترة التبريد (${remaining} يوماً متبقياً)`,
+            'warning',
+            'يمكن تفعيل تمويل إنقاذ المستثمرين مرة واحدة كل 30 يوماً فقط.'
+          );
+          return;
+        }
+
         const deficit = state.cash < 0 ? Math.abs(state.cash) : 0;
         const bailoutAmount = Math.max(
           15_000_000,
-          customNeededAmount || 0,
+          Math.min(60_000_000, customNeededAmount || 0),
           deficit + 15_000_000
         );
         const nextCash = state.cash + bailoutAmount;
@@ -1856,18 +2064,28 @@ export const useGameStore = create<HyptrixGameState>()(
           bankruptcyDeadlineDay: null,
           bankruptcyDebtAmount: 0,
           isBankruptLiquidated: false,
+          lastEmergencyBailoutDay: cur.gameDay,
           worldHistory: [
             {
               year: cur.currentYear,
-              eventText: `تمويل إنقاذ استثماري عاجل بقيمة ${formatMoney(bailoutAmount)} ج.م أنقذ شركة «${cur.studioName}» من الإفلاس وأعاد تدوير عجلة الإنتاج.`,
+              eventText: `تمويل إنقاذ استثماري عاجل بقيمة ${formatMoney(bailoutAmount)} ${curLabel} أنقذ شركة «${cur.studioName}» من الإفلاس وأعاد تدوير عجلة الإنتاج.`,
               category: 'milestone',
             },
             ...cur.worldHistory,
           ],
         }));
 
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'VIP_PACKAGE_TOPUP',
+          amountDelta: bailoutAmount,
+          previousCash: state.cash,
+          expectedNewCash: nextCash,
+          itemId: `bailout_day_${state.gameDay}`,
+          itemLabel: 'تمويل إنقاذ استثماري عاجل',
+        });
+
         get().showToast(
-          `تم ضخ تمويل إنقاذ استثماري بقيمة ${formatMoney(bailoutAmount)} ج.م في الخزينة!`,
+          `تم ضخ تمويل إنقاذ استثماري بقيمة ${formatMoney(bailoutAmount)} ${curLabel} في الخزينة!`,
           'magic',
           'تمت تسوية المديونية بالكامل وإلغاء إنذار الإفلاس'
         );
@@ -1875,6 +2093,7 @@ export const useGameStore = create<HyptrixGameState>()(
 
       liquidateAndStartNewStudioInSameWorld: () => {
         set((state) => {
+          const primaryReg = getPrimaryMarketRegion(state.worldMarket);
           const oldStudioName = state.studioName;
           const oldCeo = state.ceoName;
           const soldStudioCompetitor: CompetitorStudio = {
@@ -1895,6 +2114,8 @@ export const useGameStore = create<HyptrixGameState>()(
           return {
             studioCreated: false,
             activeScreen: 'STUDIO_CREATION',
+            currentRegion: primaryReg,
+            unlockedRegions: [primaryReg],
             cash: 75_000_000,
             marketValue: 110_000_000,
             marketValueModifier: 0,
@@ -1909,8 +2130,10 @@ export const useGameStore = create<HyptrixGameState>()(
             isBankruptLiquidated: false,
             draft: {
               ...DEFAULT_DRAFT,
+              ...getDefaultDistributionForMarket(state.worldMarket, state.customDbPatch),
               title: '',
               scriptSynopsis: '',
+              selectedDistributionMarkets: [primaryReg],
               talentOffers: {},
               crises: [],
             },
@@ -1933,23 +2156,58 @@ export const useGameStore = create<HyptrixGameState>()(
             ].slice(0, 30),
           };
         });
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'INIT_STUDIO',
+          amountDelta: 0,
+          previousCash: 75_000_000,
+          expectedNewCash: 75_000_000,
+          itemLabel: 'تصفية وتأسيس استوديو جديد',
+        });
       },
 
       spendForStarForgeUpgrade: (cashCost, _gemCost) => {
         const state = get();
+        const curLabel = getCurrencyLabel(state.worldMarket);
         const effectiveCash = Math.max(0, cashCost);
         if (effectiveCash > 0 && state.cash < effectiveCash) {
           state.showToast(
             'رصيد الخزينة لا يكفي لترقية هذه الطاقة!',
             'warning',
-            `تحتاج إلى ${formatMoney(effectiveCash)} ج.م أو يمكنك تفعيل التدريب المجاني عبر الإعلان.`
+            `تحتاج إلى ${formatMoney(effectiveCash)} ${curLabel} أو يمكنك تفعيل التدريب المجاني عبر الإعلان.`
           );
           return false;
         }
-        set((cur) => ({
-          cash: Math.max(0, cur.cash - effectiveCash),
-        }));
+        const nextCash = Math.max(0, state.cash - effectiveCash);
+        set({
+          cash: nextCash,
+        });
+        if (effectiveCash > 0) {
+          enqueueServerLedgerSync(get, set, {
+            transactionType: 'RESOLVE_CRISIS_SPEND',
+            amountDelta: -effectiveCash,
+            previousCash: state.cash,
+            expectedNewCash: nextCash,
+            itemLabel: 'ترقية طاقات غرفة صناعة النجوم',
+          });
+        }
         return true;
+      },
+
+      refundStarForgeCash: (cashAmount) => {
+        const safeAmount = Math.max(0, Math.min(10_000_000, Math.round(cashAmount)));
+        if (safeAmount <= 0) return;
+        const prevCash = get().cash;
+        const nextCash = prevCash + safeAmount;
+        set({
+          cash: nextCash,
+        });
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'SYNC_CHECKPOINT',
+          amountDelta: safeAmount,
+          previousCash: prevCash,
+          expectedNewCash: nextCash,
+          itemLabel: 'استرداد رصيد غرفة صناعة النجوم',
+        });
       },
 
       createCustomVipStar: (actor) =>
@@ -1963,6 +2221,7 @@ export const useGameStore = create<HyptrixGameState>()(
           };
           const headline = `ولادة أسطورة سينمائية: «${state.studioName}» تكشف رسمياً عن نجمها الحصري «${customStar.name}» بكارت ألماظ وتقييم ${customStar.stats.overall}!`;
           return {
+            starForgeLocksOpened: 0,
             aiGeneratedActors: [
               customStar,
               ...state.aiGeneratedActors.filter((a) => a.id !== customStar.id),
@@ -1982,6 +2241,7 @@ export const useGameStore = create<HyptrixGameState>()(
         }),
 
       verifyWalletWithServer: async () => {
+        await ledgerSyncChain;
         const state = get();
         const instanceId = getOrCreateStudioInstanceId();
         const res = await fetchAuthoritativeStudioWallet(
@@ -1989,7 +2249,12 @@ export const useGameStore = create<HyptrixGameState>()(
           state.cash,
           state.marketValue,
           state.ownedStudioAssets || [],
-          state.ledgerSignature || ''
+          state.ledgerSignature || '',
+          {
+            releasedCount: state.releasedProjects.length,
+            totalAwards: countStudioTotalAwards(state.releasedProjects),
+            reputation: state.reputation,
+          }
         );
         if (res && res.ok) {
           if (res.tamperDetected) {
@@ -2017,6 +2282,7 @@ export const useGameStore = create<HyptrixGameState>()(
       },
 
       purchaseStudioAsset: async (assetId) => {
+        await ledgerSyncChain;
         const state = get();
         const asset = STUDIO_FIXED_ASSETS.find((a) => a.id === assetId);
         if (!asset) return false;
@@ -2025,10 +2291,11 @@ export const useGameStore = create<HyptrixGameState>()(
           return false;
         }
         if (state.cash < asset.price) {
+          const curLabel = getCurrencyLabel(state.worldMarket);
           state.showToast(
             'السيولة النقدية في الخزينة لا تكفي لشراء هذا الأصل الثابت حالياً!',
             'warning',
-            `تحتاج إلى ${formatMoney(asset.price)} ج.م لإتمام الشراء.`
+            `تحتاج إلى ${formatMoney(asset.price)} ${curLabel} لإتمام الشراء.`
           );
           return false;
         }
@@ -2056,6 +2323,8 @@ export const useGameStore = create<HyptrixGameState>()(
           expectedNewCash: optimisticCash,
           marketValue: nextMarketVal,
           reputation: state.reputation,
+          releasedCount: state.releasedProjects.length,
+          totalAwards: countStudioTotalAwards(state.releasedProjects),
           ownedAssets: nextAssets,
           itemId: asset.id,
           itemLabel: asset.name,
@@ -2068,6 +2337,7 @@ export const useGameStore = create<HyptrixGameState>()(
         const finalAssets = verification.ok
           ? verification.ownedAssets
           : nextAssets;
+        const curLabel = getCurrencyLabel(state.worldMarket);
 
         set((cur) => ({
           cash: finalCash,
@@ -2077,19 +2347,20 @@ export const useGameStore = create<HyptrixGameState>()(
           ledgerSignature: verification.ledgerSignature || cur.ledgerSignature,
           draft: {
             ...cur.draft,
-            qualityModifier: cur.draft.qualityModifier + asset.qualityBonus,
+            // Permanent quality bonus from ownedStudioAssets is now computed live on every release
+            // so it persists across ALL future projects and never double-counts.
             hypeScore: Math.min(100, cur.draft.hypeScore + asset.hypeBonus),
           },
           worldHistory: [
             {
               year: cur.currentYear,
-              eventText: `استحواذ استراتيجي: شراء «${asset.name}» بقيمة ${formatMoney(asset.price)} ج.م كأصل ثابت يخفض تكاليف الإنتاج ويحمي من أزمات التصوير.`,
+              eventText: `استحواذ استراتيجي: شراء «${asset.name}» بقيمة ${formatMoney(asset.price)} ${curLabel} كأصل ثابت يخفض تكاليف الإنتاج ويحمي من أزمات التصوير.`,
               category: 'milestone',
             },
             ...cur.worldHistory,
           ],
           aiMemoryLog: [
-            `اشترت شركة "${cur.studioName}" الأصل الثابت "${asset.name}" بقيمة ${formatMoney(asset.price)} ج.م مما رفع قيمتها السوقية وخفض تكاليف إنتاجها.`,
+            `اشترت شركة "${cur.studioName}" الأصل الثابت "${asset.name}" بقيمة ${formatMoney(asset.price)} ${curLabel} مما رفع قيمتها السوقية وخفض تكاليف إنتاجها.`,
             ...(cur.aiMemoryLog || []),
           ].slice(0, 25),
         }));
@@ -2130,14 +2401,18 @@ export const useGameStore = create<HyptrixGameState>()(
         targetRivalStudio,
         contextSituation
       ) => {
+        await ledgerSyncChain;
         const state = get();
         const campaign = SOCIAL_PR_CAMPAIGNS.find((c) => c.id === campaignId);
         if (!campaign) return false;
+        const curLabel = getCurrencyLabel(state.worldMarket);
+        const aiCtx = getMarketAiContext(state.worldMarket);
+        const marketDb = getResolvedDatabase(state.customDbPatch, state.worldMarket);
         if (state.cash < campaign.cost) {
           state.showToast(
             'السيولة النقدية في الخزينة لا تكفي لتمويل هذه الحملة الإعلامية!',
             'warning',
-            `تحتاج إلى ${formatMoney(campaign.cost)} ج.م لإطلاق الحملة.`
+            `تحتاج إلى ${formatMoney(campaign.cost)} ${curLabel} لإطلاق الحملة.`
           );
           return false;
         }
@@ -2156,6 +2431,8 @@ export const useGameStore = create<HyptrixGameState>()(
           expectedNewCash,
           marketValue: state.marketValue,
           reputation: state.reputation,
+          releasedCount: state.releasedProjects.length,
+          totalAwards: countStudioTotalAwards(state.releasedProjects),
           ownedAssets: state.ownedStudioAssets || [],
           itemId: campaign.id,
           itemLabel: campaign.title,
@@ -2174,7 +2451,8 @@ export const useGameStore = create<HyptrixGameState>()(
           targetRivalStudio ||
           state.lastReleasedProject?.rivalReleases?.[0]?.studioName ||
           state.yearlyRivalReleases?.[0]?.studioName ||
-          'المتحدون ميديا جروب';
+          marketDb.competitor_studios[0]?.name ||
+          aiCtx.fallbackRivalStudios[0];
         const rivalFilmTitle =
           state.lastReleasedProject?.rivalReleases?.find(
             (r) => r.studioName === rivalStudio
@@ -2185,6 +2463,8 @@ export const useGameStore = create<HyptrixGameState>()(
 
         const cleanTag = activeProjectTitle.replace(/\s+/g, '_');
         const rivalTag = rivalFilmTitle.replace(/\s+/g, '_');
+        const [handle1, handle2, handle3] = aiCtx.socialHandles;
+        const unitCoinWord = state.worldMarket === 'saudi' ? 'ريال' : 'جنيه';
 
         // Call Groq AI (openai/gpt-oss-20b / openai/gpt-oss-120b) for contextual media response
         let aiGeneratedPosts: LiveSocialFeedPost[] = [];
@@ -2198,6 +2478,8 @@ export const useGameStore = create<HyptrixGameState>()(
               groqKeyOverride: state.groqApiKeyClient,
               preferredModel: state.preferredGroqModel,
               payload: {
+                worldMarket: state.worldMarket,
+                uiLanguage: state.uiLanguage,
                 studioName: state.studioName,
                 ceoName: state.ceoName,
                 activeProjectTitle,
@@ -2232,153 +2514,153 @@ export const useGameStore = create<HyptrixGameState>()(
         const newPosts: LiveSocialFeedPost[] = [...aiGeneratedPosts];
         if (newPosts.length === 0) {
           if (campaign.id === 'support_film_trolls') {
-          newPosts.push(
-            {
-              id: `supp_${Date.now()}_1`,
+            newPosts.push(
+              {
+                id: `supp_${Date.now()}_1`,
+                platform: 'X',
+                authorName: 'حملة جمهور السينما',
+                handle: handle1,
+                content: `بكل صراحة «${activeProjectTitle}» أقوى عمل هذا الموسم بلا منازع! أداء جبار وإخراج عالمي من شركة «${state.studioName}» 👏🔥`,
+                hashtag: `#${cleanTag}_رقم_واحد`,
+                likes: '94.2K',
+                shares: '27.8K',
+                sentiment: 'viral_boost',
+                timestampLabel: 'الآن · هجوم إيجابي كاسح',
+              },
+              {
+                id: `supp_${Date.now()}_2`,
+                platform: 'TikTok',
+                authorName: 'تريندات الشباك',
+                handle: handle3,
+                content: `الطوابير أمام قاعات السينما على «${activeProjectTitle}» قياسية! العمل يستاهل كل ${unitCoinWord} 🍿🎬`,
+                hashtag: `#${cleanTag}`,
+                likes: '175K',
+                shares: '34.1K',
+                sentiment: 'viral_boost',
+                timestampLabel: 'الآن · تيك توك',
+              }
+            );
+          } else if (campaign.id === 'rival_rumor_trolls') {
+            newPosts.push(
+              {
+                id: `rumor_${Date.now()}_1`,
+                platform: 'X',
+                authorName: 'تسريبات الفن السابع',
+                handle: handle2,
+                content: `أنباء مؤكدة عن خلافات حادة وانسحابات في كواليس «${rivalFilmTitle}» التابع لشركة «${rivalStudio}» والجمهور يشتكي من ضعف المونتاج! ⚡📉`,
+                hashtag: `#أزمة_${rivalTag}`,
+                likes: '68.4K',
+                shares: '31.9K',
+                sentiment: 'rival_attack',
+                timestampLabel: 'الآن · إشاعة متصدرة',
+              },
+              {
+                id: `rumor_${Date.now()}_2`,
+                platform: 'TikTok',
+                authorName: 'رادار النجوم',
+                handle: handle3,
+                content: `الجمهور يغادر قاعات «${rivalFilmTitle}» ويتجه لحجز تذاكر «${activeProjectTitle}»! الفارق في المستوى واضح جداً 🎯`,
+                hashtag: `#مقاطعة_${rivalTag}`,
+                likes: '142K',
+                shares: '29.5K',
+                sentiment: 'rival_attack',
+                timestampLabel: 'الآن · فيديو مسرب',
+              }
+            );
+          } else if (campaign.id === 'tiktok_viral_wave') {
+            newPosts.push(
+              {
+                id: `tt_${Date.now()}_1`,
+                platform: 'TikTok',
+                authorName: 'مراجعات الشباك',
+                handle: handle1,
+                content: `مشهد المواجهة في «${activeProjectTitle}» من إنتاج ${state.studioName} يتصدر تيك توك بملايين المشاهدات! الإخراج والتمثيل في مستوى آخر 🔥🎬`,
+                hashtag: `#${cleanTag}`,
+                likes: '284K',
+                shares: '49.2K',
+                sentiment: 'viral_boost',
+                timestampLabel: 'الآن · تريند #1 تيك توك',
+              },
+              {
+                id: `tt_${Date.now()}_2`,
+                platform: 'TikTok',
+                authorName: 'تريندات الفن السابع',
+                handle: handle3,
+                content: `القاعة كاملة صفّقت عند نهاية عرض «${activeProjectTitle}».. تجربة لا تُفوّت في نهاية الأسبوع! 🍿✨`,
+                hashtag: `#${cleanTag}_يكتسح`,
+                likes: '162K',
+                shares: '28.5K',
+                sentiment: 'viral_boost',
+                timestampLabel: 'الآن · مقطع رائج',
+              }
+            );
+          } else if (campaign.id === 'x_hashtag_storm') {
+            newPosts.push(
+              {
+                id: `x_${Date.now()}_1`,
+                platform: 'X',
+                authorName: `مرصد شباك التذاكر — ${aiCtx.countryLabel}`,
+                handle: handle1,
+                content: `تصدر هاشتاج #${cleanTag} قائمة ${aiCtx.trendHashtagLabel} بعد إقبال جماهيري قياسي على عروض شركة «${state.studioName}» بقيادة ${state.ceoName}.`,
+                hashtag: `#${cleanTag}`,
+                likes: '54.8K',
+                shares: '19.4K',
+                sentiment: 'viral_boost',
+                timestampLabel: `الآن · متصدر في ${aiCtx.countryLabel}`,
+              },
+              {
+                id: `x_${Date.now()}_2`,
+                platform: 'X',
+                authorName: 'عشاق الفن السابع',
+                handle: handle2,
+                content: `«${state.studioName}» تثبت هذا الموسم أنها الرقم الأصعب في معادلة الإنتاج الضخم مع «${activeProjectTitle}» 👏🔥`,
+                hashtag: `#${state.studioName.replace(/\s+/g, '_')}`,
+                likes: '31.2K',
+                shares: '9.1K',
+                sentiment: 'viral_boost',
+                timestampLabel: 'منذ دقيقتين',
+              }
+            );
+          } else if (campaign.id === 'rival_smear_campaign') {
+            newPosts.push(
+              {
+                id: `smear_${Date.now()}_1`,
+                platform: 'X',
+                authorName: 'ناقد بدون مجاملة',
+                handle: handle2,
+                content: `خيبة أمل كبيرة في مستوى «${rivalFilmTitle}» التابع لشركة «${rivalStudio}».. استسهال واضح في الكتابة ومط وتطويل أفقد الجمهور حماسه للعمل! 👎`,
+                hashtag: `#سقوط_${rivalTag}`,
+                likes: '41.6K',
+                shares: '16.3K',
+                sentiment: 'rival_attack',
+                timestampLabel: 'الآن · جدل واسع',
+              },
+              {
+                id: `smear_${Date.now()}_2`,
+                platform: 'TikTok',
+                authorName: 'كواليس السوشيال',
+                handle: handle3,
+                content: `تراجع ملحوظ في إقبال الجمهور على «${rivalFilmTitle}» أمام زخم أعمال «${state.studioName}» هذا الأسبوع 📉`,
+                hashtag: `#مقارنة_الموسم`,
+                likes: '118K',
+                shares: '22.4K',
+                sentiment: 'rival_attack',
+                timestampLabel: 'الآن · تيك توك',
+              }
+            );
+          } else {
+            newPosts.push({
+              id: `vip_${Date.now()}_1`,
               platform: 'X',
-              authorName: 'حملة جمهور السينما',
-              handle: '@CinemaLoversEG',
-              content: `بصراحة «${activeProjectTitle}» أفضل عمل نزل السنادي من غير منازع! أداء جبار وإخراج عالمي من شركة «${state.studioName}» 👏🔥`,
-              hashtag: `#${cleanTag}_رقم_واحد`,
-              likes: '94.2K',
-              shares: '27.8K',
-              sentiment: 'viral_boost',
-              timestampLabel: 'الآن · هجوم إيجابي كاسح',
-            },
-            {
-              id: `supp_${Date.now()}_2`,
-              platform: 'TikTok',
-              authorName: 'تريندات الشباك',
-              handle: '@BoxOfficeWave',
-              content: `الطوابير قدام السينمات على «${activeProjectTitle}» مش طبيعية! الفيلم يستاهل كل جنيه 🍿🎬`,
+              authorName: `رابطة نقاد السينما — ${aiCtx.countryLabel}`,
+              handle: handle2,
+              content: `إشادات نقدية واسعة بعد العرض الخاص لـ «${activeProjectTitle}» من إنتاج «${state.studioName}»؛ تكامل بصري ودرامي يضعه في صدارة ترشيحات جوائز العام 🏆🎬`,
               hashtag: `#${cleanTag}`,
-              likes: '175K',
-              shares: '34.1K',
+              likes: '38.9K',
+              shares: '11.2K',
               sentiment: 'viral_boost',
-              timestampLabel: 'الآن · تيك توك',
-            }
-          );
-        } else if (campaign.id === 'rival_rumor_trolls') {
-          newPosts.push(
-            {
-              id: `rumor_${Date.now()}_1`,
-              platform: 'X',
-              authorName: 'تسريبات الفن السابع',
-              handle: '@InsiderLeakEG',
-              content: `أنباء مؤكدة عن خلافات حادة وانسحابات في كواليس «${rivalFilmTitle}» التابع لشركة «${rivalStudio}» والجمهور يشتكي من ضعف المونتاج! ⚡📉`,
-              hashtag: `#أزمة_${rivalTag}`,
-              likes: '68.4K',
-              shares: '31.9K',
-              sentiment: 'rival_attack',
-              timestampLabel: 'الآن · إشاعة متصدرة',
-            },
-            {
-              id: `rumor_${Date.now()}_2`,
-              platform: 'TikTok',
-              authorName: 'رادار النجوم',
-              handle: '@StarRadarClips',
-              content: `الجمهور بيخرج من نص عرض «${rivalFilmTitle}» وبيدخل قاعة «${activeProjectTitle}»! الفرق واضح جداً 🎯`,
-              hashtag: `#مقاطعة_${rivalTag}`,
-              likes: '142K',
-              shares: '29.5K',
-              sentiment: 'rival_attack',
-              timestampLabel: 'الآن · فيديو مسرب',
-            }
-          );
-        } else if (campaign.id === 'tiktok_viral_wave') {
-          newPosts.push(
-            {
-              id: `tt_${Date.now()}_1`,
-              platform: 'TikTok',
-              authorName: 'عمر سينما ريفيو',
-              handle: '@OmarCinemaEG',
-              content: `مشهد المواجهة في «${activeProjectTitle}» من إنتاج ${state.studioName} كسر الدنيا على تيك توك! الإخراج والتمثيل في حتة تانية خالص 🔥🎬`,
-              hashtag: `#${cleanTag}`,
-              likes: '284K',
-              shares: '49.2K',
-              sentiment: 'viral_boost',
-              timestampLabel: 'الآن · تريند #1 تيك توك',
-            },
-            {
-              id: `tt_${Date.now()}_2`,
-              platform: 'TikTok',
-              authorName: 'سارة تريندات الفن',
-              handle: '@SaraPopTrends',
-              content: `القاعة كلها كانت بتصقف في عرض «${activeProjectTitle}».. لازم تشوفوه في الويك إند ده! 🍿✨`,
-              hashtag: `#${cleanTag}_يكتسح`,
-              likes: '162K',
-              shares: '28.5K',
-              sentiment: 'viral_boost',
-              timestampLabel: 'الآن · مقطع رائج',
-            }
-          );
-        } else if (campaign.id === 'x_hashtag_storm') {
-          newPosts.push(
-            {
-              id: `x_${Date.now()}_1`,
-              platform: 'X',
-              authorName: 'مرصد شباك التذاكر المصري',
-              handle: '@BoxOffice_Masr',
-              content: `تصدر هاشتاج #${cleanTag} قائمة الأكثر تداولاً في مصر والخليج بعد إقبال جماهيري قياسي على حفلات شركة «${state.studioName}» بقيادة ${state.ceoName}.`,
-              hashtag: `#${cleanTag}`,
-              likes: '54.8K',
-              shares: '19.4K',
-              sentiment: 'viral_boost',
-              timestampLabel: 'الآن · متصدر في مصر',
-            },
-            {
-              id: `x_${Date.now()}_2`,
-              platform: 'X',
-              authorName: 'عشاق الفن السابع',
-              handle: '@ArabicFilmClub',
-              content: `«${state.studioName}» تثبت هذا الموسم أنها الرقم الأصعب في معادلة الإنتاج الضخم مع «${activeProjectTitle}» 👏🔥`,
-              hashtag: `#${state.studioName.replace(/\s+/g, '_')}`,
-              likes: '31.2K',
-              shares: '9.1K',
-              sentiment: 'viral_boost',
-              timestampLabel: 'منذ دقيقتين',
-            }
-          );
-        } else if (campaign.id === 'rival_smear_campaign') {
-          newPosts.push(
-            {
-              id: `smear_${Date.now()}_1`,
-              platform: 'X',
-              authorName: 'ناقد بدون مجاملة',
-              handle: '@NoFilterCritic',
-              content: `خيبة أمل كبيرة في مستوى «${rivalFilmTitle}» التابع لشركة «${rivalStudio}».. استسهال واضح في الكتابة ومط وتطويل أفقد الجمهور حماسه للعمل! 👎`,
-              hashtag: `#سقوط_${rivalTag}`,
-              likes: '41.6K',
-              shares: '16.3K',
-              sentiment: 'rival_attack',
-              timestampLabel: 'الآن · جدل واسع',
-            },
-            {
-              id: `smear_${Date.now()}_2`,
-              platform: 'TikTok',
-              authorName: 'كواليس السوشيال',
-              handle: '@SocialRadarEG',
-              content: `تراجع ملحوظ في إقبال الجمهور على «${rivalFilmTitle}» أمام زخم أعمال «${state.studioName}» هذا الأسبوع 📉`,
-              hashtag: `#مقارنة_الموسم`,
-              likes: '118K',
-              shares: '22.4K',
-              sentiment: 'rival_attack',
-              timestampLabel: 'الآن · تيك توك',
-            }
-          );
-        } else {
-          newPosts.push({
-            id: `vip_${Date.now()}_1`,
-            platform: 'X',
-            authorName: 'رابطة نقاد السينما',
-            handle: '@CairoCriticsGuild',
-            content: `إشادات نقدية واسعة بعد العرض الخاص لـ «${activeProjectTitle}» من إنتاج «${state.studioName}»؛ تكامل بصري ودرامي يضعه في صدارة ترشيحات جوائز العام 🏆🎬`,
-            hashtag: `#${cleanTag}`,
-            likes: '38.9K',
-            shares: '11.2K',
-            sentiment: 'viral_boost',
-            timestampLabel: 'الآن · عرض النقاد الخاص',
-          });
+              timestampLabel: 'الآن · عرض النقاد الخاص',
+            });
           }
         }
 
@@ -2561,7 +2843,7 @@ export const useGameStore = create<HyptrixGameState>()(
               20
             ),
             aiMemoryLog: [
-              `أطلقت شركة "${cur.studioName}" حملة (${campaign.title}) بتكلفة ${formatMoney(campaign.cost)} ج.م على منصات التواصل الاجتماعي.`,
+              `أطلقت شركة "${cur.studioName}" حملة (${campaign.title}) بتكلفة ${formatMoney(campaign.cost)} ${curLabel} على منصات التواصل الاجتماعي.`,
               ...(cur.aiMemoryLog || []),
             ].slice(0, 25),
           };
@@ -2588,19 +2870,67 @@ export const useGameStore = create<HyptrixGameState>()(
 
       dismissToast: () => set({ activeToast: null }),
 
-      initializeStudio: ({ studioName, ceoName, logo, founderPerk, region }) =>
+      selectLanguageAndMarket: (language, market) => {
+        const safeMarket: WorldMarketId = market === 'saudi' ? 'saudi' : 'egypt';
+        const profile = getMarketProfile(safeMarket);
+        const primaryReg = profile.primaryRegion;
         set((state) => {
+          const patchTarget = state.customDbPatch?.meta?.targetMarket;
+          const keepPatch = !patchTarget || patchTarget === safeMarket;
+          if (!keepPatch && typeof window !== 'undefined') {
+            try {
+              window.localStorage.removeItem(CUSTOM_DB_STORAGE_KEY);
+              idbDel(CUSTOM_DB_STORAGE_KEY).catch(() => {});
+            } catch {
+              // ignore
+            }
+          }
+          const nextPatch = keepPatch ? state.customDbPatch : null;
+          return {
+            uiLanguage: language,
+            worldMarket: safeMarket,
+            hasSelectedMarket: true,
+            studioCreated: false,
+            activeScreen: 'STUDIO_CREATION',
+            studioName: profile.defaultStudioName,
+            ceoName: profile.defaultCeoName,
+            currentRegion: primaryReg,
+            unlockedRegions: [primaryReg],
+            customDbPatch: nextPatch,
+            customDbUrl: keepPatch ? state.customDbUrl : '',
+            draft: {
+              ...DEFAULT_DRAFT,
+              ...getDefaultDistributionForMarket(safeMarket, nextPatch),
+              title: '',
+              scriptSynopsis: '',
+              selectedDistributionMarkets: [primaryReg],
+            },
+          };
+        });
+      },
+
+      openMarketSelector: () => {
+        get().resetEntireGameAndStartFresh();
+        set({ hasSelectedMarket: false });
+      },
+
+      initializeStudio: ({ studioName, ceoName, logo, founderPerk, region }) => {
+        set((state) => {
+          const profile = getMarketProfile(state.worldMarket);
+          const primaryReg = region || profile.primaryRegion;
+          const curLabel = profile.currencyLabel;
           const isContinuingSameWorld = state.gameDay > 1;
-          const cleanStudio = studioName.trim() || 'العقرب ستوديوز';
+          const cleanStudio = studioName.trim() || profile.defaultStudioName;
           const cleanCeo = ceoName.trim() || 'المدير التنفيذي';
           return {
+            hasSelectedMarket: true,
             studioCreated: true,
             studioName: cleanStudio,
             ceoName: cleanCeo,
             logo,
             founderPerk,
-            currentRegion: region,
-            unlockedRegions: ['egypt'],
+            currentRegion: primaryReg,
+            unlockedRegions: [primaryReg],
             cash: 75_000_000,
             marketValue: 110_000_000,
             marketValueModifier: 0,
@@ -2613,11 +2943,21 @@ export const useGameStore = create<HyptrixGameState>()(
             talentRejectionCounts: {},
             syndicateMediationUnlocked: {},
             activeScreen: 'STUDIO_HUB',
+            onboardingTourStatus: isContinuingSameWorld
+              ? 'completed'
+              : 'pending_choice',
+            draft: {
+              ...DEFAULT_DRAFT,
+              ...getDefaultDistributionForMarket(state.worldMarket, state.customDbPatch),
+              title: '',
+              scriptSynopsis: '',
+              selectedDistributionMarkets: [primaryReg],
+            },
             worldHistory: isContinuingSameWorld
               ? [
                   {
                     year: state.currentYear,
-                    eventText: `عودة مدوية للسوق: تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} بسيولة 75M ج.م في نفس العالم السينمائي لعام ${state.currentYear}.`,
+                    eventText: `عودة مدوية للسوق: تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} بسيولة 75M ${curLabel} في نفس العالم السينمائي لعام ${state.currentYear}.`,
                     category: 'milestone',
                   },
                   ...state.worldHistory,
@@ -2625,27 +2965,41 @@ export const useGameStore = create<HyptrixGameState>()(
               : [
                   {
                     year: 2026,
-                    eventText: `تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} بسيولة خزينة 75M ج.م وقيمة سوقية 110M ج.م.`,
+                    eventText: `تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} في سوق ${profile.countryNameAr} بسيولة خزينة 75M ${curLabel} وقيمة سوقية 110M ${curLabel}.`,
                     category: 'milestone',
                   },
                 ],
             aiMemoryLog: isContinuingSameWorld
               ? [
-                  `أسس المنتج ${cleanCeo} شركة جديدة باسم "${cleanStudio}" بسيولة 75M ج.م في عام ${state.currentYear} بعد بيع شركته السابقة للمستثمرين.`,
+                  `أسس المنتج ${cleanCeo} شركة جديدة باسم "${cleanStudio}" بسيولة 75M ${curLabel} في عام ${state.currentYear} بعد بيع شركته السابقة للمستثمرين.`,
                   ...(state.aiMemoryLog || []),
                 ].slice(0, 25)
               : [
-                  `أسس المنتج ${cleanCeo} شركة "${cleanStudio}" بسيولة خزينة 75M ج.م وقيمة سوقية ابتدائية 110M ج.م.`,
+                  `أسس المنتج ${cleanCeo} شركة "${cleanStudio}" في عالم ${profile.marketHeadline} بسيولة خزينة 75M ${curLabel} وقيمة سوقية ابتدائية 110M ${curLabel}.`,
                 ],
           };
-        }),
+        });
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'INIT_STUDIO',
+          amountDelta: 0,
+          previousCash: 75_000_000,
+          expectedNewCash: 75_000_000,
+          itemLabel: 'تأسيس استوديو جديد',
+        });
+      },
 
       quickStartDemoStudio: () =>
-        set({
-          studioCreated: true,
-          studioName: 'العقرب ستوديوز',
-          ceoName: 'محمود الصيرفي',
-          activeScreen: 'STUDIO_HUB',
+        set((state) => {
+          const profile = getMarketProfile(state.worldMarket);
+          return {
+            hasSelectedMarket: true,
+            studioCreated: true,
+            studioName: profile.defaultStudioName,
+            ceoName: profile.defaultCeoName,
+            currentRegion: profile.primaryRegion,
+            unlockedRegions: [profile.primaryRegion],
+            activeScreen: 'STUDIO_HUB',
+          };
         }),
 
       setActiveScreen: (screen) => set({ activeScreen: screen }),
@@ -2653,7 +3007,10 @@ export const useGameStore = create<HyptrixGameState>()(
       unlockMarketRegionWithCash: (region) => {
         const state = get();
         if (state.unlockedRegions.includes(region)) return true;
-        const cfg = MARKET_CONFIGS.find((c) => c.id === region);
+        const marketConfigs = getMarketConfigsForWorld(state.worldMarket);
+        const primaryReg = getPrimaryMarketRegion(state.worldMarket);
+        const curLabel = getCurrencyLabel(state.worldMarket);
+        const cfg = marketConfigs.find((c) => c.id === region) || MARKET_CONFIGS.find((c) => c.id === region);
         if (!cfg) return false;
 
         // If studio market value already meets the threshold, unlock for free!
@@ -2664,7 +3021,7 @@ export const useGameStore = create<HyptrixGameState>()(
             draft: {
               ...state.draft,
               selectedDistributionMarkets: Array.from(
-                new Set([...(state.draft.selectedDistributionMarkets || ['egypt']), region])
+                new Set([...(state.draft.selectedDistributionMarkets || [primaryReg]), region])
               ),
             },
           });
@@ -2691,26 +3048,35 @@ export const useGameStore = create<HyptrixGameState>()(
           draft: {
             ...state.draft,
             selectedDistributionMarkets: Array.from(
-              new Set([...(state.draft.selectedDistributionMarkets || ['egypt']), region])
+              new Set([...(state.draft.selectedDistributionMarkets || [primaryReg]), region])
             ),
           },
           worldHistory: [
             {
               year: state.currentYear,
-              eventText: `افتتاح مكتب توزيع إقليمي ودولي للشركة في «${cfg.name}» باستثمار ${formatMoney(cfg.earlyLicenseCost)} ج.م.`,
+              eventText: `افتتاح مكتب توزيع إقليمي ودولي للشركة في «${cfg.name}» باستثمار ${formatMoney(cfg.earlyLicenseCost)} ${curLabel}.`,
               category: 'milestone',
             },
             ...state.worldHistory,
           ],
+        });
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'UNLOCK_MARKET_REGION',
+          amountDelta: -cfg.earlyLicenseCost,
+          previousCash: state.cash,
+          expectedNewCash: nextCash,
+          itemId: region,
+          itemLabel: `ترخيص مكتب توزيع: ${cfg.name}`,
         });
         return true;
       },
 
       toggleDraftDistributionMarket: (region) =>
         set((state) => {
-          if (region === 'egypt') return state; // Base market is always active
+          const primaryReg = getPrimaryMarketRegion(state.worldMarket);
+          if (region === primaryReg) return state; // Base market is always active
           if (!state.unlockedRegions.includes(region)) return state;
-          const currentList = state.draft.selectedDistributionMarkets || ['egypt'];
+          const currentList = state.draft.selectedDistributionMarkets || [primaryReg];
           const exists = currentList.includes(region);
           const nextList: MarketRegion[] = exists
             ? currentList.filter((r) => r !== region)
@@ -2718,14 +3084,14 @@ export const useGameStore = create<HyptrixGameState>()(
           return {
             draft: {
               ...state.draft,
-              selectedDistributionMarkets: nextList.length > 0 ? nextList : ['egypt'],
+              selectedDistributionMarkets: nextList.length > 0 ? nextList : [primaryReg],
             },
           };
         }),
 
       triggerAnnualAwardsCeremonyNow: () =>
         set((state) => {
-          const db = getResolvedDatabase(state.customDbPatch);
+          const db = getResolvedDatabase(state.customDbPatch, state.worldMarket);
           const yearToJudge = state.currentYear;
           const playerProjectsThisYear = state.releasedProjects.filter(
             (p) => p.year === yearToJudge
@@ -2736,13 +3102,16 @@ export const useGameStore = create<HyptrixGameState>()(
             (r) => !r.year || r.year === yearToJudge
           );
           if (rivalsPool.length < 3) {
+            const marketDirectors = db.crew.filter((c) => c.role === 'director');
             const extraFilmRivals = generateRivalReleases(
               [...db.competitor_studios, ...state.emergingCompetitors],
               db.actors,
               [],
               1.05,
               yearToJudge,
-              'film'
+              'film',
+              state.worldMarket,
+              marketDirectors
             );
             const extraSeriesRivals = generateRivalReleases(
               [...db.competitor_studios, ...state.emergingCompetitors],
@@ -2750,7 +3119,9 @@ export const useGameStore = create<HyptrixGameState>()(
               [],
               1.0,
               yearToJudge + 5,
-              'series'
+              'series',
+              state.worldMarket,
+              marketDirectors
             );
             rivalsPool = [...rivalsPool, ...extraFilmRivals, ...extraSeriesRivals];
           }
@@ -2761,6 +3132,7 @@ export const useGameStore = create<HyptrixGameState>()(
             studioName: state.studioName,
             year: yearToJudge,
             db,
+            worldMarket: state.worldMarket,
           });
 
           const updatedProjects = state.releasedProjects.map((proj) => {
@@ -2829,7 +3201,8 @@ export const useGameStore = create<HyptrixGameState>()(
           };
         }),
 
-      advanceGameDay: (days = 1) =>
+      advanceGameDay: (days = 1) => {
+        const cashBeforeDay = get().cash;
         set((state) => {
           const newGameDay = state.gameDay + days;
           const prevYearOffset = Math.floor((state.gameDay - 1) / DAYS_PER_GAME_YEAR);
@@ -2857,7 +3230,8 @@ export const useGameStore = create<HyptrixGameState>()(
           let nextLastGalaYear = state.lastAwardsGalaYear || 2025;
           let nextActiveToast = state.activeToast;
 
-          const db = getResolvedDatabase(state.customDbPatch);
+          const db = getResolvedDatabase(state.customDbPatch, state.worldMarket);
+          const curLabel = getCurrencyLabel(state.worldMarket);
           const liveActors = getLiveActorsWithEvolution({
             baseActors: db.actors,
             aiGeneratedActors: nextAiActors,
@@ -2891,7 +3265,7 @@ export const useGameStore = create<HyptrixGameState>()(
                   headline,
                   detail: offer.aiReason,
                   highlightName: offer.talentName,
-                  extraStatBadge: `العرض: ${formatMoney(offer.offeredSalary)} ج.م`,
+                  extraStatBadge: `العرض: ${formatMoney(offer.offeredSalary)} ${curLabel}`,
                   gameImpactLabel:
                     newRejCount >= 2
                       ? 'رفض العرض مرتين وأغلق باب التفاوض — يمكنك تفعيل «وساطة نقابة المهن التمثيلية (إعلان)» لفرصة أخيرة'
@@ -2943,18 +3317,18 @@ export const useGameStore = create<HyptrixGameState>()(
                   headline,
                   detail: offer.aiReason,
                   highlightName: offer.talentName,
-                  extraStatBadge: `الأجر: ${formatMoney(offer.offeredSalary)} ج.م`,
+                  extraStatBadge: `الأجر: ${formatMoney(offer.offeredSalary)} ${curLabel}`,
                   gameImpactLabel: exceedsCrewCapacity
                     ? `وافق أكثر من العدد الأقصى لفئة (${SLOT_ARABIC_NAMES[offer.roleSlot]}) — اختر من تعتمده في الفريق النهائي`
                     : `تم اعتماده رسمياً في فريق العمل (${SLOT_ARABIC_NAMES[offer.roleSlot]})`,
                 });
                 nextHistory.unshift({
                   year: newYear,
-                  eventText: `${headline} مقابل ${formatMoney(offer.offeredSalary)} ج.م.`,
+                  eventText: `${headline} مقابل ${formatMoney(offer.offeredSalary)} ${curLabel}.`,
                   category: 'milestone',
                 });
                 nextMemory.unshift(
-                  `وقّع النجم ${offer.talentName} مع شركة "${state.studioName}" بقيادة ${state.ceoName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" بأجر ${formatMoney(offer.offeredSalary)} ج.م.`
+                  `وقّع النجم ${offer.talentName} مع شركة "${state.studioName}" بقيادة ${state.ceoName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" بأجر ${formatMoney(offer.offeredSalary)} ${curLabel}.`
                 );
               }
             }
@@ -2974,21 +3348,72 @@ export const useGameStore = create<HyptrixGameState>()(
             );
           }
 
-          // Cash is no longer passively added every few seconds during advanceGameDay.
-          // Players earn box office / streaming cash explicitly on release or when tracking release days.
-          const nextCash = state.cash;
+          // No idle passive cash drip. Cash only grows when an actively released film/series
+          // earns its daily box office / broadcast revenue during its automatic release run.
+          let nextCash = state.cash;
+
+          // 2b. Automatically advance ALL active released projects whose run has not yet finished
+          // (so starting a new project early still collects remaining box office / episode revenue!)
+          nextReleasedProjects = nextReleasedProjects.map((proj) => {
+            const maxReleaseSteps =
+              proj.format === 'series' ? proj.episodes || 15 : 10;
+            const currentTracked = proj.daysTracked || 1;
+            if (currentTracked >= maxReleaseSteps) return proj;
+
+            let workingProj = proj;
+            const stepsToRun = Math.min(days, maxReleaseSteps - currentTracked);
+            for (let sIdx = 0; sIdx < stepsToRun; sIdx++) {
+              const nextDayNum = (workingProj.daysTracked || 1) + 1;
+              const isSeriesProj = workingProj.format === 'series';
+              const autoNews: DailyAiNewsItem = {
+                id: `auto_bo_${workingProj.id}_d${nextDayNum}_${newGameDay}`,
+                day: newGameDay,
+                headline: isSeriesProj
+                  ? `عرض الحلقة ${nextDayNum} من «${workingProj.title}» وتحديث سباق المشاهدات`
+                  : `تقرير اليوم ${nextDayNum} لشباك تذاكر «${workingProj.title}»`,
+                detail: isSeriesProj
+                  ? `تواصل الحلقات جذب الجمهور والمنصات الرقمية مع تحرك يومي حي في ترتيب الموسم.`
+                  : `شهدت قاعات العرض إقبالاً جديداً في اليوم ${nextDayNum} مع تحديث مباشر لترتيب المنافسين.`,
+                impactType: workingProj.criticScore >= 6.8 ? 'positive' : 'rival',
+                hypeDelta: 0,
+              };
+              const stepped = stepProjectRevenueProgress(
+                workingProj,
+                1.0,
+                1.0,
+                autoNews
+              );
+              workingProj = stepped.updatedProject;
+              if (stepped.revenueDelta > 0) {
+                nextCash += stepped.revenueDelta;
+              }
+            }
+            return workingProj;
+          });
+
+          if (nextLastReleased) {
+            const refreshedLast = nextReleasedProjects.find(
+              (p) => p.id === nextLastReleased?.id
+            );
+            if (refreshedLast) {
+              nextLastReleased = refreshedLast;
+            }
+          }
 
           // 3. Organic Rival Studio Releases during the year (every 30 game days):
           if (newGameDay > 5 && newGameDay % 30 === 0) {
             const allCompetitors = [...db.competitor_studios, ...nextEmergingStudios];
             const isSeriesWindow = (newGameDay / 30) % 2 === 0;
+            const marketDirectors = db.crew.filter((c) => c.role === 'director');
             const organicRivals = generateRivalReleases(
               allCompetitors,
               liveActors,
               updatedDraft.leadActorIds,
               1.0,
               newGameDay,
-              isSeriesWindow ? 'series' : 'film'
+              isSeriesWindow ? 'series' : 'film',
+              state.worldMarket,
+              marketDirectors
             ).map((r) => ({ ...r, year: newYear }));
 
             for (const riv of organicRivals) {
@@ -3085,6 +3510,7 @@ export const useGameStore = create<HyptrixGameState>()(
               (r) => !r.year || r.year === completedYear
             );
             if (rivalsInYear.length < 3) {
+              const marketDirectors = db.crew.filter((c) => c.role === 'director');
               rivalsInYear = [
                 ...rivalsInYear,
                 ...generateRivalReleases(
@@ -3093,7 +3519,9 @@ export const useGameStore = create<HyptrixGameState>()(
                   [],
                   1.05,
                   completedYear,
-                  'film'
+                  'film',
+                  state.worldMarket,
+                  marketDirectors
                 ),
                 ...generateRivalReleases(
                   [...db.competitor_studios, ...nextEmergingStudios],
@@ -3101,7 +3529,9 @@ export const useGameStore = create<HyptrixGameState>()(
                   [],
                   1.0,
                   completedYear + 3,
-                  'series'
+                  'series',
+                  state.worldMarket,
+                  marketDirectors
                 ),
               ];
             }
@@ -3112,6 +3542,7 @@ export const useGameStore = create<HyptrixGameState>()(
               studioName: state.studioName,
               year: completedYear,
               db,
+              worldMarket: state.worldMarket,
             });
 
             nextReleasedProjects = nextReleasedProjects.map((proj) => {
@@ -3186,9 +3617,9 @@ export const useGameStore = create<HyptrixGameState>()(
                 category: 'production_news',
                 badgeLabel: 'إنذار إفلاس رسمي · مهلة سداد 3 أشهر ⚠️',
                 headline: `خزينة «${state.studioName}» تسجل عجزاً مالياً والبنوك تمنح مهلة 3 أشهر قبل التصفية!`,
-                detail: `وصل رصيد السيولة في الخزينة إلى (${formatMoney(nextCash)} ج.م). أمامك مهلة 3 أشهر (30 يوماً في التقويم) لتسديد المديونية أو الحصول على «تمويل إنقاذ من مستثمر (مقابل إعلان)»، وإلا ستُجبر على بيع الشركة وتصفيتها!`,
+                detail: `وصل رصيد السيولة في الخزينة إلى (${formatMoney(nextCash)} ${curLabel}). أمامك مهلة 3 أشهر (30 يوماً في التقويم) لتسديد المديونية أو الحصول على «تمويل إنقاذ من مستثمر (مقابل إعلان)»، وإلا ستُجبر على بيع الشركة وتصفيتها!`,
                 highlightName: state.studioName,
-                extraStatBadge: `العجز: ${formatMoney(Math.abs(nextCash))} ج.م`,
+                extraStatBadge: `العجز: ${formatMoney(Math.abs(nextCash))} ${curLabel}`,
                 gameImpactLabel: 'احصل على تمويل إنقاذ فوري من مستثمر أو حقق إيرادات قبل انتهاء المهلة',
               });
             } else if (newGameDay >= nextBankruptcyDeadline) {
@@ -3227,11 +3658,24 @@ export const useGameStore = create<HyptrixGameState>()(
             aiMemoryLog: nextMemory.slice(0, 25),
             activeToast: nextActiveToast,
           };
-        }),
+        });
+        const cashAfterDay = get().cash;
+        const dailyRevenueDelta = cashAfterDay - cashBeforeDay;
+        if (dailyRevenueDelta !== 0) {
+          enqueueServerLedgerSync(get, set, {
+            transactionType: 'PROJECT_BOX_OFFICE_REVENUE',
+            amountDelta: dailyRevenueDelta,
+            previousCash: cashBeforeDay,
+            expectedNewCash: cashAfterDay,
+            itemLabel: `إيرادات شباك التذاكر اليومية (اليوم ${get().gameDay})`,
+          });
+        }
+      },
 
-      submitTalentOffer: (offer) =>
+      submitTalentOffer: (offer) => {
+        const prevCash = get().cash;
+        const dinnerFee = offer.vipDinner ? (offer.vipDinnerCost ?? VIP_DINNER_COST) : 0;
         set((state) => {
-          const dinnerFee = offer.vipDinner ? (offer.vipDinnerCost ?? VIP_DINNER_COST) : 0;
           const nextCash = Math.max(0, state.cash - dinnerFee);
           const nextMarketVal = calculateStudioMarketValue({
             cash: nextCash,
@@ -3239,7 +3683,8 @@ export const useGameStore = create<HyptrixGameState>()(
             releasedProjects: state.releasedProjects,
             marketValueModifier: state.marketValueModifier || 0,
           });
-          const memoryEntry = `أرسلت شركة "${state.studioName}" عرض تعاقد إلى ${offer.talentName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في «${state.draft.title || 'عمل جديد'}» بأجر ${formatMoney(offer.offeredSalary)} ج.م ونسبة أرباح ${offer.backendPoints}% (الرد في اليوم ${offer.responseDueDay}).`;
+          const curLabel = getCurrencyLabel(state.worldMarket);
+          const memoryEntry = `أرسلت شركة "${state.studioName}" عرض تعاقد إلى ${offer.talentName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في «${state.draft.title || 'عمل جديد'}» بأجر ${formatMoney(offer.offeredSalary)} ${curLabel} ونسبة أرباح ${offer.backendPoints}% (الرد في اليوم ${offer.responseDueDay}).`;
           return {
             cash: nextCash,
             marketValue: nextMarketVal,
@@ -3252,7 +3697,18 @@ export const useGameStore = create<HyptrixGameState>()(
               },
             },
           };
-        }),
+        });
+        if (dinnerFee > 0) {
+          enqueueServerLedgerSync(get, set, {
+            transactionType: 'RESOLVE_CRISIS_SPEND',
+            amountDelta: -dinnerFee,
+            previousCash: prevCash,
+            expectedNewCash: Math.max(0, prevCash - dinnerFee),
+            itemId: offer.talentId,
+            itemLabel: `عشاء عمل وتفاوض مع ${offer.talentName}`,
+          });
+        }
+      },
 
       toggleCrewSelectionForSlot: (slot, talentId) =>
         set((state) => {
@@ -3412,6 +3868,7 @@ export const useGameStore = create<HyptrixGameState>()(
         set((state) => ({
           draft: {
             ...DEFAULT_DRAFT,
+            ...getDefaultDistributionForMarket(state.worldMarket, state.customDbPatch),
             title: '',
             scriptSynopsis: '',
             selectedDistributionMarkets: [...state.unlockedRegions],
@@ -3471,7 +3928,9 @@ export const useGameStore = create<HyptrixGameState>()(
           };
         }),
 
-      watchVipAdStep: () =>
+      watchVipAdStep: () => {
+        const prevCash = get().cash;
+        const willUnlock = Math.min(5, get().vipAdProgress + 1) >= 5;
         set((state) => {
           const nextStep = Math.min(5, state.vipAdProgress + 1);
           const unlocked = nextStep >= 5;
@@ -3481,14 +3940,26 @@ export const useGameStore = create<HyptrixGameState>()(
             cash: unlocked ? state.cash + 40_000_000 : state.cash,
             vipCoins: unlocked ? state.vipCoins + 500 : state.vipCoins + 50,
           };
-        }),
+        });
+        if (willUnlock) {
+          enqueueServerLedgerSync(get, set, {
+            transactionType: 'VIP_PACKAGE_TOPUP',
+            amountDelta: 40_000_000,
+            previousCash: prevCash,
+            expectedNewCash: prevCash + 40_000_000,
+            itemLabel: 'مكافأة دعم استثماري للمنتج',
+          });
+        }
+      },
 
-      resolveCrisisOption: (crisisId, choice) =>
+      resolveCrisisOption: (crisisId, choice) => {
+        const beforeState = get();
+        const crisis = beforeState.draft.crises.find((c) => c.id === crisisId);
+        if (!crisis || crisis.resolved) return;
+        const opt = choice === 'A' ? crisis.optionA : crisis.optionB;
+        const prevCash = beforeState.cash;
+        const nextCash = prevCash - opt.cost;
         set((state) => {
-          const crisis = state.draft.crises.find((c) => c.id === crisisId);
-          if (!crisis || crisis.resolved) return state;
-          const opt = choice === 'A' ? crisis.optionA : crisis.optionB;
-          const nextCash = state.cash - opt.cost;
           const repDelta =
             opt.qualityDelta >= 3 ? 1 : opt.qualityDelta <= -4 ? -2 : 0;
           const nextRep = Math.max(15, Math.min(100, state.reputation + repDelta));
@@ -3513,9 +3984,21 @@ export const useGameStore = create<HyptrixGameState>()(
               ),
             },
           };
-        }),
+        });
+        if (opt.cost !== 0) {
+          enqueueServerLedgerSync(get, set, {
+            transactionType: 'RESOLVE_CRISIS_SPEND',
+            amountDelta: -opt.cost,
+            previousCash: prevCash,
+            expectedNewCash: nextCash,
+            itemId: crisisId,
+            itemLabel: `قرار أزمة إنتاجية (${choice})`,
+          });
+        }
+      },
 
-      completeProjectRelease: (record) =>
+      completeProjectRelease: (record) => {
+        const prevCash = get().cash;
         set((state) => {
           const newCash = state.cash - record.totalBudget + record.totalGrossRevenue;
           const nextProjects = [record, ...state.releasedProjects];
@@ -3538,13 +4021,17 @@ export const useGameStore = create<HyptrixGameState>()(
           });
 
           const unlocked = [...state.unlockedRegions];
-          if (nextMarketValue >= 220_000_000 && !unlocked.includes('gulf')) unlocked.push('gulf');
-          if (nextMarketValue >= 450_000_000 && !unlocked.includes('europe')) unlocked.push('europe');
-          if (nextMarketValue >= 850_000_000 && !unlocked.includes('hollywood')) unlocked.push('hollywood');
+          const marketConfigs = getMarketConfigsForWorld(state.worldMarket);
+          for (const cfg of marketConfigs) {
+            if (cfg.unlockMarketValue > 0 && nextMarketValue >= cfg.unlockMarketValue && !unlocked.includes(cfg.id)) {
+              unlocked.push(cfg.id);
+            }
+          }
 
           const nextActorDynamic = { ...state.actorDynamicState };
           const newNewsItems: WorldBreakingNewsModalItem[] = [];
-          const db = getResolvedDatabase(state.customDbPatch);
+          const db = getResolvedDatabase(state.customDbPatch, state.worldMarket);
+          const curLabel = getCurrencyLabel(state.worldMarket);
           const allActors = [...state.aiGeneratedActors, ...db.actors];
 
           const castIds = record.actorIdsInCast || [
@@ -3663,7 +4150,7 @@ export const useGameStore = create<HyptrixGameState>()(
           }
 
           const nextMemory = [
-            `طرحت شركة "${state.studioName}" بقيادة ${state.ceoName} ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بتكلفة ${formatMoney(record.totalBudget)} ج.م وحقق إجمالي إيرادات ${formatMoney(record.totalGrossRevenue)} ج.م (صافي الربح: ${formatMoney(record.netProfit)} ج.م) والمركز #${record.boxOfficeRank} في الموسم وتقييم نقاد ${record.criticScore}/10.`,
+            `طرحت شركة "${state.studioName}" بقيادة ${state.ceoName} ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بتكلفة ${formatMoney(record.totalBudget)} ${curLabel} وحقق إجمالي إيرادات ${formatMoney(record.totalGrossRevenue)} ${curLabel} (صافي الربح: ${formatMoney(record.netProfit)} ${curLabel}) والمركز #${record.boxOfficeRank} في الموسم وتقييم نقاد ${record.criticScore}/10.`,
             ...(state.aiMemoryLog || []),
           ].slice(0, 25);
 
@@ -3690,6 +4177,13 @@ export const useGameStore = create<HyptrixGameState>()(
             bankruptcyDeadlineDay: nextBankruptcyDeadline,
             bankruptcyDebtAmount: nextBankruptcyDebt,
             isBankruptLiquidated: nextIsBankruptLiquidated,
+            draft: {
+              ...DEFAULT_DRAFT,
+              ...getDefaultDistributionForMarket(state.worldMarket, state.customDbPatch),
+              title: '',
+              scriptSynopsis: '',
+              selectedDistributionMarkets: [...unlocked],
+            },
             releasedProjects: nextProjects,
             lastReleasedProject: record,
             yearlyRivalReleases: nextYearlyRivals,
@@ -3700,15 +4194,26 @@ export const useGameStore = create<HyptrixGameState>()(
             worldHistory: [
               {
                 year: state.currentYear,
-                eventText: `طرح ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بإيرادات ${formatMoney(record.totalGrossRevenue)} ج.م (المركز #${record.boxOfficeRank}) وتقييم نقاد ${record.criticScore}/10.`,
+                eventText: `طرح ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بإيرادات ${formatMoney(record.totalGrossRevenue)} ${curLabel} (المركز #${record.boxOfficeRank}) وتقييم نقاد ${record.criticScore}/10.`,
                 category: 'release',
               },
               ...state.worldHistory,
             ],
           };
-        }),
+        });
+        const afterReleaseCash = get().cash;
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'PROJECT_BOX_OFFICE_REVENUE',
+          amountDelta: afterReleaseCash - prevCash,
+          previousCash: prevCash,
+          expectedNewCash: afterReleaseCash,
+          itemId: record.id,
+          itemLabel: `طرح عمل: ${record.title}`,
+        });
+      },
 
-      advanceReleaseTrackingDay: (newsItem, playerMomentum = 1.0, rivalMomentum = 1.0) =>
+      advanceReleaseTrackingDay: (newsItem, playerMomentum = 1.0, rivalMomentum = 1.0) => {
+        const prevCash = get().cash;
         set((state) => {
           const current = state.lastReleasedProject;
           if (!current) return state;
@@ -3739,33 +4244,86 @@ export const useGameStore = create<HyptrixGameState>()(
             lastReleasedProject: updatedLast,
             releasedProjects: updatedProjects,
           };
-        }),
-
-      triggerElectronicTrollsCampaign: (projectId) =>
-        set((state) => {
-          const updatedProjects = state.releasedProjects.map((p) => {
-            if (p.id !== projectId || p.trollsCampaigned) return p;
-            const bonusRev = Math.round(p.totalGrossRevenue * 0.15);
-            return {
-              ...p,
-              audienceScore: Number(Math.min(9.5, p.audienceScore + 0.9).toFixed(1)),
-              totalGrossRevenue: p.totalGrossRevenue + bonusRev,
-              netProfit: p.netProfit + bonusRev,
-              trollsCampaigned: true,
-              viralTrendLabel: 'تريند رقم #1 بعد حملة ترويجية واسعة!',
-            };
+        });
+        const afterCash = get().cash;
+        if (afterCash !== prevCash) {
+          enqueueServerLedgerSync(get, set, {
+            transactionType: 'PROJECT_BOX_OFFICE_REVENUE',
+            amountDelta: afterCash - prevCash,
+            previousCash: prevCash,
+            expectedNewCash: afterCash,
+            itemLabel: `تحديث إيرادات شباك التذاكر: ${get().lastReleasedProject?.title || 'العمل'}`,
           });
-          const updatedLast =
-            state.lastReleasedProject?.id === projectId
-              ? updatedProjects.find((p) => p.id === projectId) || state.lastReleasedProject
-              : state.lastReleasedProject;
+        }
+      },
 
+      triggerElectronicTrollsCampaign: (projectId) => {
+        const TROLLS_CAMPAIGN_COST = 2_000_000;
+        const state = get();
+        const targetProj = state.releasedProjects.find((p) => p.id === projectId);
+        if (!targetProj || targetProj.trollsCampaigned) return;
+
+        const curLabel = getCurrencyLabel(state.worldMarket);
+        if (state.cash < TROLLS_CAMPAIGN_COST) {
+          state.showToast(
+            'السيولة لا تكفي لإطلاق حملة التريند الإلكتروني!',
+            'warning',
+            `تحتاج إلى ${formatMoney(TROLLS_CAMPAIGN_COST)} ${curLabel} من الخزينة لتنفيذ الحملة.`
+          );
+          return;
+        }
+
+        const bonusRev = Math.round(targetProj.totalGrossRevenue * 0.15);
+        const boostedTargetRev = Math.round(
+          (targetProj.targetGrossRevenue || targetProj.totalGrossRevenue) * 1.15
+        );
+        const nextCash = state.cash - TROLLS_CAMPAIGN_COST + bonusRev;
+
+        const updatedProjects = state.releasedProjects.map((p) => {
+          if (p.id !== projectId || p.trollsCampaigned) return p;
           return {
-            releasedProjects: updatedProjects,
-            lastReleasedProject: updatedLast,
-            cash: state.cash + 10_000_000,
+            ...p,
+            audienceScore: Number(Math.min(9.5, p.audienceScore + 0.9).toFixed(1)),
+            totalGrossRevenue: p.totalGrossRevenue + bonusRev,
+            targetGrossRevenue: boostedTargetRev,
+            netProfit: p.netProfit + bonusRev - TROLLS_CAMPAIGN_COST,
+            trollsCampaigned: true,
+            viralTrendLabel: 'تريند رقم #1 بعد حملة ترويجية واسعة!',
           };
-        }),
+        });
+        const updatedLast =
+          state.lastReleasedProject?.id === projectId
+            ? updatedProjects.find((p) => p.id === projectId) || state.lastReleasedProject
+            : state.lastReleasedProject;
+
+        const nextMv = calculateStudioMarketValue({
+          cash: nextCash,
+          reputation: state.reputation,
+          releasedProjects: updatedProjects,
+          marketValueModifier: state.marketValueModifier || 0,
+        });
+
+        set({
+          releasedProjects: updatedProjects,
+          lastReleasedProject: updatedLast,
+          cash: nextCash,
+          marketValue: nextMv,
+        });
+
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'PROJECT_BOX_OFFICE_REVENUE',
+          amountDelta: bonusRev - TROLLS_CAMPAIGN_COST,
+          previousCash: state.cash,
+          expectedNewCash: nextCash,
+          itemId: projectId,
+          itemLabel: `عوائد حملة التريند لـ ${targetProj.title}`,
+        });
+
+        get().showToast(
+          `تم إطلاق حملة التريند لـ «${targetProj.title}» (-2M تكلفة · +${formatMoney(bonusRev)} ${curLabel} عوائد)`,
+          'success'
+        );
+      },
 
       triggerFestivalJuryPR: () =>
         set((state) => ({
@@ -3869,10 +4427,7 @@ export const useGameStore = create<HyptrixGameState>()(
           };
           return {
             aiGeneratedActors: [cleanActor, ...state.aiGeneratedActors],
-            breakingNewsQueue:
-              state.breakingNewsQueue.length === 0
-                ? [newsItem]
-                : state.breakingNewsQueue,
+            breakingNewsQueue: [...state.breakingNewsQueue, newsItem].slice(-6),
             worldHistory: [
               {
                 year: state.currentYear,
@@ -3921,10 +4476,7 @@ export const useGameStore = create<HyptrixGameState>()(
 
           return {
             emergingCompetitors: [...state.emergingCompetitors, enrichedStudio],
-            breakingNewsQueue:
-              state.breakingNewsQueue.length === 0
-                ? [newsItem]
-                : state.breakingNewsQueue,
+            breakingNewsQueue: [...state.breakingNewsQueue, newsItem].slice(-6),
             worldHistory: [
               {
                 year: state.currentYear,
@@ -3976,15 +4528,16 @@ export const useGameStore = create<HyptrixGameState>()(
             };
           }
 
+          const curLabel = getCurrencyLabel(state.worldMarket);
           const impactParts: string[] = [];
           if (mvDelta !== 0) {
             impactParts.push(
-              `${mvDelta > 0 ? '+' : ''}${formatMoney(mvDelta)} ج.م القيمة السوقية`
+              `${mvDelta > 0 ? '+' : ''}${formatMoney(mvDelta)} ${curLabel} القيمة السوقية`
             );
           }
           if (cashDelta !== 0) {
             impactParts.push(
-              `${cashDelta > 0 ? '+' : ''}${formatMoney(cashDelta)} ج.م السيولة`
+              `${cashDelta > 0 ? '+' : ''}${formatMoney(cashDelta)} ${curLabel} السيولة`
             );
           }
           if (repDelta !== 0) {
@@ -3995,7 +4548,7 @@ export const useGameStore = create<HyptrixGameState>()(
           }
           if (event.rivalStudioName && event.rivalNetWorthDelta) {
             impactParts.push(
-              `${event.rivalStudioName}: ${event.rivalNetWorthDelta > 0 ? '+' : ''}${formatMoney(event.rivalNetWorthDelta)} ج.م`
+              `${event.rivalStudioName}: ${event.rivalNetWorthDelta > 0 ? '+' : ''}${formatMoney(event.rivalNetWorthDelta)} ${curLabel}`
             );
           }
 
@@ -4032,6 +4585,7 @@ export const useGameStore = create<HyptrixGameState>()(
       addAiRivalReleases: (rivals, newsHeadline, newsDetail) =>
         set((state) => {
           if (!Array.isArray(rivals) || rivals.length === 0) return state;
+          const curLabel = getCurrencyLabel(state.worldMarket);
           const nextCompDelta = { ...state.competitorNetWorthDelta };
           const nextYearlyRivals = [...(state.yearlyRivalReleases || [])];
 
@@ -4060,7 +4614,7 @@ export const useGameStore = create<HyptrixGameState>()(
             `اشتعال المنافسة: «${topRival.studioName}» تطلق «${topRival.title}» ببطولة ${topRival.leadStarName}!`;
           const detail =
             newsDetail ||
-            `طرحت «${topRival.studioName}» عملها الضخم «${topRival.title}» بتقييم نقدي (${topRival.criticScore}/10) وإيرادات متوقعة ${formatMoney(topRival.boxOfficeRevenue)} ج.م.`;
+            `طرحت «${topRival.studioName}» عملها الضخم «${topRival.title}» بتقييم نقدي (${topRival.criticScore}/10) وإيرادات متوقعة ${formatMoney(topRival.boxOfficeRevenue)} ${curLabel}.`;
 
           const newsItem: WorldBreakingNewsModalItem = {
             id: `news_ai_riv_${Date.now()}`,
@@ -4071,17 +4625,14 @@ export const useGameStore = create<HyptrixGameState>()(
             headline,
             detail,
             highlightName: topRival.studioName,
-            extraStatBadge: `تقييم ${topRival.criticScore}/10 · ${formatMoney(topRival.boxOfficeRevenue)} ج.م`,
+            extraStatBadge: `تقييم ${topRival.criticScore}/10 · ${formatMoney(topRival.boxOfficeRevenue)} ${curLabel}`,
             gameImpactLabel: `عمل منافس في السباق: «${topRival.title}» ببطولة ${topRival.leadStarName}`,
           };
 
           return {
             yearlyRivalReleases: nextYearlyRivals.slice(0, 18),
             competitorNetWorthDelta: nextCompDelta,
-            breakingNewsQueue:
-              state.breakingNewsQueue.length === 0
-                ? [newsItem]
-                : state.breakingNewsQueue,
+            breakingNewsQueue: [...state.breakingNewsQueue, newsItem].slice(-6),
             worldHistory: [
               {
                 year: state.currentYear,
@@ -4119,11 +4670,16 @@ export const useGameStore = create<HyptrixGameState>()(
       },
 
       resetEntireGameAndStartFresh: () => {
+        const currentMarket = get().worldMarket || 'egypt';
+        const profile = getMarketProfile(currentMarket);
+        const primaryReg = profile.primaryRegion;
         if (typeof window !== 'undefined') {
           try {
-            window.localStorage.removeItem('hyptrix_tycoon_state_v2');
+            window.localStorage.removeItem(PRIMARY_STORAGE_KEY);
+            window.localStorage.removeItem(LEGACY_STORAGE_KEY);
             window.localStorage.removeItem(CUSTOM_DB_STORAGE_KEY);
-            idbDel('hyptrix_tycoon_state_v2').catch(() => {});
+            idbDel(PRIMARY_STORAGE_KEY).catch(() => {});
+            idbDel(LEGACY_STORAGE_KEY).catch(() => {});
             idbDel(CUSTOM_DB_STORAGE_KEY).catch(() => {});
           } catch {
             // ignore
@@ -4131,16 +4687,17 @@ export const useGameStore = create<HyptrixGameState>()(
         }
         set({
           studioCreated: false,
-          studioName: 'العقرب ستوديوز',
-          ceoName: 'محمود الصيرفي',
+          hasSelectedMarket: false,
+          studioName: profile.defaultStudioName,
+          ceoName: profile.defaultCeoName,
           logo: {
-            emblem: 'golden_scorpion',
+            emblem: 'winged_lion',
             frame: 'royal_shield',
-            palette: 'amethyst_pearl',
+            palette: 'obsidian_gold',
           },
           founderPerk: 'visionary_director',
-          currentRegion: 'egypt',
-          unlockedRegions: ['egypt'],
+          currentRegion: primaryReg,
+          unlockedRegions: [primaryReg],
           cash: 75_000_000,
           marketValue: 110_000_000,
           marketValueModifier: 0,
@@ -4152,7 +4709,14 @@ export const useGameStore = create<HyptrixGameState>()(
           vipPassExpiresAt: null,
           vipAdProgress: 0,
           activeScreen: 'STUDIO_CREATION',
-          draft: { ...DEFAULT_DRAFT },
+          onboardingTourStatus: 'pending_choice',
+          draft: {
+            ...DEFAULT_DRAFT,
+            ...getDefaultDistributionForMarket(currentMarket, null),
+            title: '',
+            scriptSynopsis: '',
+            selectedDistributionMarkets: [primaryReg],
+          },
           releasedProjects: [],
           lastReleasedProject: null,
           yearlyRivalReleases: [],
@@ -4180,7 +4744,16 @@ export const useGameStore = create<HyptrixGameState>()(
           bankruptcyDeadlineDay: null,
           bankruptcyDebtAmount: 0,
           isBankruptLiquidated: false,
+          lastEmergencyBailoutDay: null,
           ownedStudioAssets: [],
+          starForgeLocksOpened: 0,
+        });
+        enqueueServerLedgerSync(get, set, {
+          transactionType: 'INIT_STUDIO',
+          amountDelta: 0,
+          previousCash: 75_000_000,
+          expectedNewCash: 75_000_000,
+          itemLabel: 'إعادة التأسيس الكاملة للاستوديو',
         });
       },
 
@@ -4189,12 +4762,93 @@ export const useGameStore = create<HyptrixGameState>()(
       setPreferredGroqModel: (model) => set({ preferredGroqModel: model }),
     }),
     {
-      name: 'hyptrix_tycoon_state_v2',
+      name: PRIMARY_STORAGE_KEY,
       storage: createJSONStorage(() => hybridStorage),
+      // Store customDbPatch ONLY in CUSTOM_DB_STORAGE_KEY (avoid doubling localStorage quota)
+      partialize: (state) => {
+        const { customDbPatch: _omittedCustomPatch, ...persisted } = state;
+        void _omittedCustomPatch;
+        return persisted;
+      },
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.isChildModalOpen = false;
           state.isPrWarRoomOpen = false;
+          if (!state.worldMarket) state.worldMarket = 'egypt';
+          if (!state.uiLanguage) state.uiLanguage = 'ar';
+          if (state.studioCreated && !state.hasSelectedMarket) {
+            state.hasSelectedMarket = true;
+          }
+
+          // Hydrate customDbPatch from its dedicated storage slot (single source of truth)
+          if (typeof window !== 'undefined') {
+            try {
+              const rawPatch = window.localStorage.getItem(CUSTOM_DB_STORAGE_KEY);
+              if (rawPatch) {
+                const parsed = JSON.parse(rawPatch) as Partial<MasterDatabase>;
+                const patchMarket = parsed?.meta?.targetMarket;
+                if (!patchMarket || patchMarket === state.worldMarket) {
+                  state.customDbPatch = parsed;
+                }
+              } else if (state.customDbPatch) {
+                // One-time migration for players upgrading from versions that stored customDbPatch inline
+                window.localStorage.setItem(
+                  CUSTOM_DB_STORAGE_KEY,
+                  JSON.stringify(state.customDbPatch)
+                );
+                idbSet(
+                  CUSTOM_DB_STORAGE_KEY,
+                  JSON.stringify(state.customDbPatch)
+                ).catch(() => {});
+              } else {
+                // Async IndexedDB fallback if localStorage lacked the mod key
+                idbGet<string>(CUSTOM_DB_STORAGE_KEY)
+                  .then((idbPatch) => {
+                    if (!idbPatch) return;
+                    const parsed = JSON.parse(idbPatch) as Partial<MasterDatabase>;
+                    const activeMarket = useGameStore.getState().worldMarket || 'egypt';
+                    const patchMarket = parsed?.meta?.targetMarket;
+                    if (!patchMarket || patchMarket === activeMarket) {
+                      useGameStore.setState({ customDbPatch: parsed });
+                    }
+                  })
+                  .catch(() => {});
+              }
+            } catch {
+              // ignore malformed patch
+            }
+          }
+
+          // Ensure draft platform/TV IDs belong to the active market (e.g. Saudi vs Egypt)
+          if (state.draft) {
+            const resolvedDb = getResolvedDatabase(state.customDbPatch, state.worldMarket);
+            const defaults = getDefaultDistributionForMarket(
+              state.worldMarket,
+              state.customDbPatch
+            );
+            const validIds = new Set(resolvedDb.streaming_platforms.map((p) => p.id));
+            if (
+              !state.draft.selectedPlatformId ||
+              !validIds.has(state.draft.selectedPlatformId)
+            ) {
+              state.draft.selectedPlatformId = defaults.selectedPlatformId;
+            }
+            if (
+              !state.draft.selectedTvChannelId ||
+              !validIds.has(state.draft.selectedTvChannelId)
+            ) {
+              state.draft.selectedTvChannelId = defaults.selectedTvChannelId;
+            }
+          }
+
+          // Ensure Star Forge re-locks cleanly if a custom star was already minted in an earlier version
+          if (
+            (state.starForgeLocksOpened || 0) >= 5 &&
+            Array.isArray(state.aiGeneratedActors) &&
+            state.aiGeneratedActors.some((a) => a.isCustomStar)
+          ) {
+            state.starForgeLocksOpened = 0;
+          }
           // Sanitize any legacy cached actors so no "موهبة صاعدة" or AI note remains
           if (Array.isArray(state.aiGeneratedActors)) {
             state.aiGeneratedActors = state.aiGeneratedActors.map((a) => ({
