@@ -3,7 +3,13 @@
 import React, { useState } from 'react';
 import { useGameStore } from '@/lib/store';
 import { GENRES } from '@/lib/db-resolver';
-import { getMarketProfile } from '@/lib/market-profiles';
+import { getCurrencyLabel } from '@/lib/market-profiles';
+import {
+  getLocalizedGenreInfo,
+  getLocalizedMarketInfo,
+  getUiDir,
+  tr,
+} from '@/lib/i18n';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import {
   AgeRating,
@@ -52,33 +58,6 @@ const GENRE_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>
   Shield,
 };
 
-// Dynamic seasons are loaded from getMarketProfile(worldMarket) inside Stage2ProjectSetup.
-
-const AGE_RATINGS: { id: AgeRating; label: string; desc: string }[] = [
-  {
-    id: 'G',
-    label: 'عرض عام (عائلي)',
-    desc: 'يفتح أبواب القاعات والمشاهدات لكل أفراد الأسرة (+12% جمهور)',
-  },
-  {
-    id: '+12',
-    label: 'إرشاد عائلي (+12)',
-    desc: 'التصنيف القياسي المتوازن لأغلب الأعمال الجماهيرية',
-  },
-  {
-    id: '+18',
-    label: 'للبالغين فقط (+18)',
-    desc: 'حرية فنية ونقدية عالية للمشاهد المركبة مقابل تقليص شريحة التذاكر العائلية',
-  },
-];
-
-const EPISODE_COUNTS: { count: SeriesEpisodes; label: string; desc: string }[] = [
-  { count: 7, label: '7 حلقات', desc: 'حكاية مكثفة سريعة الإيقاع للمنصات' },
-  { count: 10, label: '10 حلقات', desc: 'قالب المنصات الرقمية القياسي' },
-  { count: 15, label: '15 حلقة', desc: 'نصف موسم رمضاني مشدود بلا مط أو تطويل' },
-  { count: 30, label: '30 حلقة', desc: 'ملحمة درامية كاملة طوال الشهر بأعلى مشاهدات' },
-];
-
 export function Stage2ProjectSetup() {
   const {
     draft,
@@ -90,27 +69,101 @@ export function Stage2ProjectSetup() {
     worldMarket,
     uiLanguage,
   } = useGameStore();
+
+  const isEn = uiLanguage !== 'ar';
+  const uiDir = getUiDir(uiLanguage);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [genrePickMode, setGenrePickMode] = useState<'primary' | 'secondary'>('primary');
   const [aiGeneratingIdea, setAiGeneratingIdea] = useState(false);
 
-  const marketProfile = getMarketProfile(worldMarket);
-  const currencyLabel = marketProfile.currencyLabel;
-  const filmSeasons = marketProfile.filmSeasons.map((s) => ({
+  const marketInfo = getLocalizedMarketInfo(worldMarket, uiLanguage);
+  const currencyLabel = getCurrencyLabel(worldMarket, uiLanguage);
+
+  const filmSeasons = marketInfo.filmSeasons.map((s) => ({
     id: s.id,
     label: s.label,
     desc: `${s.bonus} · ${s.risk}`,
   }));
+
   const seriesSeasons: { id: SeriesSeason; label: string; desc: string }[] = [
     {
       id: 'ramadan',
-      label: marketProfile.seriesSeasonPrimaryLabel,
-      desc: marketProfile.seriesSeasonPrimarySub,
+      label: marketInfo.seriesSeasonPrimaryLabel,
+      desc: marketInfo.seriesSeasonPrimarySub,
     },
     {
       id: 'off_season',
-      label: marketProfile.seriesSeasonOffLabel,
-      desc: marketProfile.seriesSeasonOffSub,
+      label: marketInfo.seriesSeasonOffLabel,
+      desc: marketInfo.seriesSeasonOffSub,
+    },
+  ];
+
+  const ageRatings: { id: AgeRating; label: string; desc: string }[] = [
+    {
+      id: 'G',
+      label: tr(uiLanguage, 'General Audience (G)', 'عرض عام (عائلي)'),
+      desc: tr(
+        uiLanguage,
+        'Opens theaters & streams to every age group (+12% audience reach)',
+        'يفتح أبواب القاعات والمشاهدات لكل أفراد الأسرة (+12% جمهور)'
+      ),
+    },
+    {
+      id: '+12',
+      label: tr(uiLanguage, 'PG-12 (Family Guidance)', 'إرشاد عائلي (+12)'),
+      desc: tr(
+        uiLanguage,
+        'Balanced mainstream rating ideal for most commercial releases',
+        'التصنيف القياسي المتوازن لأغلب الأعمال الجماهيرية'
+      ),
+    },
+    {
+      id: '+18',
+      label: tr(uiLanguage, 'Adults Only (+18 / R)', 'للبالغين فقط (+18)'),
+      desc: tr(
+        uiLanguage,
+        'Bold creative freedom & critical prestige with a smaller family crowd',
+        'حرية فنية ونقدية عالية للمشاهد المركبة مقابل تقليص شريحة التذاكر العائلية'
+      ),
+    },
+  ];
+
+  const episodeCounts: { count: SeriesEpisodes; label: string; desc: string }[] = [
+    {
+      count: 7,
+      label: tr(uiLanguage, '7 Episodes', '7 حلقات'),
+      desc: tr(
+        uiLanguage,
+        'Tight, fast-paced streaming mini-series',
+        'حكاية مكثفة سريعة الإيقاع للمنصات'
+      ),
+    },
+    {
+      count: 10,
+      label: tr(uiLanguage, '10 Episodes', '10 حلقات'),
+      desc: tr(
+        uiLanguage,
+        'Standard prestige streaming season format',
+        'قالب المنصات الرقمية القياسي'
+      ),
+    },
+    {
+      count: 15,
+      label: tr(uiLanguage, '15 Episodes', '15 حلقة'),
+      desc: tr(
+        uiLanguage,
+        'Punchy half-season drama with zero filler',
+        'نصف موسم رمضاني مشدود بلا مط أو تطويل'
+      ),
+    },
+    {
+      count: 30,
+      label: tr(uiLanguage, '30 Episodes', '30 حلقة'),
+      desc: tr(
+        uiLanguage,
+        'Full month-long flagship saga for maximum viewership',
+        'ملحمة درامية كاملة طوال الشهر بأعلى مشاهدات'
+      ),
     },
   ];
 
@@ -119,8 +172,10 @@ export function Stage2ProjectSetup() {
   const handleGenerateAiScriptIdea = async () => {
     setAiGeneratingIdea(true);
     try {
-      const primaryGenreObj = GENRES.find((g) => g.id === draft.primaryGenre);
-      const secondaryGenreObj = GENRES.find((g) => g.id === draft.secondaryGenre);
+      const primaryGenreInfo = getLocalizedGenreInfo(draft.primaryGenre, uiLanguage);
+      const secondaryGenreInfo = draft.secondaryGenre
+        ? getLocalizedGenreInfo(draft.secondaryGenre, uiLanguage)
+        : null;
       const res = await fetch('/api/generate-event', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,9 +187,9 @@ export function Stage2ProjectSetup() {
           payload: {
             format: draft.format,
             primaryGenre: draft.primaryGenre,
-            primaryGenreName: primaryGenreObj?.name || 'دراما',
+            primaryGenreName: primaryGenreInfo.name,
             secondaryGenre: draft.secondaryGenre || '',
-            secondaryGenreName: secondaryGenreObj?.name || '',
+            secondaryGenreName: secondaryGenreInfo?.name || '',
             ageRating: draft.ageRating,
             currentTitle: draft.title,
             worldMarket,
@@ -150,7 +205,14 @@ export function Stage2ProjectSetup() {
         });
       }
     } catch {
-      showToast('تعذر الاتصال بورشة التأليف حالياً، يمكنك الكتابة مباشرة', 'warning');
+      showToast(
+        tr(
+          uiLanguage,
+          'Could not reach the writers’ room right now — you can write your story directly.',
+          'تعذر الاتصال بورشة التأليف حالياً، يمكنك الكتابة مباشرة'
+        ),
+        'warning'
+      );
     } finally {
       setAiGeneratingIdea(false);
     }
@@ -165,7 +227,14 @@ export function Stage2ProjectSetup() {
       setGenrePickMode('secondary');
     } else {
       if (draft.primaryGenre === genreId) {
-        showToast('هذا التصنيف مختار بالفعل كتصنيف أساسي للعمل', 'info');
+        showToast(
+          tr(
+            uiLanguage,
+            'This genre is already selected as your primary genre.',
+            'هذا التصنيف مختار بالفعل كتصنيف أساسي للعمل'
+          ),
+          'info'
+        );
         return;
       }
       updateDraft({
@@ -182,7 +251,14 @@ export function Stage2ProjectSetup() {
     }
     if (step === 2) {
       if (!draft.primaryGenre) {
-        showToast('يرجى اختيار التصنيف الدرامي الأساسي للعمل أولاً', 'warning');
+        showToast(
+          tr(
+            uiLanguage,
+            'Please choose a primary genre for your project first.',
+            'يرجى اختيار التصنيف الدرامي الأساسي للعمل أولاً'
+          ),
+          'warning'
+        );
         return;
       }
       setStep(3);
@@ -191,11 +267,25 @@ export function Stage2ProjectSetup() {
     }
     if (step === 3) {
       if (!draft.title.trim()) {
-        showToast('يرجى كتابة اسم العمل الفني قبل الانتقال للتعاقدات', 'warning');
+        showToast(
+          tr(
+            uiLanguage,
+            'Please enter a project title before moving to casting & contracts.',
+            'يرجى كتابة اسم العمل الفني قبل الانتقال للتعاقدات'
+          ),
+          'warning'
+        );
         return;
       }
       if ((draft.scriptSynopsis || '').trim().split(/\s+/).length < 5) {
-        showToast('يرجى كتابة ملخص القصة والحبكة الدرامية (5 كلمات على الأقل)', 'warning');
+        showToast(
+          tr(
+            uiLanguage,
+            'Please write a brief plot synopsis (at least 5 words).',
+            'يرجى كتابة ملخص القصة والحبكة الدرامية (5 كلمات على الأقل)'
+          ),
+          'warning'
+        );
         return;
       }
       setActiveScreen('CREW_CAST_CARDS');
@@ -212,11 +302,15 @@ export function Stage2ProjectSetup() {
     }
   };
 
-  const primaryGenreObj = GENRES.find((g) => g.id === draft.primaryGenre);
-  const secondaryGenreObj = GENRES.find((g) => g.id === draft.secondaryGenre);
+  const primaryGenreInfo = draft.primaryGenre
+    ? getLocalizedGenreInfo(draft.primaryGenre, uiLanguage)
+    : null;
+  const secondaryGenreInfo = draft.secondaryGenre
+    ? getLocalizedGenreInfo(draft.secondaryGenre, uiLanguage)
+    : null;
 
   return (
-    <div className="mx-auto max-w-xl space-y-3.5 pb-28" dir="rtl">
+    <div className="mx-auto max-w-xl space-y-3.5 pb-28" dir={uiDir}>
       {/* Unified Royal Cinema Header */}
       <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] px-4 py-3.5 text-[#F9F6F0] shadow-lg">
         <div className="flex items-center gap-3">
@@ -225,12 +319,27 @@ export function Stage2ProjectSetup() {
           </div>
           <div>
             <span className="text-[10px] font-black text-[#D4AF37]">
-              غرفة تطوير المشاريع السينمائية
+              {tr(uiLanguage, 'Project Development Room', 'غرفة تطوير المشاريع السينمائية')}
             </span>
             <h1 className="font-display text-sm font-black text-[#F9F6F0] sm:text-base">
-              {step === 1 && 'تحديد نوع العمل، الموسم، والتصنيف العمري'}
-              {step === 2 && 'اختيار التصنيف الدرامي للعمل'}
-              {step === 3 && 'كتابة عنوان العمل والسيناريو'}
+              {step === 1 &&
+                tr(
+                  uiLanguage,
+                  'Choose Format, Release Season & Age Rating',
+                  'تحديد نوع العمل، الموسم، والتصنيف العمري'
+                )}
+              {step === 2 &&
+                tr(
+                  uiLanguage,
+                  'Select Your Project Genre Mix',
+                  'اختيار التصنيف الدرامي للعمل'
+                )}
+              {step === 3 &&
+                tr(
+                  uiLanguage,
+                  'Write Title & Dramatic Synopsis',
+                  'كتابة عنوان العمل والسيناريو'
+                )}
             </h1>
           </div>
         </div>
@@ -249,13 +358,13 @@ export function Stage2ProjectSetup() {
             {/* Format Selection: Film vs Series */}
             <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 shadow-sm space-y-3">
               <h2 className="font-display text-sm font-black text-[#1A2530]">
-                نوع العمل الفني
+                {tr(uiLanguage, 'Production Format', 'نوع العمل الفني')}
               </h2>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={() => updateDraft({ format: 'film' })}
-                  className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-right transition-all ${
+                  className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-start transition-all ${
                     !isSeries
                       ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6] shadow-xs'
                       : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
@@ -273,20 +382,30 @@ export function Stage2ProjectSetup() {
                     </div>
                     {!isSeries && (
                       <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[9px] font-black text-white">
-                        مختار ✓
+                        {tr(uiLanguage, 'Selected ✓', 'مختار ✓')}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-black text-[#1A2530]">فيلم سينمائي</p>
+                  <p className="text-xs font-black text-[#1A2530]">
+                    {tr(uiLanguage, 'Feature Film', 'فيلم سينمائي')}
+                  </p>
                   <p className="text-[10px] leading-relaxed font-bold text-[#1A2530]/75">
-                    يقاس بـ <strong className="text-[#D91624]">إيرادات شباك التذاكر ({currencyLabel})</strong> وعدد شاشات السينما
+                    {isEn ? (
+                      <>
+                        Driven by <strong className="text-[#D91624]">Box-Office Revenue ({currencyLabel})</strong> and cinema screen count
+                      </>
+                    ) : (
+                      <>
+                        يقاس بـ <strong className="text-[#D91624]">إيرادات شباك التذاكر ({currencyLabel})</strong> وعدد شاشات السينما
+                      </>
+                    )}
                   </p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => updateDraft({ format: 'series' })}
-                  className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-right transition-all ${
+                  className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-start transition-all ${
                     isSeries
                       ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6] shadow-xs'
                       : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
@@ -304,13 +423,23 @@ export function Stage2ProjectSetup() {
                     </div>
                     {isSeries && (
                       <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[9px] font-black text-white">
-                        مختار ✓
+                        {tr(uiLanguage, 'Selected ✓', 'مختار ✓')}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-black text-[#1A2530]">مسلسل درامي</p>
+                  <p className="text-xs font-black text-[#1A2530]">
+                    {tr(uiLanguage, 'Drama Series', 'مسلسل درامي')}
+                  </p>
                   <p className="text-[10px] leading-relaxed font-bold text-[#1A2530]/75">
-                    يقاس بـ <strong className="text-[#D91624]">عدد المشاهدات بالمليون</strong> وعقود المنصات والقنوات
+                    {isEn ? (
+                      <>
+                        Driven by <strong className="text-[#D91624]">Millions of Views</strong> plus streaming & TV broadcast deals
+                      </>
+                    ) : (
+                      <>
+                        يقاس بـ <strong className="text-[#D91624]">عدد المشاهدات بالمليون</strong> وعقود المنصات والقنوات
+                      </>
+                    )}
                   </p>
                 </button>
               </div>
@@ -318,15 +447,15 @@ export function Stage2ProjectSetup() {
               {isSeries && (
                 <div className="pt-2 border-t border-[#D4AF37]/30 space-y-2">
                   <p className="text-xs font-black text-[#1A2530]">
-                    عدد حلقات المسلسل:
+                    {tr(uiLanguage, 'Episode Count:', 'عدد حلقات المسلسل:')}
                   </p>
                   <div className="grid grid-cols-2 gap-2">
-                    {EPISODE_COUNTS.map((ep) => (
+                    {episodeCounts.map((ep) => (
                       <button
                         key={ep.count}
                         type="button"
                         onClick={() => updateDraft({ episodes: ep.count })}
-                        className={`rounded-xl border-2 p-2.5 text-right transition ${
+                        className={`rounded-xl border-2 p-2.5 text-start transition ${
                           draft.episodes === ep.count
                             ? 'border-[#D4AF37] border-b-4 border-b-[#A6841D] bg-[#1A2530] text-[#F9F6F0]'
                             : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
@@ -352,7 +481,9 @@ export function Stage2ProjectSetup() {
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-[#D91624]" />
                 <h2 className="font-display text-sm font-black text-[#1A2530]">
-                  {isSeries ? 'موسم البث التلفزيوني والرقمي' : 'موسم الطرح في شباك التذاكر'}
+                  {isSeries
+                    ? tr(uiLanguage, 'TV & Streaming Broadcast Window', 'موسم البث التلفزيوني والرقمي')
+                    : tr(uiLanguage, 'Theatrical Release Season', 'موسم الطرح في شباك التذاكر')}
                 </h2>
               </div>
 
@@ -363,7 +494,7 @@ export function Stage2ProjectSetup() {
                         key={s.id}
                         type="button"
                         onClick={() => updateDraft({ filmSeason: s.id })}
-                        className={`rounded-2xl border-2 p-3 text-right transition ${
+                        className={`rounded-2xl border-2 p-3 text-start transition ${
                           draft.filmSeason === s.id
                             ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6]'
                             : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
@@ -378,7 +509,7 @@ export function Stage2ProjectSetup() {
                         key={s.id}
                         type="button"
                         onClick={() => updateDraft({ seriesSeason: s.id })}
-                        className={`rounded-2xl border-2 p-3 text-right transition ${
+                        className={`rounded-2xl border-2 p-3 text-start transition ${
                           draft.seriesSeason === s.id
                             ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6]'
                             : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
@@ -396,16 +527,16 @@ export function Stage2ProjectSetup() {
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 text-[#D4AF37]" />
                 <h2 className="font-display text-sm font-black text-[#1A2530]">
-                  التصنيف الرقابي والعمري
+                  {tr(uiLanguage, 'Content & Age Rating', 'التصنيف الرقابي والعمري')}
                 </h2>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                {AGE_RATINGS.map((ar) => (
+                {ageRatings.map((ar) => (
                   <button
                     key={ar.id}
                     type="button"
                     onClick={() => updateDraft({ ageRating: ar.id })}
-                    className={`rounded-2xl border-2 p-3 text-right transition ${
+                    className={`rounded-2xl border-2 p-3 text-start transition ${
                       draft.ageRating === ar.id
                         ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6]'
                         : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
@@ -435,7 +566,7 @@ export function Stage2ProjectSetup() {
                 <button
                   type="button"
                   onClick={() => setGenrePickMode('primary')}
-                  className={`rounded-xl border-2 p-2.5 text-right transition ${
+                  className={`rounded-xl border-2 p-2.5 text-start transition ${
                     genrePickMode === 'primary'
                       ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
                       : 'border-white/15 bg-white/10 text-[#F9F6F0]'
@@ -446,17 +577,19 @@ export function Stage2ProjectSetup() {
                       genrePickMode === 'primary' ? 'text-[#1A2530]/65' : 'text-[#F9F6F0]/70'
                     }`}
                   >
-                    التصنيف الأساسي (إلزامي)
+                    {tr(uiLanguage, 'Primary Genre (Required)', 'التصنيف الأساسي (إلزامي)')}
                   </span>
                   <p className="mt-0.5 text-xs font-black">
-                    {primaryGenreObj ? primaryGenreObj.name : 'اختر الآن'}
+                    {primaryGenreInfo
+                      ? primaryGenreInfo.name
+                      : tr(uiLanguage, 'Select Now', 'اختر الآن')}
                   </p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setGenrePickMode('secondary')}
-                  className={`rounded-xl border-2 p-2.5 text-right transition ${
+                  className={`rounded-xl border-2 p-2.5 text-start transition ${
                     genrePickMode === 'secondary'
                       ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
                       : 'border-white/15 bg-white/10 text-[#F9F6F0]'
@@ -468,7 +601,7 @@ export function Stage2ProjectSetup() {
                         genrePickMode === 'secondary' ? 'text-[#1A2530]/65' : 'text-[#F9F6F0]/70'
                       }`}
                     >
-                      التصنيف الفرعي (اختياري)
+                      {tr(uiLanguage, 'Secondary Genre (Optional)', 'التصنيف الفرعي (اختياري)')}
                     </span>
                     {draft.secondaryGenre && (
                       <span
@@ -478,12 +611,14 @@ export function Stage2ProjectSetup() {
                         }}
                         className="cursor-pointer text-[10px] font-black text-[#D91624] hover:underline"
                       >
-                        إلغاء
+                        {tr(uiLanguage, 'Clear', 'إلغاء')}
                       </span>
                     )}
                   </div>
                   <p className="mt-0.5 text-xs font-black">
-                    {secondaryGenreObj ? secondaryGenreObj.name : 'بدون تصنيف فرعي'}
+                    {secondaryGenreInfo
+                      ? secondaryGenreInfo.name
+                      : tr(uiLanguage, 'No Sub-Genre', 'بدون تصنيف فرعي')}
                   </p>
                 </button>
               </div>
@@ -496,12 +631,13 @@ export function Stage2ProjectSetup() {
                   const isPrimary = draft.primaryGenre === g.id;
                   const isSecondary = draft.secondaryGenre === g.id;
                   const IconComp = GENRE_ICON_MAP[g.icon] || Sparkles;
+                  const locGenre = getLocalizedGenreInfo(g.id as GenreId, uiLanguage);
                   return (
                     <button
                       key={g.id}
                       type="button"
                       onClick={() => handleSelectGenre(g.id as GenreId)}
-                      className={`flex flex-col items-start justify-between rounded-2xl border-2 p-3 text-right transition-all ${
+                      className={`flex flex-col items-start justify-between rounded-2xl border-2 p-3 text-start transition-all ${
                         isPrimary
                           ? 'border-[#D4AF37] border-b-4 border-b-[#9A7A16] bg-[#1A2530] text-[#F9F6F0] shadow-md'
                           : isSecondary
@@ -523,23 +659,23 @@ export function Stage2ProjectSetup() {
                         </div>
                         {isPrimary && (
                           <span className="rounded-lg bg-[#D4AF37] px-2 py-0.5 text-[9px] font-black text-[#1A2530]">
-                            أساسي ✓
+                            {tr(uiLanguage, 'Primary ✓', 'أساسي ✓')}
                           </span>
                         )}
                         {isSecondary && (
                           <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[9px] font-black text-white">
-                            فرعي ✓
+                            {tr(uiLanguage, 'Sub ✓', 'فرعي ✓')}
                           </span>
                         )}
                       </div>
                       <div className="mt-2">
-                        <p className="text-xs font-black">{g.name}</p>
+                        <p className="text-xs font-black">{locGenre.name}</p>
                         <p
                           className={`mt-0.5 text-[10px] leading-relaxed ${
                             isPrimary ? 'text-[#F9F6F0]/75' : 'text-[#1A2530]/65'
                           }`}
                         >
-                          {g.description}
+                          {locGenre.description}
                         </p>
                       </div>
                     </button>
@@ -561,7 +697,9 @@ export function Stage2ProjectSetup() {
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-display text-sm font-black text-[#1A2530]">
-                عنوان {isSeries ? 'المسلسل' : 'الفيلم'} وملخص السيناريو
+                {isSeries
+                  ? tr(uiLanguage, 'Series Title & Script Synopsis', 'عنوان المسلسل وملخص السيناريو')
+                  : tr(uiLanguage, 'Film Title & Script Synopsis', 'عنوان الفيلم وملخص السيناريو')}
               </h2>
               <button
                 type="button"
@@ -574,21 +712,33 @@ export function Stage2ProjectSetup() {
                 ) : (
                   <Wand2 className="h-3.5 w-3.5 text-[#D91624]" />
                 )}
-                <span>ابتكار فكرة وسيناريو درامي</span>
+                <span>
+                  {tr(uiLanguage, 'Pitch Story & Script Idea', 'ابتكار فكرة وسيناريو درامي')}
+                </span>
               </button>
             </div>
 
             <div className="space-y-3">
               <div>
                 <label className="mb-1.5 block text-xs font-black text-[#1A2530]">
-                  عنوان {isSeries ? 'المسلسل الدرامي' : 'الفيلم السينمائي'}
+                  {isSeries
+                    ? tr(uiLanguage, 'Drama Series Title', 'عنوان المسلسل الدرامي')
+                    : tr(uiLanguage, 'Feature Film Title', 'عنوان الفيلم السينمائي')}
                 </label>
                 <input
                   type="text"
                   value={draft.title}
                   onChange={(e) => updateDraft({ title: e.target.value })}
                   placeholder={
-                    isSeries
+                    isEn
+                      ? isSeries
+                        ? worldMarket === 'saudi'
+                          ? 'e.g., Diriyah Nights / The Red Sea Heir'
+                          : 'e.g., The Cairo Pact / Midnight on the Nile'
+                        : worldMarket === 'saudi'
+                        ? 'e.g., The Lost Road to AlUla / Boulevard Heist'
+                        : 'e.g., The Bab El-Khalq Cipher / Night of Masks'
+                      : isSeries
                       ? worldMarket === 'saudi'
                         ? 'مثال: حارة البجيري / ليالي الدرعية'
                         : 'مثال: العهد السري / ليالي المحروسة'
@@ -602,13 +752,21 @@ export function Stage2ProjectSetup() {
 
               <div>
                 <label className="mb-1.5 block text-xs font-black text-[#1A2530]">
-                  ملخص القصة والصراع الدرامي والنهاية
+                  {tr(
+                    uiLanguage,
+                    'Story Synopsis, Central Conflict & Finale Twist',
+                    'ملخص القصة والصراع الدرامي والنهاية'
+                  )}
                 </label>
                 <textarea
                   rows={4}
                   value={draft.scriptSynopsis}
                   onChange={(e) => updateDraft({ scriptSynopsis: e.target.value })}
-                  placeholder="اكتب بداية الأحداث، الصراع الرئيسي الذي يواجه البطل، والمفاجأة الدرامية في النهاية..."
+                  placeholder={tr(
+                    uiLanguage,
+                    'Describe the opening hook, the protagonist’s high-stakes conflict, and the unforgettable climax...',
+                    'اكتب بداية الأحداث، الصراع الرئيسي الذي يواجه البطل، والمفاجأة الدرامية في النهاية...'
+                  )}
                   className="w-full rounded-2xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] p-3.5 text-base leading-relaxed font-bold text-[#1A2530] placeholder:text-[#1A2530]/40 focus:border-[#D4AF37] focus:bg-white focus:outline-hidden"
                 />
               </div>
@@ -625,7 +783,11 @@ export function Stage2ProjectSetup() {
             onClick={handlePrevStep}
             className="flex min-h-[44px] items-center justify-center rounded-xl border border-white/20 bg-white/10 px-5 py-2.5 text-xs font-black text-[#F9F6F0] transition hover:bg-white/20"
           >
-            <span>{step === 1 ? 'عودة للمقر' : 'السابق'}</span>
+            <span>
+              {step === 1
+                ? tr(uiLanguage, 'Back to HQ', 'عودة للمقر')
+                : tr(uiLanguage, 'Previous', 'السابق')}
+            </span>
           </button>
 
           <button
@@ -634,7 +796,11 @@ export function Stage2ProjectSetup() {
             className="flex min-h-[44px] items-center gap-2 rounded-xl border-2 border-[#D4AF37] bg-[#D91624] px-6 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-110 active:translate-y-0.5"
           >
             {step === 3 && <Check className="h-4 w-4" />}
-            <span>{step < 3 ? 'التالي' : 'الانتقال لغرفة التعاقدات'}</span>
+            <span>
+              {step < 3
+                ? tr(uiLanguage, 'Next', 'التالي')
+                : tr(uiLanguage, 'Proceed to Casting & Deals', 'الانتقال لغرفة التعاقدات')}
+            </span>
           </button>
         </div>
       </div>

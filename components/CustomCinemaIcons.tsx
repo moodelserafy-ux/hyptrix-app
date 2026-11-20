@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
+import { useGameStore } from '@/lib/store';
 
 /**
  * 1. Custom Director's Chair SVG (Replaces generic User icon)
@@ -101,8 +102,7 @@ export function ClapperChipButton({
 }
 
 /**
- * 4. Six-Axis Hexagonal Radar Chart (الرادار السداسي للطاقات)
- * Displays: الكاريزما، الأداء الدرامي، الأكشن، الكوميديا، الجماهيرية، شباك التذاكر
+ * 4. Six-Axis Hexagonal Radar Chart
  */
 export interface SixRadarStats {
   charisma: number;
@@ -113,13 +113,18 @@ export interface SixRadarStats {
   boxOffice: number;
 }
 
-const RADAR_AXES: { key: keyof SixRadarStats; label: string; angleDeg: number }[] = [
-  { key: 'charisma', label: 'الكاريزما', angleDeg: -90 },
-  { key: 'acting', label: 'التمثيل', angleDeg: -30 },
-  { key: 'action', label: 'الأكشن', angleDeg: 30 },
-  { key: 'comedy', label: 'الكوميديا', angleDeg: 90 },
-  { key: 'popularity', label: 'الجماهيرية', angleDeg: 150 },
-  { key: 'boxOffice', label: 'الشباك', angleDeg: 210 },
+const RADAR_AXES: {
+  key: keyof SixRadarStats;
+  labelEn: string;
+  labelAr: string;
+  angleDeg: number;
+}[] = [
+  { key: 'charisma', labelEn: 'Charisma', labelAr: 'الكاريزما', angleDeg: -90 },
+  { key: 'acting', labelEn: 'Acting', labelAr: 'التمثيل', angleDeg: -30 },
+  { key: 'action', labelEn: 'Action', labelAr: 'الأكشن', angleDeg: 30 },
+  { key: 'comedy', labelEn: 'Comedy', labelAr: 'الكوميديا', angleDeg: 90 },
+  { key: 'popularity', labelEn: 'Fame', labelAr: 'الجماهيرية', angleDeg: 150 },
+  { key: 'boxOffice', labelEn: 'Box Office', labelAr: 'الشباك', angleDeg: 210 },
 ];
 
 export function HexagonalRadarChartSvg({
@@ -133,6 +138,8 @@ export function HexagonalRadarChartSvg({
   isDiamond?: boolean;
   compact?: boolean;
 }) {
+  const uiLanguage = useGameStore((s) => s.uiLanguage);
+  const isAr = uiLanguage === 'ar';
   const center = size / 2;
   const maxRadius = compact ? size * 0.34 : size * 0.33;
 
@@ -239,7 +246,7 @@ export function HexagonalRadarChartSvg({
               className="fill-[#1A2530] font-bold"
               style={{ fontSize: compact ? '8.5px' : '10px' }}
             >
-              {ax.label} ({val})
+              {isAr ? ax.labelAr : ax.labelEn} ({val})
             </text>
           </g>
         );
@@ -262,6 +269,8 @@ export function Fut3DTiltCard({
   isCustomStar?: boolean;
   className?: string;
 }) {
+  const uiLanguage = useGameStore((s) => s.uiLanguage);
+  const isAr = uiLanguage === 'ar';
   const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0 });
   const isDiamond = Boolean(isCustomStar || tier === 'DIAMOND');
 
@@ -301,13 +310,17 @@ export function Fut3DTiltCard({
       {/* Top FUT Shield Header Ribbon */}
       {isDiamond && (
         <div className="flex items-center justify-between bg-gradient-to-r from-sky-900 via-indigo-950 to-sky-900 px-3.5 py-1 text-[10px] font-black tracking-wider text-cyan-200 mb-2 rounded-xl">
-          <span>💎 CUSTOM STAR · موهبة حصرية</span>
+          <span>
+            {isAr ? '💎 CUSTOM STAR · موهبة حصرية' : '💎 CUSTOM STAR · EXCLUSIVE TALENT'}
+          </span>
           <span className="font-typewriter text-amber-300">DIAMOND 99</span>
         </div>
       )}
       {!isDiamond && tier === 'S' && (
         <div className="flex items-center justify-between bg-gradient-to-r from-[#1A2530] via-[#2C3E50] to-[#1A2530] px-3.5 py-1 text-[10px] font-black text-[#D4AF37] mb-2 rounded-xl">
-          <span>★ نجم شباك أسطوري · فئة S</span>
+          <span>
+            {isAr ? '★ نجم شباك أسطوري · فئة S' : '★ LEGENDARY BOX-OFFICE ICON · S-TIER'}
+          </span>
           <span className="font-typewriter">GOLD ICON</span>
         </div>
       )}

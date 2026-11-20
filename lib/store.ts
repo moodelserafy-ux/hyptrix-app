@@ -44,6 +44,7 @@ import {
 } from './market-profiles';
 
 export const DAYS_PER_GAME_YEAR = 120; // 10 game days per month × 12 months
+export const STAR_FORGE_REQUIRED_LOCKS = 2; // Reduced from 5 → 2 to eliminate any ad-farming friction
 
 // Serialized FIFO queue for server ledger synchronization so rapid sequential
 // cash actions (e.g., film release -> daily revenue -> asset purchase) always
@@ -722,8 +723,12 @@ export type ActiveStageScreen =
  * Maps a 120-day game year (10 game ticks per month × 12 months) into a realistic calendar date
  * such as "9 نوفمبر 2037" (Never prints raw cumulative day numbers like "اليوم 1421").
  */
-export function formatGameDate(gameDay: number, year: number): string {
-  const months = [
+export function formatGameDate(
+  gameDay: number,
+  year: number,
+  uiLanguage: UiLanguageId = 'ar'
+): string {
+  const monthsAr = [
     'يناير',
     'فبراير',
     'مارس',
@@ -737,11 +742,28 @@ export function formatGameDate(gameDay: number, year: number): string {
     'نوفمبر',
     'ديسمبر',
   ];
+  const monthsEn = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   const dayInYear = Math.max(0, (gameDay - 1) % DAYS_PER_GAME_YEAR); // 0..119
   const monthIdx = Math.min(11, Math.floor(dayInYear / 10));
   const stepInMonth = dayInYear % 10; // 0..9
   const calendarDay = Math.min(30, stepInMonth * 3 + 3); // 3, 6, 9, 12, 15, 18, 21, 24, 27, 30
-  return `${calendarDay} ${months[monthIdx]} ${year}`;
+  if (uiLanguage === 'en') {
+    return `${monthsEn[monthIdx]} ${calendarDay}, ${year}`;
+  }
+  return `${calendarDay} ${monthsAr[monthIdx]} ${year}`;
 }
 
 export function getDaysRemainingUntilAnnualAwards(gameDay: number): number {
@@ -1533,6 +1555,7 @@ export function buildThreeSeasonFestivals(params: {
 
 export interface NeelyoGameState {
   uiLanguage: UiLanguageId;
+  hasManuallySelectedLanguage: boolean;
   worldMarket: WorldMarketId;
   hasSelectedMarket: boolean;
   studioCreated: boolean;
@@ -1622,6 +1645,7 @@ export interface NeelyoGameState {
   ) => void;
   dismissToast: () => void;
   selectLanguageAndMarket: (language: UiLanguageId, market: WorldMarketId) => void;
+  setUiLanguage: (language: UiLanguageId, isManual?: boolean) => void;
   openMarketSelector: () => void;
   initializeStudio: (params: {
     studioName: string;
@@ -1754,12 +1778,13 @@ function getDefaultDistributionForMarket(
 export const useGameStore = create<NeelyoGameState>()(
   persist(
     (set, get) => ({
-      uiLanguage: 'ar',
+      uiLanguage: 'en',
+      hasManuallySelectedLanguage: false,
       worldMarket: 'egypt',
       hasSelectedMarket: false,
       studioCreated: false,
-      studioName: 'العقرب ستوديوز',
-      ceoName: 'محمود الصيرفي',
+      studioName: 'Scorpion Studios',
+      ceoName: 'Mahmoud El-Seirafy',
       logo: {
         emblem: 'winged_lion',
         frame: 'royal_shield',
@@ -1828,7 +1853,10 @@ export const useGameStore = create<NeelyoGameState>()(
 
       unlockNextStarForgeLockWithAd: () =>
         set((state) => {
-          const nextLocks = Math.min(5, (state.starForgeLocksOpened || 0) + 1);
+          const nextLocks = Math.min(
+            STAR_FORGE_REQUIRED_LOCKS,
+            (state.starForgeLocksOpened || 0) + 1
+          );
           return {
             starForgeLocksOpened: nextLocks,
           };
@@ -1882,11 +1910,14 @@ export const useGameStore = create<NeelyoGameState>()(
           itemId: crisisId,
           itemLabel: 'حسم أزمة بلاتوه عاجلة (8M)',
         });
-        const curLabel = getCurrencyLabel(state.worldMarket);
+        const isEn = state.uiLanguage === 'en';
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
         get().showToast(
-          `تم حسم أزمة البلاتوه فورياً مقابل 8 مليون ${curLabel} من الخزينة!`,
+          isEn
+            ? `On-set crisis resolved immediately for 8M ${curLabel}!`
+            : `تم حسم أزمة البلاتوه فورياً مقابل 8 مليون ${curLabel} من الخزينة!`,
           'success',
-          '+3 جودة فنية · +3 ضجة جماهيرية'
+          isEn ? '+3 Quality · +3 Audience Buzz' : '+3 جودة فنية · +3 ضجة جماهيرية'
         );
       },
 
@@ -1894,7 +1925,8 @@ export const useGameStore = create<NeelyoGameState>()(
         const state = get();
         const crisis = state.draft.crises.find((c) => c.id === crisisId);
         if (!crisis || crisis.resolved) return;
-        const curLabel = getCurrencyLabel(state.worldMarket);
+        const isEn = state.uiLanguage === 'en';
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
         set((cur) => ({
           draft: {
             ...cur.draft,
@@ -1906,13 +1938,18 @@ export const useGameStore = create<NeelyoGameState>()(
           },
         }));
         get().showToast(
-          `تمت التسوية الإعلامية المجانية لأزمة البلاتوه بنجاح (وفّرت 8 مليون ${curLabel})!`,
+          isEn
+            ? `Free PR settlement resolved the set crisis (saved 8M ${curLabel})!`
+            : `تمت التسوية الإعلامية المجانية لأزمة البلاتوه بنجاح (وفّرت 8 مليون ${curLabel})!`,
           'magic',
-          `تكلفة 0 ${curLabel} · +4 جودة فنية · +5 ضجة جماهيرية`
+          isEn
+            ? `Cost: 0 ${curLabel} · +4 Quality · +5 Audience Buzz`
+            : `تكلفة 0 ${curLabel} · +4 جودة فنية · +5 ضجة جماهيرية`
         );
       },
 
       unlockSyndicateMediationWithAd: (talentId, talentName) => {
+        const isEn = get().uiLanguage === 'en';
         set((state) => {
           const updatedOffers = { ...state.draft.talentOffers };
           if (updatedOffers[talentId]) {
@@ -1934,9 +1971,13 @@ export const useGameStore = create<NeelyoGameState>()(
           };
         });
         get().showToast(
-          `تدخلت نقابة المهن التمثيلية وتم فتح جولة مفاوضات أخيرة مع «${talentName}»!`,
+          isEn
+            ? `Actors' Guild mediation unlocked a final round of talks with "${talentName}"!`
+            : `تدخلت نقابة المهن التمثيلية وتم فتح جولة مفاوضات أخيرة مع «${talentName}»!`,
           'magic',
-          'تمت تهدئة الخلاف ورفع فرص قبول العرض الجديد بنسبة +25%'
+          isEn
+            ? 'Tensions eased and next offer acceptance chance boosted +25%'
+            : 'تمت تهدئة الخلاف ورفع فرص قبول العرض الجديد بنسبة +25%'
         );
       },
 
@@ -2003,25 +2044,35 @@ export const useGameStore = create<NeelyoGameState>()(
           itemLabel: `توزيع دولي إضافي (+25%): ${target.title}`,
         });
 
-        const curLabel = getCurrencyLabel(state.worldMarket);
+        const isEn = state.uiLanguage === 'en';
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
         get().showToast(
-          `تم تفعيل صفقة التوزيع الدولي الإضافي (+25% أرباح) لـ «${target.title}»!`,
+          isEn
+            ? `International distribution boost (+25% revenue) activated for "${target.title}"!`
+            : `تم تفعيل صفقة التوزيع الدولي الإضافي (+25% أرباح) لـ «${target.title}»!`,
           'magic',
-          `+${formatMoney(bonusAmount)} ${curLabel} أرباح توزيع دولي دخلت خزينة الاستوديو فوراً`
+          isEn
+            ? `+${formatMoney(bonusAmount)} ${curLabel} overseas profits wired straight to your treasury`
+            : `+${formatMoney(bonusAmount)} ${curLabel} أرباح توزيع دولي دخلت خزينة الاستوديو فوراً`
         );
       },
 
       claimEmergencyInvestorBailoutWithAd: (customNeededAmount) => {
         const state = get();
-        const curLabel = getCurrencyLabel(state.worldMarket);
+        const isEn = state.uiLanguage === 'en';
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
         const isInLiquidityEmergency =
           state.cash <= 10_000_000 || state.bankruptcyDeadlineDay !== null;
 
         if (!isInLiquidityEmergency) {
           state.showToast(
-            'تمويل الإنقاذ متاح فقط في حالات السيولة الحرجة!',
+            isEn
+              ? 'Emergency bailout is only available during critical liquidity!'
+              : 'تمويل الإنقاذ متاح فقط في حالات السيولة الحرجة!',
             'warning',
-            `يُفتح هذا الخيار تلقائياً عندما ينخفض رصيد الخزينة إلى 10 مليون ${curLabel} أو أقل.`
+            isEn
+              ? `Unlocks automatically when studio cash drops to 10M ${curLabel} or below.`
+              : `يُفتح هذا الخيار تلقائياً عندما ينخفض رصيد الخزينة إلى 10 مليون ${curLabel} أو أقل.`
           );
           return;
         }
@@ -2035,9 +2086,13 @@ export const useGameStore = create<NeelyoGameState>()(
             BAILOUT_COOLDOWN_DAYS -
             (state.gameDay - state.lastEmergencyBailoutDay);
           state.showToast(
-            `تمويل الإنقاذ تحت فترة التبريد (${remaining} يوماً متبقياً)`,
+            isEn
+              ? `Bailout on cooldown (${remaining} days remaining)`
+              : `تمويل الإنقاذ تحت فترة التبريد (${remaining} يوماً متبقياً)`,
             'warning',
-            'يمكن تفعيل تمويل إنقاذ المستثمرين مرة واحدة كل 30 يوماً فقط.'
+            isEn
+              ? 'Emergency investor bailout can be triggered once every 30 game days.'
+              : 'يمكن تفعيل تمويل إنقاذ المستثمرين مرة واحدة كل 30 يوماً فقط.'
           );
           return;
         }
@@ -2066,7 +2121,9 @@ export const useGameStore = create<NeelyoGameState>()(
           worldHistory: [
             {
               year: cur.currentYear,
-              eventText: `تمويل إنقاذ استثماري عاجل بقيمة ${formatMoney(bailoutAmount)} ${curLabel} أنقذ شركة «${cur.studioName}» من الإفلاس وأعاد تدوير عجلة الإنتاج.`,
+              eventText: isEn
+                ? `Emergency investor bailout of ${formatMoney(bailoutAmount)} ${curLabel} rescued "${cur.studioName}" from bankruptcy and restarted production.`
+                : `تمويل إنقاذ استثماري عاجل بقيمة ${formatMoney(bailoutAmount)} ${curLabel} أنقذ شركة «${cur.studioName}» من الإفلاس وأعاد تدوير عجلة الإنتاج.`,
               category: 'milestone',
             },
             ...cur.worldHistory,
@@ -2079,13 +2136,17 @@ export const useGameStore = create<NeelyoGameState>()(
           previousCash: state.cash,
           expectedNewCash: nextCash,
           itemId: `bailout_day_${state.gameDay}`,
-          itemLabel: 'تمويل إنقاذ استثماري عاجل',
+          itemLabel: 'Emergency Investor Bailout',
         });
 
         get().showToast(
-          `تم ضخ تمويل إنقاذ استثماري بقيمة ${formatMoney(bailoutAmount)} ${curLabel} في الخزينة!`,
+          isEn
+            ? `Emergency bailout of ${formatMoney(bailoutAmount)} ${curLabel} wired to your treasury!`
+            : `تم ضخ تمويل إنقاذ استثماري بقيمة ${formatMoney(bailoutAmount)} ${curLabel} في الخزينة!`,
           'magic',
-          'تمت تسوية المديونية بالكامل وإلغاء إنذار الإفلاس'
+          isEn
+            ? 'All debts settled and bankruptcy warning cleared'
+            : 'تمت تسوية المديونية بالكامل وإلغاء إنذار الإفلاس'
         );
       },
 
@@ -2165,13 +2226,18 @@ export const useGameStore = create<NeelyoGameState>()(
 
       spendForStarForgeUpgrade: (cashCost, _gemCost) => {
         const state = get();
-        const curLabel = getCurrencyLabel(state.worldMarket);
+        const isEn = state.uiLanguage === 'en';
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
         const effectiveCash = Math.max(0, cashCost);
         if (effectiveCash > 0 && state.cash < effectiveCash) {
           state.showToast(
-            'رصيد الخزينة لا يكفي لترقية هذه الطاقة!',
+            isEn
+              ? 'Not enough studio cash for this stat upgrade!'
+              : 'رصيد الخزينة لا يكفي لترقية هذه الطاقة!',
             'warning',
-            `تحتاج إلى ${formatMoney(effectiveCash)} ${curLabel} أو يمكنك تفعيل التدريب المجاني عبر الإعلان.`
+            isEn
+              ? `Requires ${formatMoney(effectiveCash)} ${curLabel}, or use the free Training Camp ad.`
+              : `تحتاج إلى ${formatMoney(effectiveCash)} ${curLabel} أو يمكنك تفعيل التدريب المجاني عبر الإعلان.`
           );
           return false;
         }
@@ -2185,7 +2251,7 @@ export const useGameStore = create<NeelyoGameState>()(
             amountDelta: -effectiveCash,
             previousCash: state.cash,
             expectedNewCash: nextCash,
-            itemLabel: 'ترقية طاقات غرفة صناعة النجوم',
+            itemLabel: 'Star Forge Stat Upgrade',
           });
         }
         return true;
@@ -2204,12 +2270,13 @@ export const useGameStore = create<NeelyoGameState>()(
           amountDelta: safeAmount,
           previousCash: prevCash,
           expectedNewCash: nextCash,
-          itemLabel: 'استرداد رصيد غرفة صناعة النجوم',
+          itemLabel: 'Star Forge Refund',
         });
       },
 
       createCustomVipStar: (actor) =>
         set((state) => {
+          const isEn = state.uiLanguage === 'en';
           const customStar: ActorItem = {
             ...actor,
             isCustomStar: true,
@@ -2217,7 +2284,9 @@ export const useGameStore = create<NeelyoGameState>()(
             isRisingDiscovery: false,
             status: 'active',
           };
-          const headline = `ولادة أسطورة سينمائية: «${state.studioName}» تكشف رسمياً عن نجمها الحصري «${customStar.name}» بكارت ألماظ وتقييم ${customStar.stats.overall}!`;
+          const headline = isEn
+            ? `A Star Is Born: "${state.studioName}" officially unveils exclusive diamond-tier star "${customStar.name}" (${customStar.stats.overall} OVR)!`
+            : `ولادة أسطورة سينمائية: «${state.studioName}» تكشف رسمياً عن نجمها الحصري «${customStar.name}» بكارت ألماظ وتقييم ${customStar.stats.overall}!`;
           return {
             starForgeLocksOpened: 0,
             aiGeneratedActors: [
@@ -2873,6 +2942,11 @@ export const useGameStore = create<NeelyoGameState>()(
         const safeMarket: WorldMarketId = market === 'saudi' ? 'saudi' : 'egypt';
         const profile = getMarketProfile(safeMarket);
         const primaryReg = profile.primaryRegion;
+        const isEn = language === 'en';
+        const defaultStudioEn =
+          safeMarket === 'saudi' ? 'Al-Qimmah Pictures' : 'Scorpion Studios';
+        const defaultCeoEn =
+          safeMarket === 'saudi' ? 'Turki Al-Mansour' : 'Mahmoud El-Seirafy';
         set((state) => {
           const patchTarget = state.customDbPatch?.meta?.targetMarket;
           const keepPatch = !patchTarget || patchTarget === safeMarket;
@@ -2887,12 +2961,13 @@ export const useGameStore = create<NeelyoGameState>()(
           const nextPatch = keepPatch ? state.customDbPatch : null;
           return {
             uiLanguage: language,
+            hasManuallySelectedLanguage: true,
             worldMarket: safeMarket,
             hasSelectedMarket: true,
             studioCreated: false,
             activeScreen: 'STUDIO_CREATION',
-            studioName: profile.defaultStudioName,
-            ceoName: profile.defaultCeoName,
+            studioName: isEn ? defaultStudioEn : profile.defaultStudioName,
+            ceoName: isEn ? defaultCeoEn : profile.defaultCeoName,
             currentRegion: primaryReg,
             unlockedRegions: [primaryReg],
             customDbPatch: nextPatch,
@@ -2907,6 +2982,14 @@ export const useGameStore = create<NeelyoGameState>()(
           };
         });
       },
+
+      setUiLanguage: (language, isManual = true) =>
+        set((state) => ({
+          uiLanguage: language,
+          hasManuallySelectedLanguage: isManual
+            ? true
+            : state.hasManuallySelectedLanguage,
+        })),
 
       openMarketSelector: () => {
         get().resetEntireGameAndStartFresh();
@@ -4240,12 +4323,18 @@ export const useGameStore = create<NeelyoGameState>()(
 
       claimReferralReward: (type, amount = 15_000_000) => {
         const prevCash = get().cash;
+        const isEn = get().uiLanguage === 'en';
         if (type === 'star_lock') {
           set((state) => ({
-            starForgeLocksOpened: Math.min(5, (state.starForgeLocksOpened || 0) + 1),
+            starForgeLocksOpened: Math.min(
+              STAR_FORGE_REQUIRED_LOCKS,
+              (state.starForgeLocksOpened || 0) + 1
+            ),
             activeToast: {
               id: `ref_lock_${Date.now()}`,
-              message: 'تم تفعيل مكافأة الدعوة! فُتح قفل مجاني في غرفة صناعة النجوم ⭐',
+              message: isEn
+                ? 'Referral reward unlocked! 1 free golden lock opened in the Star Forge ⭐'
+                : 'تم تفعيل مكافأة الدعوة! فُتح قفل مجاني في غرفة صناعة النجوم ⭐',
               type: 'success',
             },
           }));
@@ -4266,7 +4355,9 @@ export const useGameStore = create<NeelyoGameState>()(
             marketValue: nextMarketVal,
             activeToast: {
               id: `ref_cash_${Date.now()}`,
-              message: `مكافأة الدعوة: +${formatMoney(bonus)} ${getCurrencyLabel(state.worldMarket)} أُضيفت لخزينة الاستوديو!`,
+              message: isEn
+                ? `Referral Bonus: +${formatMoney(bonus)} ${getCurrencyLabel(state.worldMarket, 'en')} added to your treasury!`
+                : `مكافأة الدعوة: +${formatMoney(bonus)} ${getCurrencyLabel(state.worldMarket, 'ar')} أُضيفت لخزينة الاستوديو!`,
               type: 'success',
             },
           };
@@ -4861,9 +4952,12 @@ export const useGameStore = create<NeelyoGameState>()(
           state.isChildModalOpen = false;
           state.isPrWarRoomOpen = false;
           if (!state.worldMarket) state.worldMarket = 'egypt';
-          if (!state.uiLanguage) state.uiLanguage = 'ar';
+          if (!state.uiLanguage) state.uiLanguage = 'en';
           if (state.studioCreated && !state.hasSelectedMarket) {
             state.hasSelectedMarket = true;
+          }
+          if ((state.starForgeLocksOpened || 0) > STAR_FORGE_REQUIRED_LOCKS) {
+            state.starForgeLocksOpened = STAR_FORGE_REQUIRED_LOCKS;
           }
 
           // Hydrate customDbPatch from its dedicated storage slot (single source of truth)
@@ -4929,7 +5023,7 @@ export const useGameStore = create<NeelyoGameState>()(
 
           // Ensure Star Forge re-locks cleanly if a custom star was already minted in an earlier version
           if (
-            (state.starForgeLocksOpened || 0) >= 5 &&
+            (state.starForgeLocksOpened || 0) >= STAR_FORGE_REQUIRED_LOCKS &&
             Array.isArray(state.aiGeneratedActors) &&
             state.aiGeneratedActors.some((a) => a.isCustomStar)
           ) {

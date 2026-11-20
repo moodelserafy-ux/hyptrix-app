@@ -7,7 +7,7 @@ import {
   getLiveActorsWithEvolution,
   getStudioAssetBenefits,
 } from '@/lib/store';
-import { GENRES, getResolvedDatabase } from '@/lib/db-resolver';
+import { getResolvedDatabase } from '@/lib/db-resolver';
 import {
   calculateFinancialsAndQuality,
   generateRivalReleases,
@@ -15,11 +15,19 @@ import {
 } from '@/lib/game-engine';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import {
-  getMarketProfile,
-  getMarketConfigsForWorld,
+  getCurrencyLabel,
   getPrimaryMarketRegion,
   getMarketAiContext,
 } from '@/lib/market-profiles';
+import {
+  getLocalizedExpansionMarkets,
+  getLocalizedGenreInfo,
+  getLocalizedMarketInfo,
+  getUiDir,
+  isEnglishLang,
+  localizeEntityName,
+  tr,
+} from '@/lib/i18n';
 import { AnimatedCinemaPremiereGraphic } from '@/components/CinematicGraphicsScene';
 import {
   Megaphone,
@@ -31,7 +39,6 @@ import {
   Globe,
   Eye,
   Check,
-  Zap,
   Clock,
   Bot,
   Trophy,
@@ -136,11 +143,19 @@ export function Stage5ReleaseSimulation() {
     uiLanguage,
   } = useGameStore();
 
-  const marketProfile = useMemo(() => getMarketProfile(worldMarket), [worldMarket]);
-  const marketConfigs = useMemo(() => getMarketConfigsForWorld(worldMarket), [worldMarket]);
+  const isEn = isEnglishLang(uiLanguage);
+  const uiDir = getUiDir(uiLanguage);
+  const localizedMarket = useMemo(
+    () => getLocalizedMarketInfo(worldMarket, uiLanguage),
+    [worldMarket, uiLanguage]
+  );
+  const marketConfigs = useMemo(
+    () => getLocalizedExpansionMarkets(worldMarket, uiLanguage),
+    [worldMarket, uiLanguage]
+  );
   const primaryRegion = getPrimaryMarketRegion(worldMarket);
   const marketAiCtx = getMarketAiContext(worldMarket);
-  const currencyLabel = marketProfile.currencyLabel;
+  const currencyLabel = getCurrencyLabel(worldMarket, uiLanguage);
 
   const db = useMemo(
     () => getResolvedDatabase(customDbPatch, worldMarket),
@@ -201,9 +216,9 @@ export function Stage5ReleaseSimulation() {
     ? draft.selectedTvChannelId
     : tvChannels[0]?.id || null;
 
-  const primaryGenreObj = useMemo(
-    () => GENRES.find((g) => g.id === draft.primaryGenre),
-    [draft.primaryGenre]
+  const primaryGenreLocalized = useMemo(
+    () => getLocalizedGenreInfo(draft.primaryGenre, uiLanguage),
+    [draft.primaryGenre, uiLanguage]
   );
 
   const estimatedDistributionFees = useMemo(() => {
@@ -282,7 +297,9 @@ export function Stage5ReleaseSimulation() {
   const handleLaunchRelease = async () => {
     if (isOverTotalLiquidity) {
       showToast(
-        `السيولة الحالية (${formatMoney(cash)} ${currencyLabel}) لا تكفي لتغطية التكلفة الإجمالية للعمل (${formatMoney(totalLaunchCost)} ${currencyLabel}) — تحتاج ${formatMoney(liquidityDeficit)} ${currencyLabel} إضافية أو تخفيض الدعاية/التوزيع!`,
+        isEn
+          ? `Available cash (${formatMoney(cash)} ${currencyLabel}) cannot cover total launch cost (${formatMoney(totalLaunchCost)} ${currencyLabel}) — you need ${formatMoney(liquidityDeficit)} ${currencyLabel} more or lower marketing/distribution spend.`
+          : `السيولة الحالية (${formatMoney(cash)} ${currencyLabel}) لا تكفي لتغطية التكلفة الإجمالية للعمل (${formatMoney(totalLaunchCost)} ${currencyLabel}) — تحتاج ${formatMoney(liquidityDeficit)} ${currencyLabel} إضافية أو تخفيض الدعاية/التوزيع!`,
         'warning'
       );
       return;
@@ -304,10 +321,14 @@ export function Stage5ReleaseSimulation() {
         db.crew.find((c) => c.id === draft.directorId) ||
         db.crew.find((c) => c.role === 'director')!;
       const coDirector = selectedDirectors[1] || null;
+      const listJoiner = isEn ? ' & ' : ' و';
+      const localizedDirectorName = localizeEntityName(director.name, uiLanguage);
       const allDirectorsDisplayName =
         selectedDirectors.length > 0
-          ? selectedDirectors.map((d) => d.name).join(' و')
-          : director.name;
+          ? selectedDirectors
+              .map((d) => localizeEntityName(d.name, uiLanguage))
+              .join(listJoiner)
+          : localizedDirectorName;
       const dop = db.crew.find((c) => c.id === draft.dopId) || null;
       const composer = db.crew.find((c) => c.id === draft.composerId) || null;
       const vfx = db.crew.find((c) => c.id === draft.vfxId) || null;
@@ -319,6 +340,16 @@ export function Stage5ReleaseSimulation() {
         draft.supportingActorIds.includes(a.id)
       );
       const cameos = liveActors.filter((a) => draft.cameoActorIds.includes(a.id));
+
+      const localizedLeadNames = leads.map((a) =>
+        localizeEntityName(a.name, uiLanguage)
+      );
+      const localizedAntagonistName = antagonist
+        ? localizeEntityName(antagonist.name, uiLanguage)
+        : '';
+      const localizedCameoNames = cameos.map((a) =>
+        localizeEntityName(a.name, uiLanguage)
+      );
 
       const signedAllIds = Array.from(
         new Set(
@@ -397,7 +428,10 @@ export function Stage5ReleaseSimulation() {
             (a.tier === 'S' || a.tier === 'A')
         )
         .slice(0, 12)
-        .map((a) => ({ name: a.name, tier: a.tier }));
+        .map((a) => ({
+          name: localizeEntityName(a.name, uiLanguage),
+          tier: a.tier,
+        }));
 
       let aiEval: any = null;
       try {
@@ -414,12 +448,12 @@ export function Stage5ReleaseSimulation() {
               synopsis: draft.scriptSynopsis,
               format: draft.format,
               episodes: draft.episodes,
-              genre: primaryGenreObj?.name || 'دراما',
-              primaryGenre: primaryGenreObj?.name || 'دراما',
-              directorName: director.name,
-              leadName: leads.map((a) => a.name).join(' و'),
-              leadActors: leads.map((a) => a.name),
-              antagonistName: antagonist?.name || '',
+              genre: primaryGenreLocalized.name,
+              primaryGenre: primaryGenreLocalized.name,
+              directorName: allDirectorsDisplayName,
+              leadName: localizedLeadNames.join(listJoiner),
+              leadActors: localizedLeadNames,
+              antagonistName: localizedAntagonistName,
               studioName,
               ceoName,
               hypeScore: draft.hypeScore,
@@ -428,7 +462,7 @@ export function Stage5ReleaseSimulation() {
               expectedCriticScore: prelimFin.expectedCriticScore,
               expectedAudienceScore: prelimFin.expectedAudienceScore,
               competitorStudios: allCompetitors.slice(0, 6).map((s) => ({
-                name: s.name,
+                name: localizeEntityName(s.name, uiLanguage),
                 specialty: s.specialty,
               })),
               availableStars: availableRivalStars,
@@ -535,7 +569,8 @@ export function Stage5ReleaseSimulation() {
         currentYear + releasedProjects.length,
         draft.format,
         worldMarket,
-        marketDirectors
+        marketDirectors,
+        uiLanguage
       );
 
       const rawRivals =
@@ -554,11 +589,30 @@ export function Stage5ReleaseSimulation() {
                   : fb?.trajectory || 'steady';
               return {
                 id: `ai_riv_${Date.now()}_${idx}`,
-                studioName: String(r.studioName || fb?.studioName || 'استوديو منافس'),
-                title: String(r.title || fb?.title || 'عمل منافس'),
-                genre: String(r.genre || primaryGenreObj?.name || 'دراما'),
-                leadStarName: String(r.leadStarName || fb?.leadStarName || 'نجم صف أول'),
-                directorName: String(r.directorName || fb?.directorName || marketDirectors[idx % Math.max(1, marketDirectors.length)]?.name || ''),
+                studioName: String(
+                  r.studioName ||
+                    fb?.studioName ||
+                    (isEn ? 'Rival Studio' : 'استوديو منافس')
+                ),
+                title: String(
+                  r.title ||
+                    fb?.title ||
+                    (isEn ? 'Rival Feature' : 'عمل منافس')
+                ),
+                genre: String(r.genre || primaryGenreLocalized.name),
+                leadStarName: String(
+                  r.leadStarName ||
+                    fb?.leadStarName ||
+                    (isEn ? 'A-List Lead' : 'نجم صف أول')
+                ),
+                directorName: String(
+                  r.directorName ||
+                    fb?.directorName ||
+                    localizeEntityName(
+                      marketDirectors[idx % Math.max(1, marketDirectors.length)]?.name || '',
+                      uiLanguage
+                    )
+                ),
                 boxOfficeRevenue: Math.max(
                   24_000_000,
                   Math.min(175_000_000, Number(r.boxOfficeRevenue) || fb?.boxOfficeRevenue || 76_000_000)
@@ -649,28 +703,114 @@ export function Stage5ReleaseSimulation() {
           ? Number(Math.max(0.9, targetViewershipMillions * playerOpenShare).toFixed(1))
           : undefined;
 
+      const safeTitle =
+        draft.title || (isEn ? 'Untitled Production' : 'عمل سينمائي');
+      const hashtagSlug = safeTitle.replace(/\s+/g, '_');
+
+      const fallbackReviews = isEn
+        ? [
+            {
+              criticName:
+                worldMarket === 'saudi' ? 'Faisal Al-Harbi' : 'Tarek El-Sawy',
+              publication:
+                worldMarket === 'saudi'
+                  ? 'Riyadh Screen Review'
+                  : 'Cairo Cinema Dispatch',
+              sentiment: (criticScore10 >= 7.2 ? 'positive' : 'mixed') as
+                | 'positive'
+                | 'mixed',
+              quote: `"${safeTitle}" carries a distinct directorial signature from ${allDirectorsDisplayName} with compelling dramatic craft.`,
+              score: criticScore10,
+            },
+            {
+              criticName:
+                worldMarket === 'saudi' ? 'Noura Al-Qahtani' : 'Mona Abdelrahman',
+              publication:
+                worldMarket === 'saudi'
+                  ? 'Arabian Box Office Weekly'
+                  : 'Nile Arts Quarterly',
+              sentiment: (audienceScore10 >= 7.5 ? 'positive' : 'mixed') as
+                | 'positive'
+                | 'mixed',
+              quote: `Electric chemistry between ${localizedLeadNames.join(' & ') || 'the lead cast'} drives strong opening-day word of mouth.`,
+              score: audienceScore10,
+            },
+          ]
+        : [
+            {
+              criticName: marketAiCtx.fallbackCritics[0]?.name || 'ناقد سينمائي',
+              publication:
+                marketAiCtx.fallbackCritics[0]?.publication || 'الصحافة الفنية',
+              sentiment: (criticScore10 >= 7.2 ? 'positive' : 'mixed') as
+                | 'positive'
+                | 'mixed',
+              quote: `عمل فني يحمل بصمة واضحة في «${safeTitle}» بقيادة المخرج ${allDirectorsDisplayName} ويقدم معالجة درامية لافتة.`,
+              score: criticScore10,
+            },
+            {
+              criticName: marketAiCtx.fallbackCritics[1]?.name || 'محرر فني',
+              publication:
+                marketAiCtx.fallbackCritics[1]?.publication || 'مجلة الشاشة',
+              sentiment: (audienceScore10 >= 7.5 ? 'positive' : 'mixed') as
+                | 'positive'
+                | 'mixed',
+              quote: `تناغم واضح بين الأبطال (${localizedLeadNames.join(' و')}) مع إقبال جماهيري قوي منذ اليوم الأول.`,
+              score: audienceScore10,
+            },
+          ];
+
+      const fallbackSocialPosts = isEn
+        ? [
+            {
+              handle: marketAiCtx.socialHandles[0],
+              platform: 'X',
+              content: `#${hashtagSlug} is a genuinely crafted release — standout performances from the very first scene!`,
+              likes: '24.5K',
+            },
+            {
+              handle: marketAiCtx.socialHandles[2],
+              platform: 'TikTok',
+              content: `Clips from "${safeTitle}" are dominating feeds everywhere as audiences praise the story and direction.`,
+              likes: '61.2K',
+            },
+          ]
+        : [
+            {
+              handle: marketAiCtx.socialHandles[0],
+              platform: 'X',
+              content: `#${hashtagSlug} عمل متعوب عليه جداً وأداء تمثيلي خطف الأنظار من أول مشهد! 🔥👏`,
+              likes: '24.5K',
+            },
+            {
+              handle: marketAiCtx.socialHandles[2],
+              platform: 'TikTok',
+              content: `مشاهد «${safeTitle}» متصدرة التريند والجمهور يشيد بقوة القصة والإخراج ✨`,
+              likes: '61.2K',
+            },
+          ];
+
       const record: ReleasedProjectRecord = {
         id: `proj_${Date.now()}`,
-        title: draft.title || 'عمل سينمائي',
+        title: safeTitle,
         year: currentYear,
         format: draft.format,
         episodes: isSeries ? draft.episodes : undefined,
         seasonName: isSeries
           ? draft.seriesSeason === 'ramadan'
-            ? marketProfile.seriesSeasonPrimaryLabel
-            : marketProfile.seriesSeasonOffLabel
-          : marketProfile.filmSeasons.find((s) => s.id === draft.filmSeason)?.label ||
-            marketProfile.filmSeasons[0]?.label ||
-            'الموسم السينمائي',
+            ? localizedMarket.seriesSeasonPrimaryLabel
+            : localizedMarket.seriesSeasonOffLabel
+          : localizedMarket.filmSeasons.find((s) => s.id === draft.filmSeason)?.label ||
+            localizedMarket.filmSeasons[0]?.label ||
+            tr(uiLanguage, 'Theatrical Season', 'الموسم السينمائي'),
         primaryGenre: draft.primaryGenre,
         secondaryGenre: draft.secondaryGenre,
         ageRating: draft.ageRating,
         synopsis: draft.scriptSynopsis,
         directorId: director.id,
         directorName: allDirectorsDisplayName,
-        leadNames: leads.map((a) => a.name),
-        antagonistName: antagonist?.name,
-        cameoNames: cameos.map((a) => a.name),
+        leadNames: localizedLeadNames,
+        antagonistName: localizedAntagonistName || undefined,
+        cameoNames: localizedCameoNames,
         actorIdsInCast: [
           ...draft.leadActorIds,
           ...(draft.antagonistId ? [draft.antagonistId] : []),
@@ -706,8 +846,12 @@ export function Stage5ReleaseSimulation() {
         ],
         reviews: Array.isArray(aiEval?.reviews)
           ? aiEval.reviews.map((rev: any) => ({
-              criticName: String(rev.criticName || 'ناقد سينمائي'),
-              publication: String(rev.publication || 'الصحافة الفنية'),
+              criticName: String(
+                rev.criticName || (isEn ? 'Film Critic' : 'ناقد سينمائي')
+              ),
+              publication: String(
+                rev.publication || (isEn ? 'Entertainment Press' : 'الصحافة الفنية')
+              ),
               sentiment:
                 rev.sentiment === 'positive' || rev.sentiment === 'negative'
                   ? rev.sentiment
@@ -717,44 +861,16 @@ export function Stage5ReleaseSimulation() {
                 (Number(rev.score) > 10 ? Number(rev.score) / 10 : Number(rev.score) || criticScore10).toFixed(1)
               ),
             }))
-          : [
-              {
-                criticName: marketAiCtx.fallbackCritics[0]?.name || 'ناقد سينمائي',
-                publication:
-                  marketAiCtx.fallbackCritics[0]?.publication || 'الصحافة الفنية',
-                sentiment: criticScore10 >= 7.2 ? 'positive' : 'mixed',
-                quote: `عمل فني يحمل بصمة واضحة في «${draft.title}» بقيادة المخرج ${director.name} ويقدم معالجة درامية لافتة.`,
-                score: criticScore10,
-              },
-              {
-                criticName: marketAiCtx.fallbackCritics[1]?.name || 'محرر فني',
-                publication:
-                  marketAiCtx.fallbackCritics[1]?.publication || 'مجلة الشاشة',
-                sentiment: audienceScore10 >= 7.5 ? 'positive' : 'mixed',
-                quote: `تناغم واضح بين الأبطال (${leads.map((l) => l.name).join(' و')}) مع إقبال جماهيري قوي منذ اليوم الأول.`,
-                score: audienceScore10,
-              },
-            ],
+          : fallbackReviews,
         socialPosts: Array.isArray(aiEval?.social_posts || aiEval?.socialPosts)
           ? (aiEval.social_posts || aiEval.socialPosts)
-          : [
-              {
-                handle: marketAiCtx.socialHandles[0],
-                platform: 'X',
-                content: `#${draft.title.replace(/\s+/g, '_')} عمل متعوب عليه جداً وأداء تمثيلي خطف الأنظار من أول مشهد! 🔥👏`,
-                likes: '24.5K',
-              },
-              {
-                handle: marketAiCtx.socialHandles[2],
-                platform: 'TikTok',
-                content: `مشاهد «${draft.title}» متصدرة التريند والجمهور يشيد بقوة القصة والإخراج ✨`,
-                likes: '61.2K',
-              },
-            ],
+          : fallbackSocialPosts,
         viralTrendLabel:
           aiEval?.viral_trend_label ||
           aiEval?.viralTrendLabel ||
-          `#${draft.title.replace(/\s+/g, '_')} يتصدر قوائم البحث`,
+          (isEn
+            ? `#${hashtagSlug} trending #1 across regional searches`
+            : `#${hashtagSlug} يتصدر قوائم البحث`),
         rivalReleases,
         awardsWon: [],
         releaseDayStart: gameDay,
@@ -780,19 +896,29 @@ export function Stage5ReleaseSimulation() {
         year: currentYear,
         category: 'production_news',
         badgeLabel: isSeries
-          ? 'افتتاح البث التلفزيوني والرقمي'
-          : 'افتتاح شباك التذاكر السينمائي',
+          ? tr(uiLanguage, 'TV & Streaming Premiere', 'افتتاح البث التلفزيوني والرقمي')
+          : tr(uiLanguage, 'Theatrical Box Office Opening', 'افتتاح شباك التذاكر السينمائي'),
         headline: isSeries
-          ? `انطلاق بث الحلقة الأولى من «${record.title}» بـ ${viewershipMillions}M مشاهدة`
+          ? isEn
+            ? `Episode 1 of "${record.title}" premieres with ${viewershipMillions}M views`
+            : `انطلاق بث الحلقة الأولى من «${record.title}» بـ ${viewershipMillions}M مشاهدة`
+          : isEn
+          ? `Strong theatrical opening for "${record.title}" at ${formatMoney(record.totalGrossRevenue)} ${currencyLabel}`
           : `افتتاح سينمائي قوي لفيلم «${record.title}» بـ ${formatMoney(record.totalGrossRevenue)} ${currencyLabel}`,
         detail: isSeries
-          ? `حصدت الحلقة الافتتاحية من مسلسل «${record.title}» إخراج ${allDirectorsDisplayName} تفاعلاً جماهيرياً واسعاً وتقييم ${record.criticScore}/10 من النقاد.`
+          ? isEn
+            ? `The premiere episode of "${record.title}" directed by ${allDirectorsDisplayName} sparked widespread buzz and earned a ${record.criticScore}/10 critic score.`
+            : `حصدت الحلقة الافتتاحية من مسلسل «${record.title}» إخراج ${allDirectorsDisplayName} تفاعلاً جماهيرياً واسعاً وتقييم ${record.criticScore}/10 من النقاد.`
+          : isEn
+          ? `"${record.title}" directed by ${allDirectorsDisplayName} debuted in cinemas at Rank #${record.boxOfficeRank} amid fierce seasonal competition with a ${record.criticScore}/10 critic score.`
           : `انطلق عرض فيلم «${record.title}» إخراج ${allDirectorsDisplayName} في قاعات السينما بالمركز #${record.boxOfficeRank} وسط منافسة محتدمة وتقييم ${record.criticScore}/10.`,
         highlightName: record.title,
         extraStatBadge: isSeries
-          ? `${viewershipMillions}M مشاهدة`
+          ? `${viewershipMillions}M ${tr(uiLanguage, 'views', 'مشاهدة')}`
           : `${formatMoney(record.totalGrossRevenue)} ${currencyLabel}`,
-        gameImpactLabel: `المركز #${record.boxOfficeRank} في سباق الموسم · تقييم النقاد ${record.criticScore}/10`,
+        gameImpactLabel: isEn
+          ? `Season Rank #${record.boxOfficeRank} · Critics ${record.criticScore}/10`
+          : `المركز #${record.boxOfficeRank} في سباق الموسم · تقييم النقاد ${record.criticScore}/10`,
       });
     } finally {
       setIsSimulating(false);
@@ -802,7 +928,7 @@ export function Stage5ReleaseSimulation() {
   const releasedTitle = lastReleasedProject?.title || draft.title;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 pb-28" dir="rtl">
+    <div className="mx-auto max-w-4xl space-y-4 pb-28" dir={uiDir}>
       {/* Unified Royal Cinema Header */}
       <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] px-4 py-3.5 text-[#F9F6F0] shadow-lg">
         <div className="flex items-center justify-between gap-2">
@@ -812,15 +938,27 @@ export function Stage5ReleaseSimulation() {
             </div>
             <div>
               <span className="text-[10px] font-black text-[#D4AF37]">
-                غرفة التوزيع والعرض وشباك التذاكر
+                {tr(
+                  uiLanguage,
+                  'Distribution, Premiere & Box Office War Room',
+                  'غرفة التوزيع والعرض وشباك التذاكر'
+                )}
               </span>
               <h2 className="font-display text-sm font-black text-[#F9F6F0] sm:text-base">
                 {wizardStep === 1
                   ? isSeries
-                    ? `إعداد التسويق وعقود البث والفضائيات: «${draft.title}»`
+                    ? isEn
+                      ? `Marketing, Streaming & TV Deals: "${draft.title}"`
+                      : `إعداد التسويق وعقود البث والفضائيات: «${draft.title}»`
+                    : isEn
+                    ? `Marketing Campaign & Theater Screens: "${draft.title}"`
                     : `إعداد الحملة الترويجية وشاشات العرض: «${draft.title}»`
                   : isSeries
-                  ? `متابعة المشاهدات المليونية وتقييمات النقاد: «${releasedTitle}»`
+                  ? isEn
+                    ? `Live Viewership & Critic Reviews: "${releasedTitle}"`
+                    : `متابعة المشاهدات المليونية وتقييمات النقاد: «${releasedTitle}»`
+                  : isEn
+                  ? `Live Box Office & Season Race: "${releasedTitle}"`
                   : `متابعة إيرادات شباك التذاكر ومنافسة الموسم: «${releasedTitle}»`}
               </h2>
             </div>
@@ -841,15 +979,23 @@ export function Stage5ReleaseSimulation() {
             {/* Marketing & Cinema Screens Sliders */}
             <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-4 shadow-sm">
               <h3 className="font-display text-sm font-black text-[#1A2530]">
-                الحملة الترويجية وشاشات العرض
+                {tr(
+                  uiLanguage,
+                  'Marketing Campaign & Screen Count',
+                  'الحملة الترويجية وشاشات العرض'
+                )}
               </h3>
 
               <div className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-[#1A2530]">
-                    ميزانية الإعلانات والدعاية (Marketing)
+                    {tr(
+                      uiLanguage,
+                      'Marketing & Advertising Budget',
+                      'ميزانية الإعلانات والدعاية (Marketing)'
+                    )}
                   </span>
-                  <span className="font-mono text-xs font-black text-[#D91624]">
+                  <span className="font-mono text-xs font-black text-[#D91624]" dir="ltr">
                     {formatMoney(draft.marketingBudget)} {currencyLabel}
                   </span>
                 </div>
@@ -866,22 +1012,49 @@ export function Stage5ReleaseSimulation() {
                 />
                 <div className="mt-2 rounded-lg border border-[#1A2530]/15 bg-white p-2.5 space-y-1.5 text-[10px] font-bold">
                   <div className="grid grid-cols-2 gap-1.5 text-[#1A2530]/75">
-                    <div>عقود النجوم والطاقم: <span className="font-mono font-black text-[#1A2530]">{formatMoney(estimatedTalentCost)}</span></div>
-                    <div>الأقسام الإنتاجية: <span className="font-mono font-black text-[#1A2530]">{formatMoney(estimatedDeptCost)}</span></div>
-                    <div>ميزانية الدعاية: <span className="font-mono font-black text-[#D91624]">{formatMoney(draft.marketingBudget)}</span></div>
-                    <div>رسوم التوزيع الدولي: <span className="font-mono font-black text-[#1A2530]">{formatMoney(estimatedDistributionFees)}</span></div>
+                    <div>
+                      {tr(uiLanguage, 'Cast & Crew Contracts:', 'عقود النجوم والطاقم:')}{' '}
+                      <span className="font-mono font-black text-[#1A2530]">
+                        {formatMoney(estimatedTalentCost)}
+                      </span>
+                    </div>
+                    <div>
+                      {tr(uiLanguage, 'Production Departments:', 'الأقسام الإنتاجية:')}{' '}
+                      <span className="font-mono font-black text-[#1A2530]">
+                        {formatMoney(estimatedDeptCost)}
+                      </span>
+                    </div>
+                    <div>
+                      {tr(uiLanguage, 'Marketing Spend:', 'ميزانية الدعاية:')}{' '}
+                      <span className="font-mono font-black text-[#D91624]">
+                        {formatMoney(draft.marketingBudget)}
+                      </span>
+                    </div>
+                    <div>
+                      {tr(uiLanguage, 'Intl. Distribution Fees:', 'رسوم التوزيع الدولي:')}{' '}
+                      <span className="font-mono font-black text-[#1A2530]">
+                        {formatMoney(estimatedDistributionFees)}
+                      </span>
+                    </div>
                   </div>
                   <div className="border-t border-[#1A2530]/10 pt-1.5 flex flex-wrap items-center justify-between gap-1">
                     <span className="text-[#1A2530]/75">
-                      السيولة المتاحة بالخزينة: <span className="font-mono font-black text-[#1A2530]">{formatMoney(cash)} {currencyLabel}</span>
+                      {tr(uiLanguage, 'Available Studio Cash:', 'السيولة المتاحة بالخزينة:')}{' '}
+                      <span className="font-mono font-black text-[#1A2530]" dir="ltr">
+                        {formatMoney(cash)} {currencyLabel}
+                      </span>
                     </span>
                     {isOverTotalLiquidity ? (
                       <span className="text-[#D91624] font-black">
-                        ⚠️ التكلفة الكاملة ({formatMoney(totalLaunchCost)} {currencyLabel}) تتجاوز سيولتك بعجز {formatMoney(liquidityDeficit)} {currencyLabel}!
+                        {isEn
+                          ? `Total cost (${formatMoney(totalLaunchCost)} ${currencyLabel}) exceeds cash by ${formatMoney(liquidityDeficit)} ${currencyLabel}!`
+                          : `⚠️ التكلفة الكاملة (${formatMoney(totalLaunchCost)} ${currencyLabel}) تتجاوز سيولتك بعجز ${formatMoney(liquidityDeficit)} ${currencyLabel}!`}
                       </span>
                     ) : (
                       <span className="text-[#15803D] font-black">
-                        إجمالي التكلفة عند الإطلاق: {formatMoney(totalLaunchCost)} {currencyLabel} ✓
+                        {isEn
+                          ? `Total launch cost: ${formatMoney(totalLaunchCost)} ${currencyLabel} ✓`
+                          : `إجمالي التكلفة عند الإطلاق: ${formatMoney(totalLaunchCost)} ${currencyLabel} ✓`}
                       </span>
                     )}
                   </div>
@@ -892,10 +1065,14 @@ export function Stage5ReleaseSimulation() {
                 <div className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3">
                   <div className="mb-1.5 flex items-center justify-between">
                     <span className="text-xs font-black text-[#1A2530]">
-                      عدد قاعات وشاشات السينما المحجوزة
+                      {tr(
+                        uiLanguage,
+                        'Booked Cinema Screens & Halls',
+                        'عدد قاعات وشاشات السينما المحجوزة'
+                      )}
                     </span>
                     <span className="font-mono text-xs font-black text-[#B8860B]">
-                      {draft.screensCount} شاشة عرض
+                      {draft.screensCount} {tr(uiLanguage, 'screens', 'شاشة عرض')}
                     </span>
                   </div>
                   <input
@@ -923,7 +1100,11 @@ export function Stage5ReleaseSimulation() {
               <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
                 <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
                   <Globe className="h-4 w-4 text-[#D91624]" />
-                  منصة البث الرقمي (Streaming / VOD)
+                  {tr(
+                    uiLanguage,
+                    'Digital Streaming Platform (Streaming / VOD)',
+                    'منصة البث الرقمي (Streaming / VOD)'
+                  )}
                 </h3>
                 <div
                   className={`grid grid-cols-1 gap-2 ${
@@ -933,6 +1114,10 @@ export function Stage5ReleaseSimulation() {
                   {streamingPlatforms.map((plat) => {
                     const selected = effectiveSelectedPlatformId === plat.id;
                     const dealVal = Math.round(plat.budget_capacity * 320_000);
+                    const localizedPlatName = localizeEntityName(
+                      plat.name,
+                      uiLanguage
+                    );
                     return (
                       <button
                         key={plat.id}
@@ -943,7 +1128,7 @@ export function Stage5ReleaseSimulation() {
                             platformDealAmount: dealVal,
                           })
                         }
-                        className={`flex w-full items-center justify-between gap-2.5 rounded-xl border-2 p-2.5 text-right transition ${
+                        className={`flex w-full items-center justify-between gap-2.5 rounded-xl border-2 p-2.5 text-start transition ${
                           selected
                             ? 'border-[#D91624] bg-[#FFF9E6] text-[#1A2530]'
                             : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
@@ -955,7 +1140,7 @@ export function Stage5ReleaseSimulation() {
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={plat.logo_url}
-                                alt={plat.name}
+                                alt={localizedPlatName}
                                 loading="lazy"
                                 referrerPolicy="no-referrer"
                                 onError={(e) => {
@@ -974,9 +1159,12 @@ export function Stage5ReleaseSimulation() {
                             </span>
                           </div>
                           <div>
-                            <div className="text-xs font-black">{plat.name}</div>
+                            <div className="text-xs font-black">
+                              {localizedPlatName}
+                            </div>
                             <div className="font-mono text-[10px] font-bold text-[#15803D]">
-                              عقد البث: {formatMoney(dealVal)} {currencyLabel}
+                              {tr(uiLanguage, 'Streaming deal:', 'عقد البث:')}{' '}
+                              {formatMoney(dealVal)} {currencyLabel}
                             </div>
                           </div>
                         </div>
@@ -994,12 +1182,20 @@ export function Stage5ReleaseSimulation() {
                 <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
                   <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
                     <Tv className="h-4 w-4 text-[#D4AF37]" />
-                    القناة التلفزيونية الفضائية الناقلة
+                    {tr(
+                      uiLanguage,
+                      'Satellite TV Broadcast Network',
+                      'القناة التلفزيونية الفضائية الناقلة'
+                    )}
                   </h3>
                   <div className="space-y-2">
                     {tvChannels.map((tv) => {
                       const selected = effectiveSelectedTvChannelId === tv.id;
                       const dealVal = Math.round(tv.budget_capacity * 260_000);
+                      const localizedTvName = localizeEntityName(
+                        tv.name,
+                        uiLanguage
+                      );
                       return (
                         <button
                           key={tv.id}
@@ -1010,7 +1206,7 @@ export function Stage5ReleaseSimulation() {
                               tvChannelDealAmount: dealVal,
                             })
                           }
-                          className={`flex w-full items-center justify-between gap-2.5 rounded-xl border-2 p-2.5 text-right transition ${
+                          className={`flex w-full items-center justify-between gap-2.5 rounded-xl border-2 p-2.5 text-start transition ${
                             selected
                               ? 'border-[#D4AF37] bg-[#FFF9E6] text-[#1A2530]'
                               : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
@@ -1022,7 +1218,7 @@ export function Stage5ReleaseSimulation() {
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={tv.logo_url}
-                                  alt={tv.name}
+                                  alt={localizedTvName}
                                   loading="lazy"
                                   referrerPolicy="no-referrer"
                                   onError={(e) => {
@@ -1041,9 +1237,12 @@ export function Stage5ReleaseSimulation() {
                               </span>
                             </div>
                             <div>
-                              <div className="text-xs font-black">{tv.name}</div>
+                              <div className="text-xs font-black">
+                                {localizedTvName}
+                              </div>
                               <div className="font-mono text-[10px] font-bold text-[#15803D]">
-                                حقوق العرض: {formatMoney(dealVal)} {currencyLabel}
+                                {tr(uiLanguage, 'Broadcast rights:', 'حقوق العرض:')}{' '}
+                                {formatMoney(dealVal)} {currencyLabel}
                               </div>
                             </div>
                           </div>
@@ -1061,7 +1260,11 @@ export function Stage5ReleaseSimulation() {
             {/* Regional Distribution Markets */}
             <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-3 shadow-sm">
               <h3 className="font-display text-xs font-black text-[#1A2530]">
-                أسواق التوزيع الإقليمية والدولية
+                {tr(
+                  uiLanguage,
+                  'Regional & International Distribution Markets',
+                  'أسواق التوزيع الإقليمية والدولية'
+                )}
               </h3>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {marketConfigs.map((m) => {
@@ -1078,14 +1281,18 @@ export function Stage5ReleaseSimulation() {
                           : 'border-[#1A2530]/15 bg-[#F9F6F0]'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-black text-[#1A2530]">
                           {m.name}
                         </span>
                         <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-900">
                           {m.id === primaryRegion
-                            ? 'السوق الأساسي'
-                            : `+${Math.round(m.revenueBonusFactor * 100)}% عوائد`}
+                            ? tr(uiLanguage, 'Home Market', 'السوق الأساسي')
+                            : `+${Math.round(m.revenueBonusFactor * 100)}% ${tr(
+                                uiLanguage,
+                                'revenue',
+                                'عوائد'
+                              )}`}
                         </span>
                       </div>
                       <p className="mt-1 text-[10px] font-bold text-[#1A2530]/65">
@@ -1102,7 +1309,17 @@ export function Stage5ReleaseSimulation() {
                                 : 'bg-[#1A2530]/10 text-[#1A2530]'
                             }`}
                           >
-                            {isSelected ? 'سوق معتمد في التوزيع ✓' : 'تفعيل التوزيع'}
+                            {isSelected
+                              ? tr(
+                                  uiLanguage,
+                                  'Active in Distribution ✓',
+                                  'سوق معتمد في التوزيع ✓'
+                                )
+                              : tr(
+                                  uiLanguage,
+                                  'Enable Distribution',
+                                  'تفعيل التوزيع'
+                                )}
                           </button>
                         ) : (
                           <button
@@ -1111,14 +1328,18 @@ export function Stage5ReleaseSimulation() {
                               const ok = unlockMarketRegionWithCash(m.id);
                               if (!ok) {
                                 showToast(
-                                  `يتطلب فتح ${m.name} سيولة ${formatMoney(m.earlyLicenseCost)} ${currencyLabel}`,
+                                  isEn
+                                    ? `Unlocking ${m.name} requires ${formatMoney(m.earlyLicenseCost)} ${currencyLabel} in cash.`
+                                    : `يتطلب فتح ${m.name} سيولة ${formatMoney(m.earlyLicenseCost)} ${currencyLabel}`,
                                   'warning'
                                 );
                               }
                             }}
                             className="w-full rounded-lg border border-[#D4AF37] bg-[#1A2530] py-1.5 text-[11px] font-black text-[#D4AF37] hover:brightness-110"
                           >
-                            فتح ترخيص السوق ({formatMoney(m.earlyLicenseCost)} {currencyLabel})
+                            {isEn
+                              ? `Unlock Market License (${formatMoney(m.earlyLicenseCost)} ${currencyLabel})`
+                              : `فتح ترخيص السوق (${formatMoney(m.earlyLicenseCost)} ${currencyLabel})`}
                           </button>
                         )}
                       </div>
@@ -1139,22 +1360,34 @@ export function Stage5ReleaseSimulation() {
             exit={{ opacity: 0, y: -8 }}
             className="space-y-4"
           >
-            {/* LIVE BOX OFFICE STOCK TICKER & SPINNING ODOMETER (شاشة بورصة شباك التذاكر وعداد الإيرادات الدوّار) */}
+            {/* LIVE BOX OFFICE STOCK TICKER & SPINNING ODOMETER */}
             <div className="rounded-3xl bg-[#1A2530] text-[#F9F6F0] p-5 border-4 border-[#D4AF37] shadow-2xl space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#D4AF37]/30 pb-3">
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#D91624] text-white text-[10px] font-typewriter font-black mb-1">
                     <Activity className="w-3.5 h-3.5 animate-pulse" />
-                    <span>مؤشر شباك التذاكر المباشر · شاشة بورصة الإيرادات</span>
+                    <span>
+                      {tr(
+                        uiLanguage,
+                        'LIVE BOX OFFICE INDEX · REVENUE EXCHANGE BOARD',
+                        'مؤشر شباك التذاكر المباشر · شاشة بورصة الإيرادات'
+                      )}
+                    </span>
                   </div>
                   <h3 className="font-display text-xl sm:text-2xl text-[#F9F6F0]">
-                    عداد إيرادات «{lastReleasedProject.title}» المباشر
+                    {isEn
+                      ? `"${lastReleasedProject.title}" Live Revenue Odometer`
+                      : `عداد إيرادات «${lastReleasedProject.title}» المباشر`}
                   </h3>
                 </div>
 
                 <div className="flex flex-col items-end">
                   <span className="text-[11px] font-bold text-[#D4AF37] mb-1">
-                    إجمالي شباك التذاكر والبث (Cha-Ching Odometer):
+                    {tr(
+                      uiLanguage,
+                      'Total Box Office & Streaming Gross (Cha-Ching Odometer):',
+                      'إجمالي شباك التذاكر والبث (Cha-Ching Odometer):'
+                    )}
                   </span>
                   <SpinningOdometerRevenue
                     targetValue={lastReleasedProject.totalGrossRevenue}
@@ -1243,10 +1476,14 @@ export function Stage5ReleaseSimulation() {
 
                     <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[10px] font-typewriter font-bold">
                       <span className="text-[#4ADE80]">
-                        ● عملك: المركز #{lastReleasedProject.boxOfficeRank} ({formatMoney(lastReleasedProject.totalGrossRevenue)})
+                        {isEn
+                          ? `● Your Release: Rank #${lastReleasedProject.boxOfficeRank} (${formatMoney(lastReleasedProject.totalGrossRevenue)})`
+                          : `● عملك: المركز #${lastReleasedProject.boxOfficeRank} (${formatMoney(lastReleasedProject.totalGrossRevenue)})`}
                       </span>
                       <span className="text-[#D91624]">
-                        ● متصدر المنافسين ({formatMoney(topRivalNow)})
+                        {isEn
+                          ? `● Leading Rival (${formatMoney(topRivalNow)})`
+                          : `● متصدر المنافسين (${formatMoney(topRivalNow)})`}
                       </span>
                     </div>
                   </div>
@@ -1270,9 +1507,15 @@ export function Stage5ReleaseSimulation() {
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 text-center">
               <div className="rounded-2xl border-2 border-[#1A2530] bg-white p-3">
                 <span className="block text-[10px] font-bold text-[#1A2530]/70">
-                  {isSeries ? 'إجمالي عوائد البث والإعلانات' : 'إجمالي الإيرادات'}
+                  {isSeries
+                    ? tr(
+                        uiLanguage,
+                        'Total Streaming & Ad Revenue',
+                        'إجمالي عوائد البث والإعلانات'
+                      )
+                    : tr(uiLanguage, 'Total Gross Revenue', 'إجمالي الإيرادات')}
                 </span>
-                <span className="font-typewriter text-sm font-black text-[#15803D]">
+                <span className="font-typewriter text-sm font-black text-[#15803D]" dir="ltr">
                   {formatMoney(lastReleasedProject.totalGrossRevenue)} {currencyLabel}
                 </span>
               </div>
@@ -1282,21 +1525,22 @@ export function Stage5ReleaseSimulation() {
                 simInsights?.viewershipMillions) ? (
                 <div className="rounded-2xl border-2 border-[#D4AF37] bg-[#FFF9E6] p-3">
                   <span className="block text-[10px] font-bold text-[#1A2530]/75">
-                    المشاهدات المليونية
+                    {tr(uiLanguage, 'Total Viewership', 'المشاهدات المليونية')}
                   </span>
                   <span className="flex items-center justify-center gap-1 font-mono text-sm font-black text-[#1A2530]">
                     <Eye className="h-3.5 w-3.5 text-[#D91624]" />
                     {lastReleasedProject.viewershipMillions ||
                       simInsights?.viewershipMillions}
-                    M مشاهدة
+                    M {tr(uiLanguage, 'views', 'مشاهدة')}
                   </span>
                 </div>
               ) : (
                 <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
                   <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                    صافي الربح / الخسارة
+                    {tr(uiLanguage, 'Net Profit / Loss', 'صافي الربح / الخسارة')}
                   </span>
                   <span
+                    dir="ltr"
                     className={`font-mono text-sm font-black ${
                       lastReleasedProject.netProfit >= 0
                         ? 'text-[#15803D]'
@@ -1310,7 +1554,7 @@ export function Stage5ReleaseSimulation() {
 
               <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
                 <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                  تقييم النقاد
+                  {tr(uiLanguage, 'Critics Score', 'تقييم النقاد')}
                 </span>
                 <span className="font-mono text-sm font-black text-[#B8860B]">
                   {lastReleasedProject.criticScore}/10
@@ -1319,7 +1563,7 @@ export function Stage5ReleaseSimulation() {
 
               <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
                 <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                  تقييم الجمهور
+                  {tr(uiLanguage, 'Audience Score', 'تقييم الجمهور')}
                 </span>
                 <span className="font-mono text-sm font-black text-[#D91624]">
                   {lastReleasedProject.audienceScore}/10
@@ -1330,7 +1574,9 @@ export function Stage5ReleaseSimulation() {
             {Boolean(lastReleasedProject.backendPointsTotalPercent) && (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#D4AF37] bg-[#FFF9E6] px-3.5 py-2 text-xs font-bold text-[#1A2530]">
                 <span>
-                  حصة نسب أرباح النجوم المتعاقد عليها ({lastReleasedProject.backendPointsTotalPercent}% من الإيرادات)
+                  {isEn
+                    ? `Contracted talent backend points (${lastReleasedProject.backendPointsTotalPercent}% of gross)`
+                    : `حصة نسب أرباح النجوم المتعاقد عليها (${lastReleasedProject.backendPointsTotalPercent}% من الإيرادات)`}
                 </span>
                 <span className="font-mono font-black text-[#D91624]" dir="ltr">
                   -{formatMoney(lastReleasedProject.backendRoyaltiesPaid || 0)} {currencyLabel}
@@ -1364,7 +1610,11 @@ export function Stage5ReleaseSimulation() {
                         <span className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-[#1A2530]">
                           <TrendingUp className="h-4 w-4 text-[#D91624]" />
                           {isSeries
-                            ? `البث المباشر للحلقات: الحلقة ${currentStep} من ${totalSteps}`
+                            ? isEn
+                              ? `Live Episode Broadcast: Episode ${currentStep} of ${totalSteps}`
+                              : `البث المباشر للحلقات: الحلقة ${currentStep} من ${totalSteps}`
+                            : isEn
+                            ? `Live Box Office Run: Day ${currentStep} of ${totalSteps}`
                             : `موسم شباك التذاكر الحي: اليوم ${currentStep} من ${totalSteps}`}
                         </span>
                         <span
@@ -1377,29 +1627,45 @@ export function Stage5ReleaseSimulation() {
                           {isRunComplete ? (
                             <>
                               <Check className="h-3 w-3" />
-                              <span>اكتمل الموسم ✓</span>
+                              <span>
+                                {tr(uiLanguage, 'Run Complete ✓', 'اكتمل الموسم ✓')}
+                              </span>
                             </>
                           ) : (
                             <>
                               <Clock className="h-3 w-3 animate-pulse" />
-                              <span>الأيام تمر تلقائياً مع ساعة اللعبة</span>
+                              <span>
+                                {tr(
+                                  uiLanguage,
+                                  'Days advance automatically with the studio clock',
+                                  'الأيام تمر تلقائياً مع ساعة اللعبة'
+                                )}
+                              </span>
                             </>
                           )}
                         </span>
                       </div>
                       <p className="mt-1 text-[11px] font-bold text-[#15803D]">
                         {isRunComplete
-                          ? 'تم رصد كامل الإيرادات النهائية وترتيب الموسم وإضافتها لخزينة الاستوديو.'
-                          : 'تتزايد الإيرادات والمشاهدات ويتحرك ترتيبك أمام المنافسين تلقائياً مع كل يوم جديد في التقويم.'}
+                          ? tr(
+                              uiLanguage,
+                              'Final revenues and season rank have been settled and credited to your studio treasury.',
+                              'تم رصد كامل الإيرادات النهائية وترتيب الموسم وإضافتها لخزينة الاستوديو.'
+                            )
+                          : tr(
+                              uiLanguage,
+                              'Revenues, viewership, and chart rankings update dynamically every calendar day against rival studios.',
+                              'تتزايد الإيرادات والمشاهدات ويتحرك ترتيبك أمام المنافسين تلقائياً مع كل يوم جديد في التقويم.'
+                            )}
                       </p>
                     </div>
 
                     {typeof lastReleasedProject.lastDailyRevenueDelta ===
                       'number' &&
                       lastReleasedProject.lastDailyRevenueDelta > 0 && (
-                        <div className="rounded-xl border border-[#15803D]/30 bg-[#15803D]/10 px-3 py-1.5 text-left shrink-0">
+                        <div className="rounded-xl border border-[#15803D]/30 bg-[#15803D]/10 px-3 py-1.5 text-end shrink-0">
                           <span className="block text-[9px] font-bold text-[#15803D]">
-                            إيراد آخر يوم مرّ
+                            {tr(uiLanguage, 'Latest Daily Gross', 'إيراد آخر يوم مرّ')}
                           </span>
                           <span
                             dir="ltr"
@@ -1441,7 +1707,13 @@ export function Stage5ReleaseSimulation() {
                             }`}
                           >
                             <span className="font-typewriter text-[10px] font-black leading-none">
-                              {isSeries ? `ح${stepVal}` : `ي${stepVal}`}
+                              {isEn
+                                ? isSeries
+                                  ? `Ep${stepVal}`
+                                  : `D${stepVal}`
+                                : isSeries
+                                ? `ح${stepVal}`
+                                : `ي${stepVal}`}
                             </span>
                             <span
                               className={`mt-1 h-1.5 w-1.5 rounded-full ${
@@ -1482,7 +1754,9 @@ export function Stage5ReleaseSimulation() {
                         >
                           <Bot className="h-3.5 w-3.5 text-[#D4AF37]" />
                           <span>
-                            إطلاق حملة تريند إلكترونية (بتكلفة 2M {currencyLabel} · +15% عوائد)
+                            {isEn
+                              ? `Launch Viral Social Push (2M ${currencyLabel} · +15% gross)`
+                              : `إطلاق حملة تريند إلكترونية (بتكلفة 2M ${currencyLabel} · +15% عوائد)`}
                           </span>
                         </button>
                       )}
@@ -1500,7 +1774,9 @@ export function Stage5ReleaseSimulation() {
                             } else {
                               const errMsg = getRewardedAdErrorMessage(
                                 adResult.reason,
-                                'لتفعيل مكافأة التوزيع الدولي'
+                                'لتفعيل مكافأة التوزيع الدولي',
+                                uiLanguage,
+                                'to activate the international distribution bonus'
                               );
                               if (errMsg) showToast(errMsg, 'warning');
                             }
@@ -1509,13 +1785,17 @@ export function Stage5ReleaseSimulation() {
                         >
                           <Film className="h-3.5 w-3.5 shrink-0" />
                           <span>
-                            توزيع دولي إضافي (+25% أرباح · +
-                            {formatMoney(
-                              Math.round(
-                                lastReleasedProject.totalGrossRevenue * 0.25
-                              )
-                            )}{' '}
-                            {currencyLabel}) — إعلان
+                            {isEn
+                              ? `Bonus Intl. Distribution (+25% Gross · +${formatMoney(
+                                  Math.round(
+                                    lastReleasedProject.totalGrossRevenue * 0.25
+                                  )
+                                )} ${currencyLabel}) — Watch Ad`
+                              : `توزيع دولي إضافي (+25% أرباح · +${formatMoney(
+                                  Math.round(
+                                    lastReleasedProject.totalGrossRevenue * 0.25
+                                  )
+                                )} ${currencyLabel}) — إعلان`}
                           </span>
                         </button>
                       )}
@@ -1529,7 +1809,7 @@ export function Stage5ReleaseSimulation() {
                         {lastReleasedProject.dailyNews.slice(0, 3).map((n) => (
                           <div
                             key={n.id}
-                            className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] px-3 py-2 text-right"
+                            className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] px-3 py-2 text-start"
                           >
                             <div className="text-[11px] font-black text-[#1A2530]">
                               {n.headline}
@@ -1550,10 +1830,16 @@ export function Stage5ReleaseSimulation() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
                   <Trophy className="h-4 w-4 text-[#D4AF37]" />
-                  جدول منافسة الموسم أمام شركات الإنتاج المنافسة (يتغير يومياً)
+                  {tr(
+                    uiLanguage,
+                    'Season Box Office Standings vs Rival Studios (Updates Daily)',
+                    'جدول منافسة الموسم أمام شركات الإنتاج المنافسة (يتغير يومياً)'
+                  )}
                 </h3>
                 <span className="text-[10px] font-bold text-[#1A2530]/60">
-                  اليوم {lastReleasedProject.daysTracked || 1} · الترتيب بالإيرادات وليس بالتقييم النقدي فقط
+                  {isEn
+                    ? `Day ${lastReleasedProject.daysTracked || 1} · Ranked by gross revenue, not critics alone`
+                    : `اليوم ${lastReleasedProject.daysTracked || 1} · الترتيب بالإيرادات وليس بالتقييم النقدي فقط`}
                 </span>
               </div>
               <div className="space-y-2">
@@ -1561,7 +1847,9 @@ export function Stage5ReleaseSimulation() {
                   {
                     title: lastReleasedProject.title,
                     studioName,
-                    leadStarName: lastReleasedProject.leadNames[0] || 'بطل العمل',
+                    leadStarName:
+                      lastReleasedProject.leadNames[0] ||
+                      tr(uiLanguage, 'Lead Star', 'بطل العمل'),
                     boxOfficeRevenue: lastReleasedProject.totalGrossRevenue,
                     criticScore: lastReleasedProject.criticScore,
                     audienceScore: lastReleasedProject.audienceScore,
@@ -1573,6 +1861,8 @@ export function Stage5ReleaseSimulation() {
                     .filter((r) => r.status !== 'delayed')
                     .map((r) => ({
                       ...r,
+                      studioName: localizeEntityName(r.studioName, uiLanguage),
+                      leadStarName: localizeEntityName(r.leadStarName, uiLanguage),
                       isPlayer: false,
                     })),
                 ]
@@ -1619,33 +1909,39 @@ export function Stage5ReleaseSimulation() {
                               <span className="truncate">{entry.title}</span>
                               {entry.isPlayer && (
                                 <span className="rounded bg-[#D91624] px-1.5 py-0.5 text-[9px] text-white shrink-0">
-                                  عملك
+                                  {tr(uiLanguage, 'Yours', 'عملك')}
                                 </span>
                               )}
                             </div>
                             <div className="truncate text-[10px] font-bold text-[#1A2530]/65">
-                              {entry.studioName} · بطولة: {entry.leadStarName}
+                              {entry.studioName} ·{' '}
+                              {tr(uiLanguage, 'Starring:', 'بطولة:')}{' '}
+                              {entry.leadStarName}
                             </div>
                           </div>
                         </div>
-                        <div className="shrink-0 text-left">
-                          <div className="font-mono text-xs font-black text-[#15803D]">
+                        <div className="shrink-0 text-end">
+                          <div className="font-mono text-xs font-black text-[#15803D]" dir="ltr">
                             {formatMoney(entry.boxOfficeRevenue)} {currencyLabel}
                           </div>
                           {typeof entry.lastDailyDelta === 'number' &&
                             entry.lastDailyDelta > 0 &&
                             (lastReleasedProject.daysTracked || 1) > 1 && (
                               <div className="font-mono text-[9px] font-bold text-[#15803D]/80">
-                                +{formatMoney(entry.lastDailyDelta)} اليوم
+                                +{formatMoney(entry.lastDailyDelta)}{' '}
+                                {tr(uiLanguage, 'today', 'اليوم')}
                               </div>
                             )}
                           <div className="text-[10px] font-bold text-[#1A2530]/75">
-                            <span className="text-[#B8860B]">نقاد {entry.criticScore}</span>
+                            <span className="text-[#B8860B]">
+                              {tr(uiLanguage, 'Critics', 'نقاد')} {entry.criticScore}
+                            </span>
                             {typeof entry.audienceScore === 'number' && (
                               <>
                                 {' · '}
                                 <span className="text-[#D91624]">
-                                  جمهور {entry.audienceScore}
+                                  {tr(uiLanguage, 'Audience', 'جمهور')}{' '}
+                                  {entry.audienceScore}
                                 </span>
                               </>
                             )}
@@ -1661,19 +1957,23 @@ export function Stage5ReleaseSimulation() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
                 <h3 className="text-xs font-black text-[#1A2530]">
-                  مراجعات النقاد والصحافة الفنية
+                  {tr(
+                    uiLanguage,
+                    'Critic Reviews & Trade Press',
+                    'مراجعات النقاد والصحافة الفنية'
+                  )}
                 </h3>
                 {lastReleasedProject.reviews.map((rev, i) => (
                   <div
                     key={i}
                     className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 space-y-1"
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-black text-[#1A2530]">
                         {rev.criticName} ·{' '}
                         <span className="text-[#D91624]">{rev.publication}</span>
                       </span>
-                      <span className="rounded border border-[#D4AF37]/60 bg-[#FFF9E6] px-1.5 py-0.5 font-mono text-[10px] font-black text-[#1A2530]">
+                      <span className="rounded border border-[#D4AF37]/60 bg-[#FFF9E6] px-1.5 py-0.5 font-mono text-[10px] font-black text-[#1A2530] shrink-0">
                         {rev.score}/10
                       </span>
                     </div>
@@ -1686,7 +1986,11 @@ export function Stage5ReleaseSimulation() {
 
               <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
                 <h3 className="text-xs font-black text-[#1A2530]">
-                  نبض الجمهور والسوشيال ميديا
+                  {tr(
+                    uiLanguage,
+                    'Audience Buzz & Social Media Pulse',
+                    'نبض الجمهور والسوشيال ميديا'
+                  )}
                 </h3>
                 {lastReleasedProject.socialPosts.map((post, i) => (
                   <div
@@ -1694,7 +1998,7 @@ export function Stage5ReleaseSimulation() {
                     className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] font-black text-[#D91624]">
-                      <span>{post.handle}</span>
+                      <span dir="ltr">{post.handle}</span>
                       <span>♥ {post.likes}</span>
                     </div>
                     <p className="text-[11px] font-bold text-[#1A2530]/80">
@@ -1710,18 +2014,22 @@ export function Stage5ReleaseSimulation() {
 
       {/* FLOATING STICKY BOTTOM NAVIGATION BOX — Royal Cinema Theme */}
       <div className="pointer-events-none fixed right-0 bottom-3 left-0 z-40 px-3">
-        <div className="pointer-events-auto mx-auto flex max-w-xl items-center justify-between rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 px-4 py-3 shadow-2xl backdrop-blur-md">
+        <div className="pointer-events-auto mx-auto flex max-w-xl items-center justify-between gap-2 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 px-4 py-3 shadow-2xl backdrop-blur-md">
           {wizardStep === 1 ? (
             <button
               type="button"
               onClick={() => setActiveScreen('PRODUCTION_CRISES')}
               className="rounded-xl border border-white/20 bg-white/10 px-5 py-2 text-xs font-black text-[#F9F6F0] transition hover:bg-white/20"
             >
-              السابق
+              {tr(uiLanguage, 'Back', 'السابق')}
             </button>
           ) : (
             <span className="text-xs font-black text-emerald-400">
-              تم تسجيل العمل في أرشيف الاستوديو ✓
+              {tr(
+                uiLanguage,
+                'Logged in Studio Archive ✓',
+                'تم تسجيل العمل في أرشيف الاستوديو ✓'
+              )}
             </span>
           )}
 
@@ -1744,23 +2052,47 @@ export function Stage5ReleaseSimulation() {
             {isSimulating ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>جاري تقييم العمل وحساب النتائج...</span>
+                <span>
+                  {tr(
+                    uiLanguage,
+                    'Evaluating release & calculating box office...',
+                    'جاري تقييم العمل وحساب النتائج...'
+                  )}
+                </span>
               </>
             ) : wizardStep === 1 ? (
               isOverTotalLiquidity ? (
-                <span>عجز سيولة {formatMoney(liquidityDeficit)} {currencyLabel} — خفّض الميزانية</span>
+                <span>
+                  {isEn
+                    ? `Cash deficit ${formatMoney(liquidityDeficit)} ${currencyLabel} — trim budget`
+                    : `عجز سيولة ${formatMoney(liquidityDeficit)} ${currencyLabel} — خفّض الميزانية`}
+                </span>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 text-[#D4AF37]" />
                   <span>
                     {isSeries
-                      ? 'بدء بث المسلسل ورصد المشاهدات'
-                      : 'طرح الفيلم في السينمات الآن'}
+                      ? tr(
+                          uiLanguage,
+                          'Premiere Series & Track Viewership',
+                          'بدء بث المسلسل ورصد المشاهدات'
+                        )
+                      : tr(
+                          uiLanguage,
+                          'Release Film in Cinemas Now',
+                          'طرح الفيلم في السينمات الآن'
+                        )}
                   </span>
                 </>
               )
             ) : (
-              <span>الانتقال للمهرجانات والجوائز</span>
+              <span>
+                {tr(
+                  uiLanguage,
+                  'Proceed to Festivals & Awards',
+                  'الانتقال للمهرجانات والجوائز'
+                )}
+              </span>
             )}
           </button>
         </div>

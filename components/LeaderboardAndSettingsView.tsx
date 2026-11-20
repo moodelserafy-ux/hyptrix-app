@@ -3,8 +3,14 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useGameStore, getDaysRemainingUntilAnnualAwards } from '@/lib/store';
 import { formatMoney } from '@/lib/game-engine';
-import { getResolvedDatabase } from '@/lib/db-resolver';
-import { getMarketProfile } from '@/lib/market-profiles';
+import { getResolvedDatabase, type GenreId } from '@/lib/db-resolver';
+import {
+  getUiDir,
+  getLocalizedMarketInfo,
+  getLocalizedGenreInfo,
+  localizeEntityName,
+  tr,
+} from '@/lib/i18n';
 import {
   syncAndFetchRealPlayersLeaderboard,
   RealPlayersLeaderboardResponse,
@@ -70,12 +76,15 @@ export function LeaderboardAndSettingsView() {
     ownedStudioAssets,
     resetEntireGameAndStartFresh,
     worldMarket,
+    uiLanguage,
     openMarketSelector,
     showToast,
   } = useGameStore();
 
-  const marketProfile = getMarketProfile(worldMarket);
-  const currencyLabel = marketProfile.currencyLabel;
+  const isAr = uiLanguage === 'ar';
+  const dir = getUiDir(uiLanguage);
+  const marketInfo = getLocalizedMarketInfo(worldMarket, uiLanguage);
+  const currencyLabel = marketInfo.currencyLabel;
 
   const [subTab, setSubTab] = useState<
     'real_players' | 'world_studios' | 'challenges' | 'system'
@@ -84,12 +93,10 @@ export function LeaderboardAndSettingsView() {
   const [confirmSwitchMarket, setConfirmSwitchMarket] = useState(false);
   const [page, setPage] = useState(0);
 
-  // Real Players Top 15 Global Leaderboard State
   const [realLeaderboard, setRealLeaderboard] =
     useState<RealPlayersLeaderboardResponse | null>(null);
   const [loadingReal, setLoadingReal] = useState(false);
 
-  // Weekly Global Challenge & Viral Referrals State (/api/social-growth)
   const [weeklyChallenge, setWeeklyChallenge] =
     useState<WeeklyChallengeData | null>(null);
   const [challengeEntries, setChallengeEntries] = useState<
@@ -115,12 +122,14 @@ export function LeaderboardAndSettingsView() {
     [releasedProjects]
   );
 
+  const defaultCeoFallback = tr(uiLanguage, 'Executive Producer', 'المدير التنفيذي');
+
   const loadRealPlayersRanking = useCallback(async () => {
     setLoadingReal(true);
     try {
       const data = await syncAndFetchRealPlayersLeaderboard({
-        studioName: studioName || marketProfile.defaultStudioName,
-        ceoName: ceoName || 'المدير التنفيذي',
+        studioName: studioName || marketInfo.defaultStudioName,
+        ceoName: ceoName || defaultCeoFallback,
         marketValue,
         cash,
         reputation,
@@ -137,8 +146,9 @@ export function LeaderboardAndSettingsView() {
     }
   }, [
     studioName,
-    marketProfile.defaultStudioName,
+    marketInfo.defaultStudioName,
     ceoName,
+    defaultCeoFallback,
     marketValue,
     cash,
     reputation,
@@ -153,8 +163,8 @@ export function LeaderboardAndSettingsView() {
     let active = true;
 
     syncAndFetchRealPlayersLeaderboard({
-      studioName: studioName || marketProfile.defaultStudioName,
-      ceoName: ceoName || 'المدير التنفيذي',
+      studioName: studioName || marketInfo.defaultStudioName,
+      ceoName: ceoName || defaultCeoFallback,
       marketValue,
       cash,
       reputation,
@@ -174,8 +184,9 @@ export function LeaderboardAndSettingsView() {
   }, [
     subTab,
     studioName,
-    marketProfile.defaultStudioName,
+    marketInfo.defaultStudioName,
     ceoName,
+    defaultCeoFallback,
     marketValue,
     cash,
     reputation,
@@ -188,8 +199,8 @@ export function LeaderboardAndSettingsView() {
   const combinedWorldLeaderboard = useMemo(() => {
     const playerEntry = {
       id: 'player_studio',
-      name: studioName || marketProfile.defaultStudioName,
-      ceo: ceoName || 'المدير التنفيذي',
+      name: studioName || marketInfo.defaultStudioName,
+      ceo: ceoName || defaultCeoFallback,
       netWorth: marketValue,
       reputation,
       releasesCount: releasedProjects.length,
@@ -208,8 +219,11 @@ export function LeaderboardAndSettingsView() {
           comp.estimated_net_worth || comp.market_power * 4_500_000;
         return {
           id: comp.id,
-          name: comp.name,
-          ceo: comp.ceoName || comp.ceo || 'مجلس الإدارة',
+          name: localizeEntityName(comp.name, uiLanguage),
+          ceo: localizeEntityName(
+            comp.ceoName || comp.ceo || tr(uiLanguage, 'Executive Board', 'مجلس الإدارة'),
+            uiLanguage
+          ),
           netWorth: Math.max(30_000_000, baseWorth + delta.netWorthDelta),
           reputation: comp.market_power,
           releasesCount: 4 + delta.releasesDelta,
@@ -222,8 +236,9 @@ export function LeaderboardAndSettingsView() {
     return [playerEntry, ...allRivals].sort((a, b) => b.netWorth - a.netWorth);
   }, [
     studioName,
-    marketProfile.defaultStudioName,
+    marketInfo.defaultStudioName,
     ceoName,
+    defaultCeoFallback,
     marketValue,
     reputation,
     releasedProjects.length,
@@ -231,6 +246,7 @@ export function LeaderboardAndSettingsView() {
     db.competitor_studios,
     emergingCompetitors,
     competitorNetWorthDelta,
+    uiLanguage,
   ]);
 
   const pageSize = 6;
@@ -338,10 +354,16 @@ export function LeaderboardAndSettingsView() {
     try {
       await navigator.clipboard.writeText(referralShareUrl);
       setCopiedRefLink(true);
-      showToast('تم نسخ رابط الدعوة الخاص باستوديوك!', 'success');
+      showToast(
+        tr(uiLanguage, 'Studio invite link copied!', 'تم نسخ رابط الدعوة الخاص باستوديوك!'),
+        'success'
+      );
       setTimeout(() => setCopiedRefLink(false), 2200);
     } catch {
-      showToast('انسخ الرابط يدوياً من الخانة', 'info');
+      showToast(
+        tr(uiLanguage, 'Copy the invite link manually from the field.', 'انسخ الرابط يدوياً من الخانة'),
+        'info'
+      );
     }
   };
 
@@ -357,8 +379,8 @@ export function LeaderboardAndSettingsView() {
         body: JSON.stringify({
           action: 'submit_challenge',
           studioInstanceId: myStudioInstanceId,
-          studioName: studioName || marketProfile.defaultStudioName,
-          ceoName: ceoName || 'المدير التنفيذي',
+          studioName: studioName || marketInfo.defaultStudioName,
+          ceoName: ceoName || defaultCeoFallback,
           projectTitle: project.title,
           worldMarket,
           primaryGenre: project.primaryGenre,
@@ -369,25 +391,53 @@ export function LeaderboardAndSettingsView() {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
-        showToast(data?.error || 'تعذر تسجيل العمل في التحدي حالياً.', 'warning');
+        showToast(
+          data?.error ||
+            tr(
+              uiLanguage,
+              'Could not submit project to the weekly challenge right now.',
+              'تعذر تسجيل العمل في التحدي حالياً.'
+            ),
+          'warning'
+        );
       } else {
         if (Array.isArray(data.topEntries)) {
           setChallengeEntries(data.topEntries);
         }
         showToast(
-          `تم تسجيل «${project.title}» في التحدي الأسبوعي بنجاح!`,
+          tr(
+            uiLanguage,
+            `Submitted “${project.title}” to the Weekly Global Challenge!`,
+            `تم تسجيل «${project.title}» في التحدي الأسبوعي بنجاح!`
+          ),
           'success'
         );
       }
     } catch {
-      showToast('حدث خطأ في الاتصال بخادم التحديات.', 'warning');
+      showToast(
+        tr(
+          uiLanguage,
+          'Connection error reaching the challenge server.',
+          'حدث خطأ في الاتصال بخادم التحديات.'
+        ),
+        'warning'
+      );
     } finally {
       setSubmittingChallengeId(null);
     }
   };
 
+  const localizedChallengeGenre = weeklyChallenge
+    ? isAr
+      ? weeklyChallenge.requiredGenreAr
+      : getLocalizedGenreInfo(
+          weeklyChallenge.requiredGenre as GenreId,
+          'en'
+        ).name
+    : tr(uiLanguage, 'Featured Genre', 'التحدي');
+
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={dir}>
       {/* Unified Royal Cinema Header & Tabs */}
       <div className="rounded-3xl bg-[#1A2530] text-[#F9F6F0] border-2 border-[#D4AF37] p-3.5 sm:p-4 shadow-lg space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -397,10 +447,18 @@ export function LeaderboardAndSettingsView() {
             </div>
             <div>
               <h2 className="font-display text-base sm:text-lg text-[#F9F6F0]">
-                بورصة التصنيف العالمي وترتيب الاستوديوهات
+                {tr(
+                  uiLanguage,
+                  'Global Studio Exchange & Rankings',
+                  'بورصة التصنيف العالمي وترتيب الاستوديوهات'
+                )}
               </h2>
               <p className="text-[11px] font-bold text-[#D4AF37]">
-                حفل الجوائز السنوي التلقائي بعد {daysUntilAnnualAwards} يوم
+                {tr(
+                  uiLanguage,
+                  `Annual Awards Gala in ${daysUntilAnnualAwards} days`,
+                  `حفل الجوائز السنوي التلقائي بعد ${daysUntilAnnualAwards} يوم`
+                )}
               </p>
             </div>
           </div>
@@ -415,7 +473,7 @@ export function LeaderboardAndSettingsView() {
               <RefreshCw
                 className={`h-3.5 w-3.5 ${loadingReal ? 'animate-spin' : ''}`}
               />
-              <span>تحديث الترتيب المباشر</span>
+              <span>{tr(uiLanguage, 'Refresh Live Board', 'تحديث الترتيب المباشر')}</span>
             </button>
           )}
         </div>
@@ -432,7 +490,7 @@ export function LeaderboardAndSettingsView() {
             }`}
           >
             <Globe className="h-3.5 w-3.5 text-[#D4AF37]" />
-            <span>ترتيب اللاعبين الحقيقيين (أفضل 15)</span>
+            <span>{tr(uiLanguage, 'Real Players (Top 15)', 'ترتيب اللاعبين الحقيقيين (أفضل 15)')}</span>
           </button>
 
           <button
@@ -445,7 +503,7 @@ export function LeaderboardAndSettingsView() {
             }`}
           >
             <Building2 className="h-3.5 w-3.5" />
-            <span>بورصة شركات العالم</span>
+            <span>{tr(uiLanguage, 'World Studios', 'بورصة شركات العالم')}</span>
           </button>
 
           <button
@@ -458,7 +516,7 @@ export function LeaderboardAndSettingsView() {
             }`}
           >
             <Flame className="h-3.5 w-3.5 text-[#D4AF37]" />
-            <span>التحدي والدعوات</span>
+            <span>{tr(uiLanguage, 'Challenges & Invites', 'التحدي والدعوات')}</span>
           </button>
 
           <button
@@ -471,7 +529,7 @@ export function LeaderboardAndSettingsView() {
             }`}
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            <span>إعادة التأسيس</span>
+            <span>{tr(uiLanguage, 'Reset / Market', 'إعادة التأسيس')}</span>
           </button>
         </div>
       </div>
@@ -479,12 +537,15 @@ export function LeaderboardAndSettingsView() {
       {/* TAB 1: REAL PLAYERS GLOBAL TOP 15 LEADERBOARD */}
       {subTab === 'real_players' && (
         <div className="space-y-3">
-          {/* Quick Status Header showing exact player rank */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-[#D4AF37] bg-[#FFF9E6] px-4 py-3">
             <div className="flex items-center gap-2 text-xs font-black text-[#1A2530]">
               <Crown className="h-4 w-4 text-[#D91624]" />
               <span>
-                يُعرض أفضل 15 إمبراطورية إنتاج للاعبين الحقيقيين فقط · إجمالي اللاعبين المسجلين:{' '}
+                {tr(
+                  uiLanguage,
+                  'Top 15 real player studio empires · Total registered studios:',
+                  'يُعرض أفضل 15 إمبراطورية إنتاج للاعبين الحقيقيين فقط · إجمالي اللاعبين المسجلين:'
+                )}{' '}
                 <strong className="font-typewriter text-[#D91624] tabular-nums">
                   {realLeaderboard?.totalPlayers || top15RealPlayers.length || 1}
                 </strong>
@@ -492,7 +553,7 @@ export function LeaderboardAndSettingsView() {
             </div>
             {myRealRank !== null && (
               <span className="font-typewriter text-xs font-black text-[#1A2530] tabular-nums">
-                مركزك الحالي:{' '}
+                {tr(uiLanguage, 'Your Rank:', 'مركزك الحالي:')}{' '}
                 <strong className="text-[#D91624]">#{myRealRank}</strong>
               </span>
             )}
@@ -502,17 +563,25 @@ export function LeaderboardAndSettingsView() {
             <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-8 text-center space-y-2">
               <RefreshCw className="mx-auto h-6 w-6 animate-spin text-[#D91624]" />
               <p className="text-xs font-extrabold text-[#1A2530]">
-                جاري مزامنة ترتيب اللاعبين الحقيقيين...
+                {tr(uiLanguage, 'Syncing global player rankings...', 'جاري مزامنة ترتيب اللاعبين الحقيقيين...')}
               </p>
             </div>
           ) : top15RealPlayers.length === 0 ? (
             <div className="rounded-3xl border-2 border-[#D4AF37] bg-white p-6 text-center space-y-2">
               <Trophy className="mx-auto h-8 w-8 text-[#D4AF37]" />
               <p className="text-sm font-black text-[#1A2530]">
-                أنت أول شركة إنتاج مسجلة حالياً في الترتيب العالمي!
+                {tr(
+                  uiLanguage,
+                  'You are the first studio registered on the global board!',
+                  'أنت أول شركة إنتاج مسجلة حالياً في الترتيب العالمي!'
+                )}
               </p>
               <p className="text-xs font-bold text-[#1A2530]/70">
-                سيظهر باقي اللاعبين الحقيقيين هنا تلقائياً فور دخولهم وبناء استوديوهاتهم.
+                {tr(
+                  uiLanguage,
+                  'Other real players will appear automatically as they launch their empires.',
+                  'سيظهر باقي اللاعبين الحقيقيين هنا تلقائياً فور دخولهم وبناء استوديوهاتهم.'
+                )}
               </p>
             </div>
           ) : (
@@ -562,13 +631,14 @@ export function LeaderboardAndSettingsView() {
                           </h4>
                           {isMe && (
                             <span className="rounded bg-[#D91624] px-1.5 py-0.5 text-[9px] font-black text-white">
-                              شركتك
+                              {tr(uiLanguage, 'YOU', 'شركتك')}
                             </span>
                           )}
                         </div>
                         <p className="text-[10px] font-bold text-[#1A2530]/70">
-                          القيادة: {entry.ceo_name} · الأعمال: {entry.released_count} ·
-                          الجوائز: {entry.total_awards}
+                          {tr(uiLanguage, 'CEO', 'القيادة')}: {entry.ceo_name} ·{' '}
+                          {tr(uiLanguage, 'Releases', 'الأعمال')}: {entry.released_count} ·{' '}
+                          {tr(uiLanguage, 'Awards', 'الجوائز')}: {entry.total_awards}
                         </p>
                       </div>
                     </div>
@@ -576,7 +646,7 @@ export function LeaderboardAndSettingsView() {
                     <div className="flex items-center gap-3 text-xs tabular-nums">
                       <div className="text-center">
                         <span className="block text-[9px] font-bold text-[#1A2530]/60">
-                          السمعة
+                          {tr(uiLanguage, 'Rep', 'السمعة')}
                         </span>
                         <span className="font-typewriter font-black text-[#1A2530]">
                           {entry.reputation}%
@@ -584,7 +654,7 @@ export function LeaderboardAndSettingsView() {
                       </div>
                       <div className="rounded-xl border border-[#D4AF37] bg-[#1A2530] px-3 py-1 text-center">
                         <span className="block text-[9px] font-bold text-[#D4AF37]">
-                          القيمة السوقية
+                          {tr(uiLanguage, 'Valuation', 'القيمة السوقية')}
                         </span>
                         <span className="font-typewriter text-xs font-black text-[#F9F6F0]">
                           {formatMoney(entry.market_value)} {currencyLabel}
@@ -597,16 +667,25 @@ export function LeaderboardAndSettingsView() {
             </div>
           )}
 
-          {/* PINNED CURRENT PLAYER RANK CARD WHEN RANKED BELOW #15 */}
           {isPlayerBelowTop15 && myRealRank !== null && (
             <div className="mt-4 rounded-3xl border-3 border-[#D91624] bg-[#1A2530] p-4 text-[#F9F6F0] shadow-xl">
               <div className="mb-2 flex items-center justify-between gap-2 border-b border-[#D4AF37]/30 pb-2">
                 <span className="inline-flex items-center gap-1.5 text-xs font-black text-[#D4AF37]">
                   <Sparkles className="h-4 w-4" />
-                  <span>موقع شركتك الحالي خارج قائمة أفضل 15 لاعباً</span>
+                  <span>
+                    {tr(
+                      uiLanguage,
+                      'Your current position outside Top 15',
+                      'موقع شركتك الحالي خارج قائمة أفضل 15 لاعباً'
+                    )}
+                  </span>
                 </span>
                 <span className="font-typewriter text-xs font-black text-white tabular-nums">
-                  المركز #{myRealRank} من {realLeaderboard?.totalPlayers || myRealRank}
+                  {tr(
+                    uiLanguage,
+                    `Rank #${myRealRank} of ${realLeaderboard?.totalPlayers || myRealRank}`,
+                    `المركز #${myRealRank} من ${realLeaderboard?.totalPlayers || myRealRank}`
+                  )}
                 </span>
               </div>
 
@@ -620,13 +699,18 @@ export function LeaderboardAndSettingsView() {
                   </div>
                   <div>
                     <h4 className="font-display text-sm sm:text-base text-[#F9F6F0]">
-                      {studioName || marketProfile.defaultStudioName}
+                      {studioName || marketInfo.defaultStudioName}
                     </h4>
                     <p className="text-[11px] font-bold text-[#F9F6F0]/80">
-                      أنت حالياً في المركز{' '}
-                      <strong className="text-[#D4AF37]">#{myRealRank}</strong> عالمياً
+                      {tr(uiLanguage, 'Currently ranked', 'أنت حالياً في المركز')}{' '}
+                      <strong className="text-[#D4AF37]">#{myRealRank}</strong>{' '}
+                      {tr(uiLanguage, 'globally', 'عالمياً')}
                       {gapToTop15 > 0
-                        ? ` · تحتاج +${formatMoney(gapToTop15)} ${currencyLabel} قيمة سوقية لدخول قائمة أفضل 15!`
+                        ? tr(
+                            uiLanguage,
+                            ` · Need +${formatMoney(gapToTop15)} ${currencyLabel} valuation to break into Top 15!`,
+                            ` · تحتاج +${formatMoney(gapToTop15)} ${currencyLabel} قيمة سوقية لدخول قائمة أفضل 15!`
+                          )
                         : ''}
                     </p>
                   </div>
@@ -634,7 +718,7 @@ export function LeaderboardAndSettingsView() {
 
                 <div className="rounded-xl border border-[#D4AF37] bg-[#F9F6F0] px-3.5 py-1.5 text-center text-[#1A2530]">
                   <span className="block text-[9px] font-extrabold text-[#1A2530]/65">
-                    قيمتك السوقية
+                    {tr(uiLanguage, 'Your Valuation', 'قيمتك السوقية')}
                   </span>
                   <span className="font-typewriter text-xs font-black text-[#15803D] tabular-nums">
                     {formatMoney(marketValue)} {currencyLabel}
@@ -686,14 +770,15 @@ export function LeaderboardAndSettingsView() {
                       </h4>
                       {studio.isPlayer && (
                         <span className="rounded bg-[#D91624] px-1.5 py-0.5 text-[9px] font-black text-white">
-                          شركتك
+                          {tr(uiLanguage, 'YOU', 'شركتك')}
                         </span>
                       )}
                     </div>
                     <p className="text-[10px] font-bold leading-relaxed text-[#1A2530]/70">
-                      القيادة: {studio.ceo} · الأعمال: {studio.releasesCount} ·
+                      {tr(uiLanguage, 'CEO', 'القيادة')}: {studio.ceo} ·{' '}
+                      {tr(uiLanguage, 'Releases', 'الأعمال')}: {studio.releasesCount} ·
                       <Award className="inline h-3 w-3 mx-0.5 text-[#D4AF37]" />
-                      {studio.awardsCount} جوائز
+                      {studio.awardsCount} {tr(uiLanguage, 'Awards', 'جوائز')}
                     </p>
                   </div>
                 </div>
@@ -701,7 +786,7 @@ export function LeaderboardAndSettingsView() {
                 <div className="flex items-center gap-3 text-xs tabular-nums">
                   <div className="text-center">
                     <span className="block text-[9px] font-bold text-[#1A2530]/60">
-                      السمعة
+                      {tr(uiLanguage, 'Rep', 'السمعة')}
                     </span>
                     <span className="font-typewriter font-black text-[#1A2530]">
                       {studio.reputation}%
@@ -709,7 +794,7 @@ export function LeaderboardAndSettingsView() {
                   </div>
                   <div className="rounded-xl border border-[#D4AF37] bg-[#1A2530] px-3 py-1 text-center">
                     <span className="block text-[9px] font-bold text-[#D4AF37]">
-                      القيمة السوقية
+                      {tr(uiLanguage, 'Valuation', 'القيمة السوقية')}
                     </span>
                     <span className="font-typewriter text-xs font-black text-[#F9F6F0]">
                       {formatMoney(studio.netWorth)} {currencyLabel}
@@ -731,10 +816,14 @@ export function LeaderboardAndSettingsView() {
                 }}
                 className="flex items-center justify-center rounded-xl border-2 border-[#1A2530] bg-[#F9F6F0] px-4 py-1.5 text-xs font-black text-[#1A2530] disabled:opacity-40 cursor-pointer"
               >
-                <span>السابق</span>
+                <span>{tr(uiLanguage, 'Previous', 'السابق')}</span>
               </button>
               <span className="text-xs font-black text-[#1A2530] tabular-nums">
-                صفحة {safePage + 1} من {totalPages}
+                {tr(
+                  uiLanguage,
+                  `Page ${safePage + 1} of ${totalPages}`,
+                  `صفحة ${safePage + 1} من ${totalPages}`
+                )}
               </span>
               <button
                 type="button"
@@ -745,7 +834,7 @@ export function LeaderboardAndSettingsView() {
                 }}
                 className="flex items-center justify-center rounded-xl bg-[#D91624] border border-[#D4AF37] px-4 py-1.5 text-xs font-black text-white disabled:opacity-40 cursor-pointer"
               >
-                <span>التالي</span>
+                <span>{tr(uiLanguage, 'Next', 'التالي')}</span>
               </button>
             </div>
           )}
@@ -755,7 +844,6 @@ export function LeaderboardAndSettingsView() {
       {/* TAB 3: WEEKLY GLOBAL CHALLENGE & VIRAL REFERRALS */}
       {subTab === 'challenges' && (
         <div className="space-y-4">
-          {/* Card 1: Weekly Global Challenge */}
           <div className="rounded-3xl border-2 border-[#D4AF37] bg-white p-4 sm:p-5 shadow-md space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-2 border-b border-[#1A2530]/12 pb-3">
               <div className="flex items-start gap-2.5">
@@ -765,17 +853,27 @@ export function LeaderboardAndSettingsView() {
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-display text-base font-black text-[#1A2530]">
-                      {weeklyChallenge?.title || 'التحدي الأسبوعي العالمي'}
+                      {isAr
+                        ? weeklyChallenge?.title || 'التحدي الأسبوعي العالمي'
+                        : 'Weekly Global Box-Office Challenge'}
                     </h3>
                     {weeklyChallenge && (
                       <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[10px] font-black text-white">
-                        متبقي {weeklyChallenge.endsInDays} يوم
+                        {tr(
+                          uiLanguage,
+                          `${weeklyChallenge.endsInDays}d left`,
+                          `متبقي ${weeklyChallenge.endsInDays} يوم`
+                        )}
                       </span>
                     )}
                   </div>
                   <p className="mt-1 text-xs font-bold text-[#1A2530]/75 leading-relaxed">
-                    {weeklyChallenge?.description ||
-                      'أطلق عملاً يطابق شروط الأسبوع وسجّل أعلى صافي ربح لتتصدر التحدي العالمي.'}
+                    {isAr
+                      ? weeklyChallenge?.description ||
+                        'أطلق عملاً يطابق شروط الأسبوع وسجّل أعلى صافي ربح لتتصدر التحدي العالمي.'
+                      : `Release a ${localizedChallengeGenre} title under ${formatMoney(
+                          weeklyChallenge?.maxBudget || 40_000_000
+                        )} ${currencyLabel} and post the highest net profit to top the global board!`}
                   </p>
                 </div>
               </div>
@@ -789,7 +887,7 @@ export function LeaderboardAndSettingsView() {
                 <RefreshCw
                   className={`h-3.5 w-3.5 ${loadingSocial ? 'animate-spin' : ''}`}
                 />
-                <span>تحديث</span>
+                <span>{tr(uiLanguage, 'Refresh', 'تحديث')}</span>
               </button>
             </div>
 
@@ -797,15 +895,15 @@ export function LeaderboardAndSettingsView() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div className="rounded-2xl border border-[#1A2530]/12 bg-[#F9F6F0] px-3 py-2">
                   <span className="block text-[10px] font-bold text-[#1A2530]/60">
-                    التصنيف المطلوب
+                    {tr(uiLanguage, 'Required Genre', 'التصنيف المطلوب')}
                   </span>
                   <span className="text-xs font-black text-[#D91624]">
-                    {weeklyChallenge.requiredGenreAr}
+                    {localizedChallengeGenre}
                   </span>
                 </div>
                 <div className="rounded-2xl border border-[#1A2530]/12 bg-[#F9F6F0] px-3 py-2">
                   <span className="block text-[10px] font-bold text-[#1A2530]/60">
-                    سقف الميزانية القصوى
+                    {tr(uiLanguage, 'Maximum Budget Cap', 'سقف الميزانية القصوى')}
                   </span>
                   <span
                     dir="ltr"
@@ -816,32 +914,55 @@ export function LeaderboardAndSettingsView() {
                 </div>
                 <div className="rounded-2xl border border-[#D4AF37]/60 bg-[#FFF9E6] px-3 py-2">
                   <span className="block text-[10px] font-bold text-[#9A7209]">
-                    جائزة المتصدر
+                    {tr(uiLanguage, 'Champion Reward', 'جائزة المتصدر')}
                   </span>
                   <span className="text-xs font-black text-[#1A2530]">
-                    {weeklyChallenge.rewardLabel}
+                    {isAr
+                      ? weeklyChallenge.rewardLabel
+                      : 'Global Prestige Crown & Spotlight'}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Player Qualifying Releases for 1-Click Submit */}
+            {/* Qualifying Releases */}
             <div className="space-y-2">
               <span className="block text-xs font-black text-[#1A2530]">
-                أعمالك المطابقة لشروط تحدي هذا الأسبوع:
+                {tr(
+                  uiLanguage,
+                  'Your Qualifying Releases This Week:',
+                  'أعمالك المطابقة لشروط تحدي هذا الأسبوع:'
+                )}
               </span>
               {qualifyingChallengeProjects.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[#1A2530]/25 bg-[#F9F6F0] p-3 text-xs font-bold text-[#1A2530]/70">
-                  لا يوجد لديك عمل مطابق بعد. أنتج عملاً بتصنيف{' '}
-                  <strong className="text-[#D91624]">
-                    {weeklyChallenge?.requiredGenreAr || 'التحدي'}
-                  </strong>{' '}
-                  بميزانية إجمالية لا تتجاوز{' '}
-                  <strong className="font-typewriter">
-                    {formatMoney(weeklyChallenge?.maxBudget || 40_000_000)}{' '}
-                    {currencyLabel}
-                  </strong>{' '}
-                  ثم سجّله هنا فوراً!
+                  {isAr ? (
+                    <>
+                      لا يوجد لديك عمل مطابق بعد. أنتج عملاً بتصنيف{' '}
+                      <strong className="text-[#D91624]">
+                        {weeklyChallenge?.requiredGenreAr || 'التحدي'}
+                      </strong>{' '}
+                      بميزانية إجمالية لا تتجاوز{' '}
+                      <strong className="font-typewriter">
+                        {formatMoney(weeklyChallenge?.maxBudget || 40_000_000)}{' '}
+                        {currencyLabel}
+                      </strong>{' '}
+                      ثم سجّله هنا فوراً!
+                    </>
+                  ) : (
+                    <>
+                      No qualifying release yet. Produce a{' '}
+                      <strong className="text-[#D91624]">
+                        {localizedChallengeGenre}
+                      </strong>{' '}
+                      project with a total budget at or below{' '}
+                      <strong className="font-typewriter">
+                        {formatMoney(weeklyChallenge?.maxBudget || 40_000_000)}{' '}
+                        {currencyLabel}
+                      </strong>
+                      , then submit it right here!
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -855,15 +976,15 @@ export function LeaderboardAndSettingsView() {
                           {proj.title}
                         </div>
                         <div className="text-[11px] font-bold text-[#1A2530]/70">
-                          صافي الربح:{' '}
+                          {tr(uiLanguage, 'Net Profit:', 'صافي الربح:')}{' '}
                           <span className="font-typewriter text-[#15803D]">
                             {formatMoney(proj.netProfit)} {currencyLabel}
                           </span>{' '}
-                          · التكلفة:{' '}
+                          · {tr(uiLanguage, 'Cost:', 'التكلفة:')}{' '}
                           <span className="font-typewriter">
                             {formatMoney(proj.totalBudget)}
                           </span>{' '}
-                          · النقاد: {proj.criticScore}/10
+                          · {tr(uiLanguage, 'Critics:', 'النقاد:')} {proj.criticScore}/10
                         </div>
                       </div>
                       <button
@@ -875,8 +996,8 @@ export function LeaderboardAndSettingsView() {
                         <Send className="h-3.5 w-3.5" />
                         <span>
                           {submittingChallengeId === proj.id
-                            ? 'جاري التسجيل...'
-                            : 'إرسال للتحدي'}
+                            ? tr(uiLanguage, 'Submitting...', 'جاري التسجيل...')
+                            : tr(uiLanguage, 'Enter Challenge', 'إرسال للتحدي')}
                         </span>
                       </button>
                     </div>
@@ -888,11 +1009,19 @@ export function LeaderboardAndSettingsView() {
             {/* Weekly Challenge Top 10 Board */}
             <div className="space-y-2 pt-2 border-t border-[#1A2530]/12">
               <span className="block text-xs font-black text-[#1A2530]">
-                متصدرو التحدي هذا الأسبوع ({weeklyChallenge?.weekKey || 'الأسبوع الحالي'}):
+                {tr(
+                  uiLanguage,
+                  `This Week's Leaders (${weeklyChallenge?.weekKey || 'Active Week'}):`,
+                  `متصدرو التحدي هذا الأسبوع (${weeklyChallenge?.weekKey || 'الأسبوع الحالي'}):`
+                )}
               </span>
               {challengeEntries.length === 0 ? (
                 <p className="rounded-2xl bg-[#F9F6F0] px-3 py-3 text-center text-xs font-bold text-[#1A2530]/65">
-                  كن أول منتج يسجّل رقماً قياسياً في تحدي هذا الأسبوع!
+                  {tr(
+                    uiLanguage,
+                    'Be the first producer to post a record score in this week’s challenge!',
+                    'كن أول منتج يسجّل رقماً قياسياً في تحدي هذا الأسبوع!'
+                  )}
                 </p>
               ) : (
                 <div className="space-y-1.5">
@@ -913,11 +1042,13 @@ export function LeaderboardAndSettingsView() {
                           </span>
                           <div className="min-w-0">
                             <span className="block font-black text-[#1A2530] truncate">
-                              {row.studio_name} — «{row.project_title}»
+                              {row.studio_name} — “{row.project_title}”
                             </span>
                             <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                              المدير: {row.ceo_name} · الميزانية:{' '}
-                              {formatMoney(row.budget_used)} · النقاد:{' '}
+                              {tr(uiLanguage, 'CEO', 'المدير')}: {row.ceo_name} ·{' '}
+                              {tr(uiLanguage, 'Budget', 'الميزانية')}:{' '}
+                              {formatMoney(row.budget_used)} ·{' '}
+                              {tr(uiLanguage, 'Critics', 'النقاد')}:{' '}
                               {row.critic_score}/10
                             </span>
                           </div>
@@ -936,7 +1067,7 @@ export function LeaderboardAndSettingsView() {
             </div>
           </div>
 
-          {/* Card 2: Viral Referral Hub (Telegram Mini App & Web) */}
+          {/* Card 2: Viral Referral Hub */}
           <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] p-4 sm:p-5 text-[#F9F6F0] shadow-lg space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
@@ -945,16 +1076,24 @@ export function LeaderboardAndSettingsView() {
                 </div>
                 <div>
                   <h3 className="font-display text-base font-black text-[#FFF3B0]">
-                    ادعُ أصدقاءك واكسب تمويلاً فورياً
+                    {tr(
+                      uiLanguage,
+                      'Invite Friends & Earn Instant Funding',
+                      'ادعُ أصدقاءك واكسب تمويلاً فورياً'
+                    )}
                   </h3>
                   <p className="text-xs font-bold text-[#F9F6F0]/80">
-                    كل صديق يؤسس استوديو عبر رابطك يحصل فوراً على +15M في خزينته (أو قفل غرفة النجوم).
+                    {tr(
+                      uiLanguage,
+                      'Every friend who launches a studio through your link starts with +15M bonus cash (and unlocks a Star Forge lock!).',
+                      'كل صديق يؤسس استوديو عبر رابطك يحصل فوراً على +15M في خزينته (أو قفل غرفة النجوم).'
+                    )}
                   </p>
                 </div>
               </div>
               <div className="rounded-2xl border border-[#D4AF37]/60 bg-[#0F171E] px-3 py-1.5 text-center">
                 <span className="block text-[10px] font-bold text-[#D4AF37]">
-                  أصدقاء انضموا عبرك
+                  {tr(uiLanguage, 'Friends Joined', 'أصدقاء انضموا عبرك')}
                 </span>
                 <span className="font-typewriter text-base font-black text-white tabular-nums">
                   {referralCount}
@@ -981,22 +1120,32 @@ export function LeaderboardAndSettingsView() {
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
-                  <span>{copiedRefLink ? 'تم النسخ' : 'نسخ الرابط'}</span>
+                  <span>
+                    {copiedRefLink
+                      ? tr(uiLanguage, 'Copied', 'تم النسخ')
+                      : tr(uiLanguage, 'Copy Link', 'نسخ الرابط')}
+                  </span>
                 </button>
                 <a
                   href={`https://t.me/share/url?url=${encodeURIComponent(
                     referralShareUrl
                   )}&text=${encodeURIComponent(
-                    `أسّس شركة إنتاجك السينمائي في Neelyo ونافس استوديو «${
-                      studioName || marketProfile.defaultStudioName
-                    }» واحصل على 15M مكافأة ترحيب!`
+                    tr(
+                      uiLanguage,
+                      `Launch your own film studio in Neelyo, challenge "${
+                        studioName || marketInfo.defaultStudioName
+                      }", and claim a 15M welcome bonus!`,
+                      `أسّس شركة إنتاجك السينمائي في Neelyo ونافس استوديو «${
+                        studioName || marketInfo.defaultStudioName
+                      }» واحصل على 15M مكافأة ترحيب!`
+                    )
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-[#D4AF37] bg-[#D91624] px-3.5 py-2 text-xs font-black text-white hover:brightness-110 transition"
                 >
                   <Share2 className="h-4 w-4" />
-                  <span>تيليجرام</span>
+                  <span>{tr(uiLanguage, 'Telegram', 'تيليجرام')}</span>
                 </a>
               </div>
             </div>
@@ -1007,7 +1156,6 @@ export function LeaderboardAndSettingsView() {
       {/* TAB 4: SYSTEM, WORLD MARKET SWITCH & RESET */}
       {subTab === 'system' && (
         <div className="space-y-3">
-          {/* Active World Market Switcher */}
           <div className="flex flex-col items-center justify-between gap-3 rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] p-5 text-[#F9F6F0] shadow-md sm:flex-row">
             <div className="flex items-center gap-3">
               <div className="rounded-xl border border-[#D4AF37]/60 bg-white/10 p-2 shrink-0">
@@ -1015,10 +1163,15 @@ export function LeaderboardAndSettingsView() {
               </div>
               <div>
                 <h3 className="font-display text-sm font-black text-[#D4AF37]">
-                  عالم الإنتاج النشط: {marketProfile.nativeTitle}
+                  {tr(uiLanguage, 'Active Production World:', 'عالم الإنتاج النشط:')}{' '}
+                  {marketInfo.nativeTitle}
                 </h3>
                 <p className="mt-0.5 text-xs font-bold text-[#F9F6F0]/75">
-                  العملة: {marketProfile.currencyFullName} ({currencyLabel}) · يمكنك الانتقال لعالم إنتاج جديد (مثل السعودية والخليج أو مصر) بمسيرة مستقلة.
+                  {tr(
+                    uiLanguage,
+                    `Currency: ${marketInfo.currencyFullName} (${currencyLabel}) · Switch anytime to launch an independent career in another cinema market.`,
+                    `العملة: ${marketInfo.currencyFullName} (${currencyLabel}) · يمكنك الانتقال لعالم إنتاج جديد (مثل السعودية والخليج أو مصر) بمسيرة مستقلة.`
+                  )}
                 </p>
               </div>
             </div>
@@ -1031,7 +1184,7 @@ export function LeaderboardAndSettingsView() {
                   className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-[#D4AF37] px-4 py-2 text-xs font-black text-[#1A2530] shadow hover:brightness-110 cursor-pointer"
                 >
                   <Globe className="h-3.5 w-3.5" />
-                  <span>تغيير الدولة / السوق</span>
+                  <span>{tr(uiLanguage, 'Switch Market', 'تغيير الدولة / السوق')}</span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
@@ -1043,14 +1196,14 @@ export function LeaderboardAndSettingsView() {
                     }}
                     className="min-h-[40px] rounded-xl bg-[#D91624] border border-[#D4AF37] px-3.5 py-2 text-xs font-black text-white cursor-pointer"
                   >
-                    نعم، فتح اختيار الدول
+                    {tr(uiLanguage, 'Yes, Open Markets', 'نعم، فتح اختيار الدول')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmSwitchMarket(false)}
                     className="min-h-[40px] rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-xs font-black text-white cursor-pointer"
                   >
-                    إلغاء
+                    {tr(uiLanguage, 'Cancel', 'إلغاء')}
                   </button>
                 </div>
               )}
@@ -1061,10 +1214,14 @@ export function LeaderboardAndSettingsView() {
             <div>
               <h3 className="flex items-center gap-1.5 font-display text-sm font-black text-[#D91624]">
                 <AlertTriangle className="h-4 w-4 text-[#D91624]" />
-                <span>إعادة تأسيس الاستوديو من الصفر</span>
+                <span>{tr(uiLanguage, 'Reset Studio From Scratch', 'إعادة تأسيس الاستوديو من الصفر')}</span>
               </h3>
               <p className="mt-1 text-xs font-bold text-[#1A2530]/75">
-                يتم حفظ تقدمك تلقائياً. إذا أردت البدء باستوديو جديد تماماً يمكنك مسح البيانات الحالية.
+                {tr(
+                  uiLanguage,
+                  'Your progress is auto-saved. Wipe current data only if you want to found a brand-new studio from Year 1.',
+                  'يتم حفظ تقدمك تلقائياً. إذا أردت البدء باستوديو جديد تماماً يمكنك مسح البيانات الحالية.'
+                )}
               </p>
             </div>
 
@@ -1076,7 +1233,7 @@ export function LeaderboardAndSettingsView() {
                   className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-[#D91624] border border-[#D4AF37] px-4 py-2 text-xs font-black text-white shadow hover:brightness-110 cursor-pointer"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  <span>إعادة ضبط اللعبة</span>
+                  <span>{tr(uiLanguage, 'Reset Game', 'إعادة ضبط اللعبة')}</span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
@@ -1088,14 +1245,14 @@ export function LeaderboardAndSettingsView() {
                     }}
                     className="min-h-[40px] rounded-xl bg-[#D91624] px-3.5 py-2 text-xs font-black text-white cursor-pointer"
                   >
-                    تأكيد المسح النهائي
+                    {tr(uiLanguage, 'Confirm Wipe', 'تأكيد المسح النهائي')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmReset(false)}
                     className="min-h-[40px] rounded-xl border-2 border-[#1A2530] bg-[#F9F6F0] px-3.5 py-2 text-xs font-black text-[#1A2530] cursor-pointer"
                   >
-                    إلغاء
+                    {tr(uiLanguage, 'Cancel', 'إلغاء')}
                   </button>
                 </div>
               )}

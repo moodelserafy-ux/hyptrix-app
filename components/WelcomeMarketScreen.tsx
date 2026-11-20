@@ -8,6 +8,8 @@ import {
   type UiLanguageId,
   type WorldMarketId,
 } from '@/lib/market-profiles';
+import { getLocalizedMarketInfo, getUiDir, tr } from '@/lib/i18n';
+import { useGameStore } from '@/lib/store';
 import { WorldFlagArt } from './WorldFlagArt';
 import { triggerTelegramHaptic } from './TelegramMiniAppBridge';
 import { playClapperboardSnap } from '@/lib/sound-fx';
@@ -17,6 +19,7 @@ import {
   Lock,
   Check,
   ArrowLeft,
+  ArrowRight,
   Crown,
   BookOpen,
   Mail,
@@ -26,7 +29,7 @@ import {
 import type { NeelyoInfoTab } from './NeelyoInfoModal';
 
 export function WelcomeMarketScreen({
-  initialLanguage = 'ar',
+  initialLanguage = 'en',
   initialMarket = 'egypt',
   onComplete,
   onOpenInfo,
@@ -36,13 +39,19 @@ export function WelcomeMarketScreen({
   onComplete: (language: UiLanguageId, market: WorldMarketId) => void;
   onOpenInfo?: (tab: NeelyoInfoTab) => void;
 }) {
-  const [selectedLang, setSelectedLang] = useState<UiLanguageId>(initialLanguage);
+  const setUiLanguage = useGameStore((s) => s.setUiLanguage);
+  const storeLang = useGameStore((s) => s.uiLanguage);
+
+  const selectedLang: UiLanguageId = storeLang || initialLanguage;
   const [selectedMarket, setSelectedMarket] = useState<WorldMarketId>(
     initialMarket === 'saudi' ? 'saudi' : 'egypt'
   );
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const [lockedNotice, setLockedNotice] = useState<string | null>(null);
   const langMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const isEn = selectedLang === 'en';
+  const uiDir = getUiDir(selectedLang);
 
   const featuredMarkets = [MARKET_PROFILES.egypt, MARKET_PROFILES.saudi];
   const upcomingMarkets = [
@@ -54,10 +63,9 @@ export function WelcomeMarketScreen({
   const activeLangObj =
     UI_LANGUAGE_OPTIONS.find((l) => l.id === selectedLang) ||
     UI_LANGUAGE_OPTIONS[0];
-  const activeMarketObj = MARKET_PROFILES[selectedMarket];
+  const activeMarketLoc = getLocalizedMarketInfo(selectedMarket, selectedLang);
   const isSaudiSelected = selectedMarket === 'saudi';
 
-  // Close language popover on outside click or Escape
   useEffect(() => {
     if (!isLangMenuOpen) return;
     const handlePointerDown = (e: MouseEvent) => {
@@ -79,7 +87,6 @@ export function WelcomeMarketScreen({
     };
   }, [isLangMenuOpen]);
 
-  // Auto-dismiss transient locked notice after 3.4s
   useEffect(() => {
     if (!lockedNotice) return;
     const timer = setTimeout(() => setLockedNotice(null), 3400);
@@ -89,12 +96,18 @@ export function WelcomeMarketScreen({
   const handleSelectLanguage = (langId: UiLanguageId, available: boolean) => {
     if (!available) {
       triggerTelegramHaptic('warning');
-      setLockedNotice('هذه اللغة قيد التجهيز وستُفتح قريباً في التحديث القادم.');
+      setLockedNotice(
+        tr(
+          selectedLang,
+          'This language is currently in production and will unlock in an upcoming update.',
+          'هذه اللغة قيد التجهيز وستُفتح قريباً في التحديث القادم.'
+        )
+      );
       setIsLangMenuOpen(false);
       return;
     }
     triggerTelegramHaptic('selection');
-    setSelectedLang(langId);
+    setUiLanguage(langId, true);
     setLockedNotice(null);
     setIsLangMenuOpen(false);
   };
@@ -102,8 +115,13 @@ export function WelcomeMarketScreen({
   const handleSelectMarket = (marketId: WorldMarketId, available: boolean) => {
     if (!available) {
       triggerTelegramHaptic('light');
+      const loc = getLocalizedMarketInfo(marketId, selectedLang);
       setLockedNotice(
-        `عالم ${MARKET_PROFILES[marketId].countryNameAr} قادم قريباً بقاعدة نجومه ومهرجاناته الخاصة!`
+        tr(
+          selectedLang,
+          `${loc.countryName} is coming soon with its own stars, festivals, and box office!`,
+          `عالم ${loc.countryName} قادم قريباً بقاعدة نجومه ومهرجاناته الخاصة!`
+        )
       );
       return;
     }
@@ -123,12 +141,14 @@ export function WelcomeMarketScreen({
     onComplete(selectedLang, selectedMarket);
   };
 
+  const CtaArrow = isEn ? ArrowRight : ArrowLeft;
+
   return (
     <div
       className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-[#F9F6F0] text-[#1A2530]"
-      dir="rtl"
+      dir={uiDir}
     >
-      {/* Warm Creamy Ivory & Golden Ambient Glow matching the Main Interface */}
+      {/* Warm Creamy Ivory & Golden Ambient Glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-28 left-1/2 h-[320px] w-[540px] -translate-x-1/2 rounded-full bg-[#D4AF37]/18 blur-[90px]" />
         <motion.div
@@ -161,7 +181,7 @@ export function WelcomeMarketScreen({
                 type="button"
                 onClick={() => setLockedNotice(null)}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#F9F6F0]/75 hover:text-white cursor-pointer"
-                aria-label="إغلاق التنبيه"
+                aria-label={tr(selectedLang, 'Close notice', 'إغلاق التنبيه')}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -172,7 +192,7 @@ export function WelcomeMarketScreen({
 
       {/* ==================== TOP UTILITY BAR ==================== */}
       <header className="relative z-30 mx-auto flex w-full max-w-5xl items-center justify-between px-4 pt-3 pb-1 sm:px-6 sm:pt-4">
-        {/* Right: Quick Info Links */}
+        {/* Quick Info Links */}
         <div className="flex items-center gap-1.5">
           {onOpenInfo && (
             <button
@@ -184,7 +204,7 @@ export function WelcomeMarketScreen({
               className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-[#D4AF37]/60 bg-[#FFFDF8] px-3 text-xs font-extrabold text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer"
             >
               <BookOpen className="h-3.5 w-3.5 text-[#D91624]" />
-              <span>عن Neelyo</span>
+              <span>{tr(selectedLang, 'About Neelyo', 'عن Neelyo')}</span>
             </button>
           )}
           {onOpenInfo && (
@@ -195,15 +215,17 @@ export function WelcomeMarketScreen({
                 onOpenInfo('contact');
               }}
               className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#1A2530]/15 bg-[#FFFDF8] px-2.5 text-xs font-extrabold text-[#1A2530]/80 shadow-xs hover:border-[#D4AF37] hover:text-[#1A2530] transition cursor-pointer"
-              aria-label="تواصل معنا"
+              aria-label={tr(selectedLang, 'Contact us', 'تواصل معنا')}
             >
               <Mail className="h-3.5 w-3.5 text-[#B8860B]" />
-              <span className="hidden sm:inline">تواصل</span>
+              <span className="hidden sm:inline">
+                {tr(selectedLang, 'Contact', 'تواصل')}
+              </span>
             </button>
           )}
         </div>
 
-        {/* Left: Compact Interactive Language Capsule Switcher */}
+        {/* Compact Interactive Language Capsule Switcher (English + العربية Unlocked!) */}
         <div className="relative" ref={langMenuRef}>
           <button
             type="button"
@@ -232,11 +254,13 @@ export function WelcomeMarketScreen({
                 exit={{ opacity: 0, y: 6, scale: 0.96 }}
                 transition={{ duration: 0.16 }}
                 role="listbox"
-                aria-label="اختيار لغة الواجهة"
-                className="absolute left-0 top-12 z-50 w-56 overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-[#FFFDF8] p-1.5 shadow-[0_18px_45px_rgba(26,37,48,0.18)]"
+                aria-label={tr(selectedLang, 'Interface language', 'اختيار لغة الواجهة')}
+                className={`absolute ${
+                  isEn ? 'right-0' : 'left-0'
+                } top-12 z-50 w-56 overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-[#FFFDF8] p-1.5 shadow-[0_18px_45px_rgba(26,37,48,0.18)]`}
               >
                 <div className="px-2.5 py-1.5 text-[10px] font-black tracking-wide text-[#9A7209]">
-                  لغة الواجهة
+                  {tr(selectedLang, 'INTERFACE LANGUAGE', 'لغة الواجهة')}
                 </div>
                 <div className="space-y-1">
                   {UI_LANGUAGE_OPTIONS.map((lang) => {
@@ -250,7 +274,9 @@ export function WelcomeMarketScreen({
                         onClick={() =>
                           handleSelectLanguage(lang.id, lang.available)
                         }
-                        className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-right transition cursor-pointer ${
+                        className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl px-3 py-2 ${
+                          isEn ? 'text-left' : 'text-right'
+                        } transition cursor-pointer ${
                           isCurrent
                             ? 'bg-[#FFF5D6] text-[#1A2530] border border-[#D4AF37]'
                             : lang.available
@@ -265,20 +291,24 @@ export function WelcomeMarketScreen({
                           >
                             {lang.nativeLabel}
                           </span>
-                          {lang.id !== 'ar' && (
+                          {!isEn && lang.id !== 'ar' && (
                             <span className="text-[10px] font-bold text-[#1A2530]/50">
                               {lang.arabicLabel}
                             </span>
                           )}
                         </div>
-                        {lang.available ? (
+                        {isCurrent ? (
                           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#D91624] text-white">
                             <Check className="h-3.5 w-3.5 stroke-[3]" />
+                          </span>
+                        ) : lang.available ? (
+                          <span className="text-[10px] font-extrabold text-[#15803D]">
+                            {tr(selectedLang, 'Ready', 'متاح')}
                           </span>
                         ) : (
                           <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-extrabold text-[#9A7209]">
                             <Lock className="h-3 w-3" />
-                            <span>قريباً</span>
+                            <span>{tr(selectedLang, 'Soon', 'قريباً')}</span>
                           </span>
                         )}
                       </button>
@@ -318,10 +348,18 @@ export function WelcomeMarketScreen({
           </motion.div>
 
           <h1 className="font-display text-2xl sm:text-4xl font-black text-[#1A2530] leading-tight text-balance">
-            اختر ساحة المعركة السينمائية
+            {tr(
+              selectedLang,
+              'Choose Your Cinema Arena',
+              'اختر ساحة المعركة السينمائية'
+            )}
           </h1>
           <p className="mt-1 text-xs sm:text-sm font-bold text-[#1A2530]/65">
-            عالم مستقل بنجومه ومواسمه وعملته · رأس مال افتتاحي 75M
+            {tr(
+              selectedLang,
+              'Dedicated stars, seasons, awards & currency · 75M Starting Capital',
+              'عالم مستقل بنجومه ومواسمه وعملته · رأس مال افتتاحي 75M'
+            )}
           </p>
         </div>
 
@@ -330,6 +368,7 @@ export function WelcomeMarketScreen({
           {featuredMarkets.map((market) => {
             const isSelected = selectedMarket === market.id;
             const isSaudi = market.id === 'saudi';
+            const loc = getLocalizedMarketInfo(market.id, selectedLang);
 
             return (
               <motion.button
@@ -337,7 +376,9 @@ export function WelcomeMarketScreen({
                 type="button"
                 whileTap={{ scale: 0.98 }}
                 onClick={() => handleSelectMarket(market.id, true)}
-                className={`group relative flex flex-col overflow-hidden rounded-[22px] sm:rounded-[28px] border-2 text-right transition-all duration-200 cursor-pointer ${
+                className={`group relative flex flex-col overflow-hidden rounded-[22px] sm:rounded-[28px] border-2 ${
+                  isEn ? 'text-left' : 'text-right'
+                } transition-all duration-200 cursor-pointer ${
                   isSelected
                     ? isSaudi
                       ? 'border-[#046A38] bg-gradient-to-b from-[#FFFDF8] via-[#F7FBF8] to-[#ECF7F0] shadow-[0_16px_38px_rgba(4,106,56,0.18)] ring-2 ring-[#D4AF37]/75'
@@ -355,7 +396,7 @@ export function WelcomeMarketScreen({
                 >
                   <div className="mb-2 flex items-center justify-between gap-1">
                     <span className="text-[10px] sm:text-xs font-black tracking-wide text-[#FFF3B0] truncate">
-                      {market.countryNameAr} · {market.currencyLabel}
+                      {loc.countryName} · {loc.currencyLabel}
                     </span>
                     <span
                       className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition ${
@@ -377,13 +418,13 @@ export function WelcomeMarketScreen({
                 {/* Creamy Luxury Copy Footer */}
                 <div className="relative mt-auto flex flex-col justify-between gap-1 px-3 py-3 sm:px-5 sm:py-4">
                   <h2 className="font-display text-sm sm:text-xl font-black text-[#1A2530] leading-snug">
-                    {market.nativeTitle}
+                    {loc.nativeTitle}
                   </h2>
                   <p className="text-[11px] sm:text-xs font-bold text-[#1A2530]/70 line-clamp-2 leading-relaxed">
-                    {market.hqSubtitle} · {market.highlights[0]}
+                    {loc.hqSubtitle} · {loc.highlights[0]}
                   </p>
                   <div className="mt-1 hidden sm:flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-extrabold text-[#9A7209]">
-                    {market.highlights.map((h, i) => (
+                    {loc.highlights.map((h, i) => (
                       <React.Fragment key={h}>
                         {i > 0 && <span aria-hidden="true">·</span>}
                         <span>{h}</span>
@@ -399,25 +440,34 @@ export function WelcomeMarketScreen({
         {/* UPCOMING GLOBAL WORLDS — COMPACT HORIZONTAL STRIP */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between px-1 text-[11px] font-extrabold text-[#1A2530]/60">
-            <span>أسواق عالمية قادمة قريباً</span>
-            <span className="text-[#9A7209]">توسعات دولية</span>
+            <span>
+              {tr(selectedLang, 'Upcoming Global Markets', 'أسواق عالمية قادمة قريباً')}
+            </span>
+            <span className="text-[#9A7209]">
+              {tr(selectedLang, 'Global Expansions', 'توسعات دولية')}
+            </span>
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {upcomingMarkets.map((market) => {
-              const shortLabel =
-                market.id === 'turkey'
-                  ? 'تركيا'
+              const shortLabel = isEn
+                ? market.id === 'turkey'
+                  ? 'Turkey'
                   : market.id === 'korea'
-                  ? 'كوريا'
-                  : market.id === 'usa'
-                  ? 'هوليوود'
-                  : market.countryNameAr;
+                  ? 'Korea'
+                  : 'Hollywood'
+                : market.id === 'turkey'
+                ? 'تركيا'
+                : market.id === 'korea'
+                ? 'كوريا'
+                : 'هوليوود';
               return (
                 <button
                   key={market.id}
                   type="button"
                   onClick={() => handleSelectMarket(market.id, false)}
-                  className="group flex min-h-[54px] items-center justify-between gap-1.5 rounded-2xl border border-[#D4AF37]/40 bg-[#FFFDF8]/90 px-2.5 py-2 sm:px-3.5 sm:py-2.5 text-right shadow-2xs transition hover:border-[#D4AF37] hover:bg-[#FFF9E6] cursor-pointer"
+                  className={`group flex min-h-[54px] items-center justify-between gap-1.5 rounded-2xl border border-[#D4AF37]/40 bg-[#FFFDF8]/90 px-2.5 py-2 sm:px-3.5 sm:py-2.5 ${
+                    isEn ? 'text-left' : 'text-right'
+                  } shadow-2xs transition hover:border-[#D4AF37] hover:bg-[#FFF9E6] cursor-pointer`}
                 >
                   <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                     <div className="w-7 sm:w-10 shrink-0 opacity-90 group-hover:opacity-100 transition">
@@ -428,7 +478,7 @@ export function WelcomeMarketScreen({
                         {shortLabel}
                       </div>
                       <div className="text-[10px] font-extrabold text-[#9A7209]">
-                        قريباً
+                        {tr(selectedLang, 'Soon', 'قريباً')}
                       </div>
                     </div>
                   </div>
@@ -445,7 +495,7 @@ export function WelcomeMarketScreen({
         {/* Unified 3-Step Opening Progress Dots */}
         <div
           className="mb-3 flex items-center justify-center gap-2"
-          aria-label="الخطوة 1 من 3"
+          aria-label={tr(selectedLang, 'Step 1 of 3', 'الخطوة 1 من 3')}
         >
           <span
             className={`h-1.5 w-8 rounded-full transition-colors ${
@@ -466,8 +516,14 @@ export function WelcomeMarketScreen({
           }`}
         >
           <Crown className="h-5 w-5 text-[#FFF3B0]" />
-          <span>دخول سوق {activeMarketObj.countryNameAr}</span>
-          <ArrowLeft className="h-5 w-5 text-[#FFF3B0]" />
+          <span>
+            {tr(
+              selectedLang,
+              `Enter ${activeMarketLoc.countryName} Market`,
+              `دخول سوق ${activeMarketLoc.countryName}`
+            )}
+          </span>
+          <CtaArrow className="h-5 w-5 text-[#FFF3B0]" />
         </button>
       </footer>
     </div>

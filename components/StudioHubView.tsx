@@ -8,17 +8,18 @@ import {
   getDaysRemainingUntilAnnualAwards,
   STUDIO_FIXED_ASSETS,
   getStudioAssetBenefits,
+  STAR_FORGE_REQUIRED_LOCKS,
 } from '@/lib/store';
-import { GENRES } from '@/lib/db-resolver';
+import { MarketRegion, formatMoney } from '@/lib/game-engine';
+import { getPrimaryMarketRegion } from '@/lib/market-profiles';
 import {
-  MarketRegion,
-  formatMoney,
-} from '@/lib/game-engine';
-import {
-  getMarketProfile,
-  getMarketConfigsForWorld,
-  getPrimaryMarketRegion,
-} from '@/lib/market-profiles';
+  getUiDir,
+  getLocalizedMarketInfo,
+  getLocalizedExpansionMarkets,
+  getLocalizedGenreInfo,
+  STUDIO_ASSETS_EN,
+  tr,
+} from '@/lib/i18n';
 import { StudioLogoSvg } from './StudioLogoSvg';
 import { WorldFlagArt } from './WorldFlagArt';
 import { LeaderboardAndSettingsView } from './LeaderboardAndSettingsView';
@@ -99,12 +100,16 @@ export function StudioHubView({
     purchaseStudioAsset,
     showToast,
     worldMarket,
+    uiLanguage,
   } = useGameStore();
 
-  const marketProfile = getMarketProfile(worldMarket);
-  const marketConfigs = getMarketConfigsForWorld(worldMarket);
+  const isAr = uiLanguage === 'ar';
+  const dir = getUiDir(uiLanguage);
+  const marketInfo = getLocalizedMarketInfo(worldMarket, uiLanguage);
+  const marketConfigs = getLocalizedExpansionMarkets(worldMarket, uiLanguage);
   const primaryRegion = getPrimaryMarketRegion(worldMarket);
-  const currencyLabel = marketProfile.currencyLabel;
+  const currencyLabel = marketInfo.currencyLabel;
+  const arrowGlyph = isAr ? '←' : '→';
 
   const [activeSheet, setActiveSheet] = useState<
     null | 'markets' | 'archive' | 'history' | 'leaderboard' | 'assets'
@@ -129,7 +134,9 @@ export function StudioHubView({
     } else {
       const errMsg = getRewardedAdErrorMessage(
         adResult.reason,
-        'لتفعيل تمويل الإنقاذ'
+        'لتفعيل تمويل الإنقاذ',
+        uiLanguage,
+        'to activate the emergency investor bailout'
       );
       if (errMsg) showToast(errMsg, 'warning');
     }
@@ -159,19 +166,16 @@ export function StudioHubView({
     (sum, p) => sum + p.totalGrossRevenue,
     0
   );
-  const currentYearProjectsCount = releasedProjects.filter(
-    (p) => p.year === currentYear
-  ).length;
   const daysUntilAnnualAwards = getDaysRemainingUntilAnnualAwards(gameDay);
 
   const studioRankTitle =
     marketValue >= 1_000_000_000
-      ? 'إمبراطور السينما الملياردير'
+      ? tr(uiLanguage, 'Billionaire Cinema Emperor', 'إمبراطور السينما الملياردير')
       : marketValue >= 550_000_000
-      ? 'عملاق الإنتاج الدولي'
+      ? tr(uiLanguage, 'Global Studio Titan', 'عملاق الإنتاج الدولي')
       : marketValue >= 260_000_000
-      ? 'قطب الإنتاج الإقليمي'
-      : 'منتج سينمائي صاعد';
+      ? tr(uiLanguage, 'Regional Box-Office Mogul', 'قطب الإنتاج الإقليمي')
+      : tr(uiLanguage, 'Rising Film Producer', 'منتج سينمائي صاعد');
 
   const offerList = Object.values(draft.talentOffers || {});
   const isUntouchedLegacyDefault =
@@ -242,8 +246,13 @@ export function StudioHubView({
     (modalPage + 1) * historyPageSize
   );
 
+  const lockIndices = Array.from(
+    { length: STAR_FORGE_REQUIRED_LOCKS },
+    (_, idx) => idx
+  );
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6 py-2">
+    <div dir={dir} className="mx-auto max-w-6xl space-y-6 py-2">
       <div
         className={
           activeSheet
@@ -251,14 +260,13 @@ export function StudioHubView({
             : 'space-y-6'
         }
       >
-        {/* TOP STUDIO WALL PLAQUE (لوحة استوديو هوليوود الصباحية النحاسية) */}
+        {/* TOP STUDIO WALL PLAQUE */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           className="relative rounded-3xl bg-[#1A2530] text-[#F9F6F0] border-4 border-[#D4AF37] p-4 sm:p-6 shadow-[0_20px_50px_rgba(26,37,48,0.25)]"
         >
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            {/* Right: Studio Crest + Name + Director Chair Icon */}
             <div className="flex items-center gap-4">
               <div className="shrink-0 rounded-2xl bg-[#F9F6F0] p-2.5 border-2 border-[#D4AF37] shadow-lg">
                 <StudioLogoSvg config={logo} size={62} />
@@ -271,36 +279,43 @@ export function StudioHubView({
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 text-[#F9F6F0] text-[11px] font-bold border border-[#D4AF37]/40">
                     <WorldFlagArt market={worldMarket} className="w-4 h-3 rounded-[2px] shrink-0" />
-                    <span>{marketProfile.countryNameAr}</span>
+                    <span>{marketInfo.countryName}</span>
                   </span>
                   <span className="text-xs font-bold text-[#D4AF37]">
-                    · {formatGameDate(gameDay, currentYear)}
+                    · {formatGameDate(gameDay, currentYear, uiLanguage)}
                   </span>
                 </div>
 
                 <h1 className="font-display text-2xl sm:text-3xl text-[#F9F6F0] tracking-wide">
-                  مكتب الإمبراطور — {studioName}
+                  {tr(
+                    uiLanguage,
+                    `Executive Office — ${studioName}`,
+                    `مكتب الإمبراطور — ${studioName}`
+                  )}
                 </h1>
 
                 <div className="flex flex-wrap items-center gap-3 mt-1 text-xs font-bold text-[#F9F6F0]/80">
                   <span className="inline-flex items-center gap-1.5 text-[#D4AF37]">
                     <DirectorChairIcon className="w-4 h-4 text-[#D4AF37]" />
-                    <span>الإمبراطور: {ceoName}</span>
+                    <span>
+                      {tr(uiLanguage, `CEO: ${ceoName}`, `الإمبراطور: ${ceoName}`)}
+                    </span>
                   </span>
                   <span>
                     ·{' '}
                     {founderPerk === 'visionary_director'
-                      ? '★ مخرج عبقري (+10% جودة)'
+                      ? tr(uiLanguage, '★ Visionary Auteur (+10 Quality)', '★ مخرج عبقري (+10% جودة)')
                       : founderPerk === 'marketing_whale'
-                      ? '★ حوت تسويق (+15% إيرادات)'
-                      : '★ مفاوض شرس (-15% أجور)'}
+                      ? tr(uiLanguage, '★ Box-Office Mogul (+20% Opening)', '★ حوت تسويق (+15% إيرادات)')
+                      : tr(uiLanguage, '★ Shark Negotiator (-15% Salaries)', '★ مفاوض شرس (-15% أجور)')}
                   </span>
-                  <span>· السمعة الفنية: {reputation}%</span>
+                  <span>
+                    · {tr(uiLanguage, `Reputation: ${reputation}%`, `السمعة الفنية: ${reputation}%`)}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Left: Brass Financial Plaques + Film Reel Settings */}
             <div
               data-tour-id="tour-finance"
               className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-between lg:justify-end"
@@ -311,7 +326,7 @@ export function StudioHubView({
               >
                 <div className="text-[10px] font-extrabold text-[#1A2530]/70 flex items-center gap-1">
                   <Wallet className="w-3.5 h-3.5 text-[#D91624]" />
-                  <span>خزينة السيولة النقدية</span>
+                  <span>{tr(uiLanguage, 'Liquid Cash Treasury', 'خزينة السيولة النقدية')}</span>
                 </div>
                 <div
                   data-testid="hub-cash-value"
@@ -325,7 +340,7 @@ export function StudioHubView({
               <div className="px-4 py-2 rounded-2xl bg-[#F9F6F0]/10 text-[#F9F6F0] border-2 border-[#D4AF37]/60">
                 <div className="text-[10px] font-extrabold text-[#D4AF37] flex items-center gap-1">
                   <TrendingUp className="w-3.5 h-3.5" />
-                  <span>القيمة السوقية</span>
+                  <span>{tr(uiLanguage, 'Market Valuation', 'القيمة السوقية')}</span>
                 </div>
                 <div
                   data-testid="hub-market-value"
@@ -340,7 +355,7 @@ export function StudioHubView({
                 <button
                   type="button"
                   onClick={onOpenSettings}
-                  title="إعدادات الاستوديو (بكرة السينما)"
+                  title={tr(uiLanguage, 'Studio Settings & Language', 'إعدادات الاستوديو واللغة')}
                   className="w-12 h-12 rounded-2xl bg-[#D4AF37] hover:brightness-110 text-[#1A2530] flex items-center justify-center border-2 border-[#F9F6F0] shadow-lg transition cursor-pointer"
                 >
                   <FilmReelSettingsIcon className="w-6 h-6" />
@@ -350,7 +365,7 @@ export function StudioHubView({
           </div>
         </motion.div>
 
-        {/* EMERGENCY LIQUIDITY & BANKRUPTCY GRACE PERIOD BANNER (السيولة الطارئة ومهلة الإفلاس) */}
+        {/* EMERGENCY LIQUIDITY & BANKRUPTCY GRACE PERIOD BANNER */}
         {(cash <= 10_000_000 || bankruptcyDeadlineDay !== null) && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -366,19 +381,43 @@ export function StudioHubView({
                 <Flame className="w-3.5 h-3.5 text-[#D91624]" />
                 <span>
                   {cash <= 0 && bankruptcyDeadlineDay !== null
-                    ? `إنذار إفلاس رسمي · متبقي ${Math.max(1, bankruptcyDeadlineDay - gameDay)} يوم في المهلة قبل بيع وتصفية الشركة!`
-                    : 'تحذير سيولة حرجة · الخزينة تقترب من الصفر!'}
+                    ? tr(
+                        uiLanguage,
+                        `Official Bankruptcy Warning · ${Math.max(1, bankruptcyDeadlineDay - gameDay)} days left before liquidation!`,
+                        `إنذار إفلاس رسمي · متبقي ${Math.max(1, bankruptcyDeadlineDay - gameDay)} يوم في المهلة قبل بيع وتصفية الشركة!`
+                      )
+                    : tr(
+                        uiLanguage,
+                        'Critical Liquidity Alert · Treasury approaching zero!',
+                        'تحذير سيولة حرجة · الخزينة تقترب من الصفر!'
+                      )}
                 </span>
               </div>
               <h3 className="font-display text-lg sm:text-xl text-[#F9F6F0]">
                 {cash <= 0
-                  ? `عجز الخزينة الحالي (${formatMoney(cash)} ${currencyLabel}) — أنقذ شركتك من التصفية الآن!`
-                  : 'احصل على تمويل إنقاذ عاجل من مستثمر سينمائي لتفادي الإفلاس'}
+                  ? tr(
+                      uiLanguage,
+                      `Current Deficit (${formatMoney(cash)} ${currencyLabel}) — Rescue your studio now!`,
+                      `عجز الخزينة الحالي (${formatMoney(cash)} ${currencyLabel}) — أنقذ شركتك من التصفية الآن!`
+                    )
+                  : tr(
+                      uiLanguage,
+                      'Secure an emergency investor bailout to keep cameras rolling',
+                      'احصل على تمويل إنقاذ عاجل من مستثمر سينمائي لتفادي الإفلاس'
+                    )}
               </h3>
               <p className="text-xs font-bold text-[#F9F6F0]/85">
                 {cash <= 0
-                  ? 'إذا انتهت مهلة الـ 3 أشهر دون سداد المديونية ستُجبر على بيع الشركة للمستثمرين وتأسيس شركة جديدة في نفس العالم.'
-                  : 'بدلاً من تعريض الاستوديو للإفلاس، يمكنك تفعيل صفقة تمويل إنقاذ فوري مقابل إعلان ممول.'}
+                  ? tr(
+                      uiLanguage,
+                      'If the 3-month grace period expires with negative cash, creditors will liquidate the studio and force a fresh start.',
+                      'إذا انتهت مهلة الـ 3 أشهر دون سداد المديونية ستُجبر على بيع الشركة للمستثمرين وتأسيس شركة جديدة في نفس العالم.'
+                    )
+                  : tr(
+                      uiLanguage,
+                      'Instead of risking bankruptcy, trigger an instant investor liquidity injection via a short sponsored reel.',
+                      'بدلاً من تعريض الاستوديو للإفلاس، يمكنك تفعيل صفقة تمويل إنقاذ فوري مقابل إعلان ممول.'
+                    )}
               </p>
             </div>
 
@@ -389,19 +428,22 @@ export function StudioHubView({
             >
               <Film className="w-4 h-4 shrink-0" />
               <span>
-                تمويل إنقاذ من مستثمر (+
-                {formatMoney(
-                  cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
-                )}{' '}
-                {currencyLabel}) — مشاهدة إعلان
+                {tr(
+                  uiLanguage,
+                  `Investor Bailout (+${formatMoney(
+                    cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
+                  )} ${currencyLabel}) — Watch Ad`,
+                  `تمويل إنقاذ من مستثمر (+${formatMoney(
+                    cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
+                  )} ${currencyLabel}) — مشاهدة إعلان`
+                )}
               </span>
             </button>
           </motion.div>
         )}
 
-        {/* THE STUDIO WALL (الحائط الخلفي للمكتب: سبورة الفلين Corkboard + الخزنة الحديدية في الحائط) */}
+        {/* THE STUDIO WALL (Corkboard + Wall Safe) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* 1. سبورة الفلين المعلقة على الحائط (Authentic Corkboard with Polaroids, Glossy Push-Pins & Red Twine) */}
           <motion.div
             data-tour-id="tour-corkboard"
             whileHover={{ y: -4, scale: 1.008 }}
@@ -415,26 +457,26 @@ export function StudioHubView({
               backgroundPosition: '0 0, 7px 7px, 0 0',
             }}
           >
-            {/* Brass Frame Corner Rivets */}
             <span className="pointer-events-none absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#FFF3B0] to-[#9A7210] shadow-xs" />
             <span className="pointer-events-none absolute top-2 left-2 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#FFF3B0] to-[#9A7210] shadow-xs" />
             <span className="pointer-events-none absolute bottom-2 right-2 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#FFF3B0] to-[#9A7210] shadow-xs" />
             <span className="pointer-events-none absolute bottom-2 left-2 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-[#FFF3B0] to-[#9A7210] shadow-xs" />
 
-            {/* Corkboard Brass Plaque Header */}
             <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-4">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-[#1A2530] text-[#F9F6F0] border-2 border-[#D4AF37] text-xs font-extrabold shadow-md">
                 <Pin className="w-3.5 h-3.5 text-[#D91624] fill-[#D91624]" />
-                <span>سبورة الكاستينج والنجوم</span>
+                <span>{tr(uiLanguage, 'Casting & Talent Corkboard', 'سبورة الكاستينج والنجوم')}</span>
               </div>
               <span className="px-3 py-1 rounded-lg bg-[#D91624] text-white border border-[#D4AF37]/80 font-display text-xs tracking-wide shadow-md group-hover:brightness-110 transition">
-                افتح ملفات الممثلين والمخرجين ←
+                {tr(
+                  uiLanguage,
+                  `Open Talent & Crew Files ${arrowGlyph}`,
+                  `افتح ملفات الممثلين والمخرجين ${arrowGlyph}`
+                )}
               </span>
             </div>
 
-            {/* Pinned Polaroid Talent Snapshots Connected with Red Casting Twine */}
             <div className="relative my-2 pt-2">
-              {/* Red Casting String SVG connecting the 3 push-pins */}
               <svg
                 aria-hidden="true"
                 viewBox="0 0 600 90"
@@ -454,12 +496,12 @@ export function StudioHubView({
               <div className="relative z-10 grid grid-cols-3 gap-2.5 sm:gap-4">
                 {[
                   {
-                    title: 'نجوم الشباك',
+                    title: tr(uiLanguage, 'Box-Office Stars', 'نجوم الشباك'),
                     sub:
                       worldMarket === 'saudi'
-                        ? '100+ نجم ونجمة خليجية'
-                        : '180+ ممثل وممثلة',
-                    note: 'فئة S الذهبية',
+                        ? tr(uiLanguage, '100+ Gulf Stars', '100+ نجم ونجمة خليجية')
+                        : tr(uiLanguage, '180+ Screen Stars', '180+ ممثل وممثلة'),
+                    note: tr(uiLanguage, 'GOLD S-TIER', 'فئة S الذهبية'),
                     rot: '-rotate-2',
                     pinColor: 'from-[#FF5C67] via-[#D91624] to-[#7A0912]',
                     frameBg: 'from-[#1E2C3A] to-[#111921]',
@@ -467,9 +509,9 @@ export function StudioHubView({
                     iconColor: 'text-[#D4AF37]',
                   },
                   {
-                    title: 'المخرجين والطاقم',
-                    sub: 'مخرجين + تصوير وموسيقى',
-                    note: 'قيادة البلاتوه',
+                    title: tr(uiLanguage, 'Directors & Crew', 'المخرجين والطاقم'),
+                    sub: tr(uiLanguage, 'Directors · DOP · Score', 'مخرجين + تصوير وموسيقى'),
+                    note: tr(uiLanguage, 'ON-SET MASTERS', 'قيادة البلاتوه'),
                     rot: 'rotate-2',
                     pinColor: 'from-[#FFF3B0] via-[#D4AF37] to-[#8C670C]',
                     frameBg: 'from-[#2A1D1F] to-[#1A2530]',
@@ -477,9 +519,9 @@ export function StudioHubView({
                     iconColor: 'text-[#FFF3B0]',
                   },
                   {
-                    title: 'الرادار والنجوم الخاصة',
-                    sub: 'كروت الألماظ 99',
-                    note: 'عقود حصرية',
+                    title: tr(uiLanguage, 'Custom Stars', 'الرادار والنجوم الخاصة'),
+                    sub: tr(uiLanguage, 'Diamond 99 Cards', 'كروت الألماظ 99'),
+                    note: tr(uiLanguage, 'VIP EXCLUSIVE', 'عقود حصرية'),
                     rot: '-rotate-1',
                     pinColor: 'from-[#FF5C67] via-[#D91624] to-[#7A0912]',
                     frameBg: 'from-[#162735] to-[#0D1821]',
@@ -493,7 +535,6 @@ export function StudioHubView({
                       key={i}
                       className={`relative bg-[#FDFBF7] p-2 sm:p-2.5 pb-3 rounded-md shadow-[0_10px_18px_rgba(32,16,4,0.34)] border border-[#E5DEC9] ${card.rot} group-hover:rotate-0 transition-transform duration-300`}
                     >
-                      {/* Realistic 3D Glossy Push-Pin + Cast Shadow */}
                       <div className="relative mx-auto -mt-4 mb-1.5 flex items-center justify-center">
                         <span className="absolute top-2.5 h-2.5 w-2.5 rounded-full bg-black/35 blur-[2px]" />
                         <span
@@ -503,7 +544,6 @@ export function StudioHubView({
                         </span>
                       </div>
 
-                      {/* Authentic Polaroid Dark Photo Window */}
                       <div
                         className={`relative h-16 sm:h-20 w-full rounded-xs bg-gradient-to-br ${card.frameBg} border border-[#1A2530]/20 flex flex-col items-center justify-center overflow-hidden mb-2`}
                       >
@@ -513,12 +553,11 @@ export function StudioHubView({
                         </span>
                       </div>
 
-                      {/* Handwritten Polaroid Caption Strip */}
                       <div className="text-center">
                         <div className="font-display text-xs sm:text-sm text-[#1A2530] leading-tight truncate">
                           {card.title}
                         </div>
-                        <div className="font-ruqaa text-[12px] sm:text-sm text-[#D91624] leading-tight mt-0.5 truncate">
+                        <div className="font-ruqaa text-[11px] sm:text-xs text-[#D91624] leading-tight mt-0.5 truncate">
                           {card.sub}
                         </div>
                       </div>
@@ -528,22 +567,33 @@ export function StudioHubView({
               </div>
             </div>
 
-            {/* Pinned Yellow Sticky Note for Active Contracts or Quick Status */}
             <div className="relative z-10 mt-3.5 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#FEF08A] border border-[#CA8A04]/70 px-3.5 py-2 text-[#1A2530] text-xs font-extrabold shadow-[2px_4px_10px_rgba(32,16,4,0.22)] -rotate-[0.4deg]">
               <span>
                 {awaitingChoiceCount > 0
-                  ? `⚠️ لديك ${awaitingChoiceCount} عروض مقبولة تنتظر اختيارك النهائي على السبورة!`
+                  ? tr(
+                      uiLanguage,
+                      `⚠️ ${awaitingChoiceCount} accepted offer(s) awaiting your final signature on the board!`,
+                      `⚠️ لديك ${awaitingChoiceCount} عروض مقبولة تنتظر اختيارك النهائي على السبورة!`
+                    )
                   : pendingOffersCount > 0
-                  ? `⏳ بانتظار رد ${pendingOffersCount} من النجوم على عقودك المرسلة...`
-                  : '📌 اضغط لتصفح كروت الممثلين والمخرجين وإرسال عروض التعاقد لفيلمك القادم'}
+                  ? tr(
+                      uiLanguage,
+                      `⏳ Awaiting replies from ${pendingOffersCount} star(s) on your pending offers...`,
+                      `⏳ بانتظار رد ${pendingOffersCount} من النجوم على عقودك المرسلة...`
+                    )
+                  : tr(
+                      uiLanguage,
+                      '📌 Tap to scout actors & directors and send contract offers for your next release',
+                      '📌 اضغط لتصفح كروت الممثلين والمخرجين وإرسال عروض التعاقد لفيلمك القادم'
+                    )}
               </span>
               <span className="font-display text-[#D91624] underline shrink-0">
-                فحص الكاستينج
+                {tr(uiLanguage, 'Inspect Roster', 'فحص الكاستينج')}
               </span>
             </div>
           </motion.div>
 
-          {/* 2. الخزنة الحديدية في الحائط (Wall Safe) -> تفتح الميزانية والبلاتوهات والأصول الثابتة */}
+          {/* 2. Wall Safe */}
           <motion.div
             data-tour-id="tour-vault-shelf"
             whileHover={{ y: -4, scale: 1.01 }}
@@ -553,15 +603,14 @@ export function StudioHubView({
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#D4AF37] text-[#1A2530] text-xs font-black">
                 <ShieldCheck className="w-4 h-4" />
-                <span>خزنة الإمبراطور في الحائط</span>
+                <span>{tr(uiLanguage, 'Executive Wall Safe', 'خزنة الإمبراطور في الحائط')}</span>
               </span>
               <span className="font-typewriter text-xs font-black text-[#D4AF37]">
-                خزنة مصفحة
+                {tr(uiLanguage, 'ARMORED VAULT', 'خزنة مصفحة')}
               </span>
             </div>
 
             <div className="my-4 flex items-center gap-4">
-              {/* Spinning Safe Wheel Visual */}
               <div className="w-20 h-20 shrink-0 rounded-full border-4 border-[#D4AF37] bg-[#1A2530] flex items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.35)] group-hover:rotate-90 transition-transform duration-500">
                 <div className="w-10 h-10 rounded-full border-2 border-[#D4AF37] bg-[#D91624] flex items-center justify-center">
                   <Coins className="w-5 h-5 text-[#D4AF37]" />
@@ -570,39 +619,57 @@ export function StudioHubView({
 
               <div>
                 <h3 className="font-display text-xl text-[#F9F6F0]">
-                  الميزانية والبلاتوهات والأصول الثابتة
+                  {tr(uiLanguage, 'Treasury, Soundstages & Assets', 'الميزانية والبلاتوهات والأصول الثابتة')}
                 </h3>
                 <p className="text-xs text-[#F9F6F0]/80 font-bold mt-1 leading-relaxed">
-                  شراء البلاتوهات الثابتة لتقليل تكاليف الإنتاج (خصم -{assetBenefits.totalDiscountPercent}%) والحماية من أزمات التصوير وتمويل الإنقاذ العاجل
+                  {tr(
+                    uiLanguage,
+                    `Acquire permanent soundstages to slash production costs (-${assetBenefits.totalDiscountPercent}%), shield against set crises, and unlock emergency bailouts.`,
+                    `شراء البلاتوهات الثابتة لتقليل تكاليف الإنتاج (خصم -${assetBenefits.totalDiscountPercent}%) والحماية من أزمات التصوير وتمويل الإنقاذ العاجل`
+                  )}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-3 border-t border-[#D4AF37]/30 text-xs font-extrabold text-[#D4AF37]">
-              <span>الأصول المملوكة: {(ownedStudioAssets || []).length}/5 بلاتوهات</span>
+              <span>
+                {tr(
+                  uiLanguage,
+                  `Owned Assets: ${(ownedStudioAssets || []).length}/5 Facilities`,
+                  `الأصول المملوكة: ${(ownedStudioAssets || []).length}/5 بلاتوهات`
+                )}
+              </span>
               <span className="px-3 py-1 rounded-lg bg-[#D4AF37] text-[#1A2530]">
-                فتح الخزنة ←
+                {tr(uiLanguage, `Open Vault ${arrowGlyph}`, `فتح الخزنة ${arrowGlyph}`)}
               </span>
             </div>
           </motion.div>
         </div>
 
-        {/* THE 3D EMPEROR'S WOODEN DESK SURFACE (سطح مكتب الإمبراطور الخشبي التفاعلي) */}
+        {/* THE 3D EMPEROR'S WOODEN DESK SURFACE */}
         <div className="relative rounded-[32px] bg-gradient-to-b from-[#5C3A21] via-[#4A2E19] to-[#362010] border-8 border-[#D4AF37] p-5 sm:p-8 shadow-[0_28px_70px_rgba(26,37,48,0.45)]">
-          {/* Brass Desk Nameplate */}
           <div className="flex flex-wrap items-center justify-between gap-2 mb-6 pb-3 border-b-2 border-[#D4AF37]/40">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-display text-base sm:text-lg shadow-md">
               <DirectorChairIcon className="w-5 h-5 text-[#1A2530]" />
-              <span>سطح مكتب الإمبراطور التفاعلي — اختر الأداة من فوق المكتب</span>
+              <span>
+                {tr(
+                  uiLanguage,
+                  'Interactive Executive Desk — Pick Your Tool',
+                  'سطح مكتب الإمبراطور التفاعلي — اختر الأداة من فوق المكتب'
+                )}
+              </span>
             </div>
             <span className="text-xs font-bold text-[#F9F6F0]/85">
-              اضغط مباشرة على ورق السيناريو أو الملف السري الأحمر أو الموبايل
+              {tr(
+                uiLanguage,
+                'Tap the Script Stack, Top Secret Red Folder, or Executive Phone directly',
+                'اضغط مباشرة على ورق السيناريو أو الملف السري الأحمر أو الموبايل'
+              )}
             </span>
           </div>
 
-          {/* 3 Physical Props on the Emperor's Desk */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* PROP 1: ورق السيناريو على المكتب (Script Paper Stack -> Project Setup / Active Film) */}
+            {/* PROP 1: Script Paper Stack */}
             <motion.div
               data-tour-id="tour-script"
               whileHover={{ y: -6, rotate: -1 }}
@@ -619,37 +686,51 @@ export function StudioHubView({
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <span className="px-2.5 py-0.5 rounded bg-[#1A2530] text-[#F9F6F0] font-typewriter text-[11px] font-black">
-                    مسودة سيناريو · {currentYear}
+                    {tr(uiLanguage, `SCRIPT DRAFT · ${currentYear}`, `مسودة سيناريو · ${currentYear}`)}
                   </span>
                   <FileText className="w-6 h-6 text-[#D91624]" />
                 </div>
 
                 <h3 className="font-display text-2xl text-[#1A2530] mb-1">
                   {hasActiveProject
-                    ? `سيناريو «${draft.title}»`
-                    : 'ورق السيناريو (مشروع جديد)'}
+                    ? tr(uiLanguage, `Script “${draft.title}”`, `سيناريو «${draft.title}»`)
+                    : tr(uiLanguage, 'New Production Script', 'ورق السيناريو (مشروع جديد)')}
                 </h3>
 
                 <p className="font-typewriter text-xs font-bold text-[#1A2530]/80 leading-relaxed">
                   {hasActiveProject
                     ? draft.filmingStartDay !== null
-                      ? `التصوير جاري في البلاتوه (${draft.filmingDaysElapsed}/${draft.filmingDurationDays})`
-                      : 'اضغط لاستكمال التعاقدات والتصوير على ورق السيناريو'
-                    : 'اضغط لفتح ورق السيناريو المطبوع بالآلة الكاتبة وبدء فيلم أو مسلسل جديد'}
+                      ? tr(
+                          uiLanguage,
+                          `Principal photography in progress (${draft.filmingDaysElapsed}/${draft.filmingDurationDays})`,
+                          `التصوير جاري في البلاتوه (${draft.filmingDaysElapsed}/${draft.filmingDurationDays})`
+                        )
+                      : tr(
+                          uiLanguage,
+                          'Tap to continue casting contracts and filming prep for this script',
+                          'اضغط لاستكمال التعاقدات والتصوير على ورق السيناريو'
+                        )
+                    : tr(
+                        uiLanguage,
+                        'Tap to open a fresh typewritten script and greenlight a blockbuster film or TV series',
+                        'اضغط لفتح ورق السيناريو المطبوع بالآلة الكاتبة وبدء فيلم أو مسلسل جديد'
+                      )}
                 </p>
               </div>
 
               <div className="mt-5 pt-3 border-t-2 border-dashed border-[#1A2530]/20 flex items-center justify-between">
-                <span className="font-ruqaa text-lg text-[#D91624]">
-                  نسخة المخرج المعتمدة
+                <span className="font-ruqaa text-base sm:text-lg text-[#D91624]">
+                  {tr(uiLanguage, 'Director’s Cut', 'نسخة المخرج المعتمدة')}
                 </span>
                 <span className="px-3.5 py-1.5 rounded-xl bg-[#D91624] text-white font-extrabold text-xs shadow">
-                  {hasActiveProject ? 'متابعة العمل ←' : 'إنشاء مشروع ←'}
+                  {hasActiveProject
+                    ? tr(uiLanguage, `Resume ${arrowGlyph}`, `متابعة العمل ${arrowGlyph}`)
+                    : tr(uiLanguage, `New Project ${arrowGlyph}`, `إنشاء مشروع ${arrowGlyph}`)}
                 </span>
               </div>
             </motion.div>
 
-            {/* PROP 2: الملف السري الأحمر المقفول بـ 5 أقفال ذهبية (Top Secret Folder -> The Star Forge) */}
+            {/* PROP 2: Top Secret Red Folder (2 Golden Locks -> The Star Forge) */}
             <motion.div
               data-tour-id="tour-starforge"
               whileHover={{ y: -6, scale: 1.02 }}
@@ -657,43 +738,59 @@ export function StudioHubView({
               onClick={() => setStarForgeOpen(true)}
               className="relative rounded-2xl bg-gradient-to-br from-[#D91624] via-[#B3121E] to-[#7D0912] text-[#F9F6F0] p-5 border-4 border-[#D4AF37] shadow-[8px_12px_0px_#1A2530] cursor-pointer flex flex-col justify-between overflow-hidden"
             >
-              {/* Top Secret Stamp */}
               <div className="flex items-center justify-between mb-3">
                 <span className="px-2.5 py-0.5 rounded bg-[#1A2530] text-[#D4AF37] font-typewriter text-[11px] font-black border border-[#D4AF37]">
-                  ملف سري للغاية · خاص
+                  {tr(uiLanguage, 'TOP SECRET · VIP', 'ملف سري للغاية · خاص')}
                 </span>
                 <span className="text-xs font-extrabold text-[#D4AF37]">
-                  {starForgeLocksOpened >= 5
-                    ? 'الأقفال الـ 5 مفتوحة ✓'
-                    : `${starForgeLocksOpened}/5 أقفال`}
+                  {starForgeLocksOpened >= STAR_FORGE_REQUIRED_LOCKS
+                    ? tr(
+                        uiLanguage,
+                        `All ${STAR_FORGE_REQUIRED_LOCKS} Locks Open ✓`,
+                        `القفلان مفتوحان ✓`
+                      )
+                    : tr(
+                        uiLanguage,
+                        `${starForgeLocksOpened}/${STAR_FORGE_REQUIRED_LOCKS} Locks`,
+                        `${starForgeLocksOpened}/${STAR_FORGE_REQUIRED_LOCKS} أقفال`
+                      )}
                 </span>
               </div>
 
               <div>
                 <h3 className="font-display text-2xl text-[#F9F6F0] mb-1">
-                  الملف السري (غرفة صناعة النجوم)
+                  {tr(uiLanguage, 'Top Secret (The Star Forge)', 'الملف السري (غرفة صناعة النجوم)')}
                 </h3>
                 <p className="text-xs font-bold text-[#F9F6F0]/90 leading-relaxed">
-                  افتح الأقفال الذهبية الـ 5 وادخل كابينة الكاستينج لتصميم نجمك الخاص بالرادار السداسي والكارت الألماظ!
+                  {tr(
+                    uiLanguage,
+                    `Unlock the ${STAR_FORGE_REQUIRED_LOCKS} golden vault locks and enter the Royal Casting Cabin to craft your own Diamond-tier superstar!`,
+                    `افتح القفلين الذهبيين (${STAR_FORGE_REQUIRED_LOCKS}) وادخل كابينة الكاستينج لتصميم نجمك الخاص بالرادار السداسي والكارت الألماظ!`
+                  )}
                 </p>
 
-                {/* 5 Golden Locks Row on the Folder */}
-                <div className="grid grid-cols-5 gap-1.5 mt-4">
-                  {[0, 1, 2, 3, 4].map((idx) => {
+                <div className="grid grid-cols-2 gap-2.5 mt-4">
+                  {lockIndices.map((idx) => {
                     const unlocked = idx < (starForgeLocksOpened || 0);
                     return (
                       <div
                         key={idx}
-                        className={`py-1.5 rounded-lg flex flex-col items-center justify-center border ${
+                        className={`py-2 rounded-lg flex items-center justify-center gap-1.5 border text-[11px] font-black ${
                           unlocked
                             ? 'bg-[#D4AF37] text-[#1A2530] border-white'
                             : 'bg-[#1A2530]/80 text-[#D4AF37] border-[#D4AF37]/50'
                         }`}
                       >
                         {unlocked ? (
-                          <Unlock className="w-3.5 h-3.5" />
+                          <>
+                            <Unlock className="w-3.5 h-3.5" />
+                            <span>{tr(uiLanguage, 'Open', 'مفتوح')}</span>
+                          </>
                         ) : (
-                          <Lock className="w-3.5 h-3.5" />
+                          <>
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>#{idx + 1}</span>
+                          </>
                         )}
                       </div>
                     );
@@ -703,15 +800,15 @@ export function StudioHubView({
 
               <div className="mt-4 pt-3 border-t border-[#D4AF37]/40 flex items-center justify-between">
                 <span className="text-xs font-extrabold text-[#D4AF37]">
-                  كابينة الكاستينج الملكية
+                  {tr(uiLanguage, 'Royal Casting Cabin', 'كابينة الكاستينج الملكية')}
                 </span>
                 <span className="px-3.5 py-1.5 rounded-xl bg-[#D4AF37] text-[#1A2530] font-extrabold text-xs shadow">
-                  فتح الملف السري ←
+                  {tr(uiLanguage, `Open Vault ${arrowGlyph}`, `فتح الملف السري ${arrowGlyph}`)}
                 </span>
               </div>
             </motion.div>
 
-            {/* PROP 3: الموبايل على المكتب (Smartphone -> Electronic Committees & Trend War Room) */}
+            {/* PROP 3: Executive Smartphone */}
             <motion.div
               data-tour-id="tour-phone"
               whileHover={{ y: -6, rotate: 1 }}
@@ -725,58 +822,71 @@ export function StudioHubView({
               onClick={() => setPrWarRoomOpen(true)}
               className="relative rounded-[28px] bg-[#1A2530] text-[#F9F6F0] p-5 border-4 border-[#D4AF37] shadow-[8px_12px_0px_#0F171E] cursor-pointer flex flex-col justify-between"
             >
-              {/* Phone Speaker Notch */}
               <div className="w-16 h-1.5 rounded-full bg-[#D4AF37]/40 mx-auto mb-3" />
 
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#D91624] text-white text-[10px] font-extrabold">
                     <Flame className="w-3 h-3" />
-                    <span>موبايل الإمبراطور المباشر</span>
+                    <span>{tr(uiLanguage, 'Executive Direct Line', 'موبايل الإمبراطور المباشر')}</span>
                   </span>
                   <Smartphone className="w-5 h-5 text-[#D4AF37]" />
                 </div>
 
                 <h3 className="font-display text-2xl text-[#F9F6F0] mb-1">
-                  اللجان الإلكترونية والتريند
+                  {tr(uiLanguage, 'PR War Room & Trends', 'اللجان الإلكترونية والتريند')}
                 </h3>
                 <p className="text-xs font-bold text-[#F9F6F0]/80 leading-relaxed">
-                  شاشة موبايل حية لمتابعة تعليقات الجمهور، توجيه اللجان لدعم الفيلم (2M) أو نشر إشاعة عن فيلم المنافس (5M)!
+                  {tr(
+                    uiLanguage,
+                    'Live social buzz radar — launch fan waves to boost your release (2M) or leak set rumors against rivals (5M)!',
+                    'شاشة موبايل حية لمتابعة تعليقات الجمهور، توجيه اللجان لدعم الفيلم (2M) أو نشر إشاعة عن فيلم المنافس (5M)!'
+                  )}
                 </p>
               </div>
 
               <div className="mt-4 p-2.5 rounded-xl bg-[#F9F6F0]/10 border border-[#D4AF37]/30 text-[11px] font-bold text-[#D4AF37]">
-                💬 «الجمهور بيتكلم عن أعمالك على X وتيك توك الآن...»
+                {tr(
+                  uiLanguage,
+                  '💬 “Audiences are buzzing about your studio on X and TikTok right now...”',
+                  '💬 «الجمهور بيتكلم عن أعمالك على X وتيك توك الآن...»'
+                )}
               </div>
 
               <div className="mt-4 flex items-center justify-between">
                 <span className="font-typewriter text-xs text-[#F9F6F0]/70">
-                  بث مباشر · رادار التريند
+                  {tr(uiLanguage, 'LIVE · TREND RADAR', 'بث مباشر · رادار التريند')}
                 </span>
                 <span className="px-3.5 py-1.5 rounded-xl bg-[#D91624] text-white font-extrabold text-xs border border-[#D4AF37]">
-                  فتح شاشة الموبايل ←
+                  {tr(uiLanguage, `Open Phone ${arrowGlyph}`, `فتح شاشة الموبايل ${arrowGlyph}`)}
                 </span>
               </div>
             </motion.div>
           </div>
         </div>
 
-        {/* EMPEROR'S TROPHY & ARCHIVE SHELF (رف الجوائز والأرشيف والأسواق والترتيب) */}
+        {/* TROPHY & ARCHIVE SHELF */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
           <button
             type="button"
             onClick={() => setActiveScreen('FESTIVALS_AWARDS')}
-            className="flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition text-right cursor-pointer"
+            className={`flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition ${
+              isAr ? 'text-right' : 'text-left'
+            } cursor-pointer`}
           >
             <div className="w-11 h-11 shrink-0 rounded-xl bg-[#D4AF37] text-[#1A2530] flex items-center justify-center">
               <Award className="w-6 h-6" />
             </div>
             <div>
               <div className="font-display text-sm sm:text-base text-[#1A2530]">
-                قاعة الجوائز ({totalAwards})
+                {tr(uiLanguage, `Awards Hall (${totalAwards})`, `قاعة الجوائز (${totalAwards})`)}
               </div>
               <div className="text-[11px] font-bold text-[#1A2530]/70">
-                الحفل بعد {daysUntilAnnualAwards} يوم
+                {tr(
+                  uiLanguage,
+                  `Gala in ${daysUntilAnnualAwards}d`,
+                  `الحفل بعد ${daysUntilAnnualAwards} يوم`
+                )}
               </div>
             </div>
           </button>
@@ -784,14 +894,20 @@ export function StudioHubView({
           <button
             type="button"
             onClick={() => openModalSheet('archive')}
-            className="flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition text-right cursor-pointer"
+            className={`flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition ${
+              isAr ? 'text-right' : 'text-left'
+            } cursor-pointer`}
           >
             <div className="w-11 h-11 shrink-0 rounded-xl bg-[#D91624] text-white flex items-center justify-center">
               <Film className="w-6 h-6" />
             </div>
             <div>
               <div className="font-display text-sm sm:text-base text-[#1A2530]">
-                أرشيف الأفلام ({releasedProjects.length})
+                {tr(
+                  uiLanguage,
+                  `Film Archive (${releasedProjects.length})`,
+                  `أرشيف الأفلام (${releasedProjects.length})`
+                )}
               </div>
               <div className="font-typewriter text-[11px] font-bold text-[#1A2530]/70">
                 {formatMoney(lifetimeBoxOffice)} {currencyLabel}
@@ -802,17 +918,23 @@ export function StudioHubView({
           <button
             type="button"
             onClick={() => openModalSheet('markets')}
-            className="flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition text-right cursor-pointer"
+            className={`flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition ${
+              isAr ? 'text-right' : 'text-left'
+            } cursor-pointer`}
           >
             <div className="w-11 h-11 shrink-0 rounded-xl bg-[#1A2530] text-[#D4AF37] flex items-center justify-center">
               <Globe className="w-6 h-6" />
             </div>
             <div>
               <div className="font-display text-sm sm:text-base text-[#1A2530]">
-                الأسواق العالمية
+                {tr(uiLanguage, 'Global Markets', 'الأسواق العالمية')}
               </div>
               <div className="text-[11px] font-bold text-[#1A2530]/70">
-                {unlockedRegions.length} من 4 أسواق مفتوحة
+                {tr(
+                  uiLanguage,
+                  `${unlockedRegions.length} of 4 Unlocked`,
+                  `${unlockedRegions.length} من 4 أسواق مفتوحة`
+                )}
               </div>
             </div>
           </button>
@@ -820,23 +942,25 @@ export function StudioHubView({
           <button
             type="button"
             onClick={() => openModalSheet('leaderboard')}
-            className="flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition text-right cursor-pointer"
+            className={`flex items-center gap-3 p-4 rounded-2xl bg-[#F9F6F0] border-2 border-[#1A2530] shadow-[4px_6px_0px_#1A2530] hover:bg-[#FFF9E6] transition ${
+              isAr ? 'text-right' : 'text-left'
+            } cursor-pointer`}
           >
             <div className="w-11 h-11 shrink-0 rounded-xl bg-[#1A2530] text-[#F9F6F0] flex items-center justify-center">
               <Trophy className="w-6 h-6 text-[#D4AF37]" />
             </div>
             <div>
               <div className="font-display text-sm sm:text-base text-[#1A2530]">
-                ترتيب الشركات
+                {tr(uiLanguage, 'Rankings', 'ترتيب الشركات')}
               </div>
               <div className="text-[11px] font-bold text-[#1A2530]/70">
-                بورصة القيمة السوقية
+                {tr(uiLanguage, 'Valuation Exchange', 'بورصة القيمة السوقية')}
               </div>
             </div>
           </button>
         </div>
 
-        {/* OFFICIAL NEELYO STUDIO FOOTER (معلومات عنا · سياسة الخصوصية · شروط الاستخدام · التواصل) */}
+        {/* OFFICIAL FOOTER */}
         {onOpenInfo && (
           <footer className="rounded-2xl bg-[#1A2530] text-[#F9F6F0] border-2 border-[#D4AF37]/60 px-4 py-3.5 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -864,7 +988,7 @@ export function StudioHubView({
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 border border-[#D4AF37]/40 text-xs font-extrabold text-[#F9F6F0] cursor-pointer transition"
               >
                 <BookOpen className="w-3.5 h-3.5 text-[#D4AF37]" />
-                <span>معلومات عنا</span>
+                <span>{tr(uiLanguage, 'About', 'معلومات عنا')}</span>
               </button>
               <button
                 type="button"
@@ -872,7 +996,7 @@ export function StudioHubView({
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 border border-[#D4AF37]/40 text-xs font-extrabold text-[#F9F6F0] cursor-pointer transition"
               >
                 <Shield className="w-3.5 h-3.5 text-[#D4AF37]" />
-                <span>سياسة الخصوصية</span>
+                <span>{tr(uiLanguage, 'Privacy', 'سياسة الخصوصية')}</span>
               </button>
               <button
                 type="button"
@@ -880,7 +1004,7 @@ export function StudioHubView({
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#F9F6F0]/10 hover:bg-[#F9F6F0]/20 border border-[#D4AF37]/40 text-xs font-extrabold text-[#F9F6F0] cursor-pointer transition"
               >
                 <Scale className="w-3.5 h-3.5 text-[#D4AF37]" />
-                <span>شروط الاستخدام</span>
+                <span>{tr(uiLanguage, 'Terms', 'شروط الاستخدام')}</span>
               </button>
               <button
                 type="button"
@@ -888,14 +1012,14 @@ export function StudioHubView({
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#D91624] hover:brightness-110 border border-[#D4AF37] text-xs font-extrabold text-white cursor-pointer transition"
               >
                 <Mail className="w-3.5 h-3.5 text-[#FFF3B0]" />
-                <span>تواصل معنا</span>
+                <span>{tr(uiLanguage, 'Contact', 'تواصل معنا')}</span>
               </button>
             </div>
           </footer>
         )}
       </div>
 
-      {/* Modal Sheets (Wall Safe / Assets / Markets / Archive / Leaderboard) */}
+      {/* Modal Sheets */}
       <AnimatePresence>
         {activeSheet && (
           <motion.div
@@ -904,6 +1028,7 @@ export function StudioHubView({
             exit={{ opacity: 0 }}
             onClick={() => setActiveSheet(null)}
             className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A2530]/80 p-3 backdrop-blur-md overscroll-contain sm:p-4"
+            dir={dir}
           >
             <motion.div
               initial={{ scale: 0.94, y: 24, opacity: 0 }}
@@ -916,12 +1041,16 @@ export function StudioHubView({
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-[#D91624]" />
                   <h2 className="font-display text-xl text-[#1A2530]">
-                    {activeSheet === 'markets' && 'خريطة التوزيع الإقليمية والعالمية'}
-                    {activeSheet === 'archive' && 'أرشيف الأفلام والمسلسلات المنتجة'}
-                    {activeSheet === 'history' && 'السجل التاريخي للاستوديو'}
-                    {activeSheet === 'leaderboard' && 'الترتيب الرسمي لشركات الإنتاج'}
+                    {activeSheet === 'markets' &&
+                      tr(uiLanguage, 'Regional & Global Distribution Map', 'خريطة التوزيع الإقليمية والعالمية')}
+                    {activeSheet === 'archive' &&
+                      tr(uiLanguage, 'Released Films & Series Archive', 'أرشيف الأفلام والمسلسلات المنتجة')}
+                    {activeSheet === 'history' &&
+                      tr(uiLanguage, 'Studio Chronicle', 'السجل التاريخي للاستوديو')}
+                    {activeSheet === 'leaderboard' &&
+                      tr(uiLanguage, 'Official Studio Rankings', 'الترتيب الرسمي لشركات الإنتاج')}
                     {activeSheet === 'assets' &&
-                      'خزنة الإمبراطور — البلاتوهات الثابتة والسيولة'}
+                      tr(uiLanguage, 'Executive Vault — Fixed Assets & Liquidity', 'خزنة الإمبراطور — البلاتوهات الثابتة والسيولة')}
                   </h2>
                 </div>
                 <button
@@ -935,19 +1064,18 @@ export function StudioHubView({
 
               {activeSheet === 'assets' && (
                 <div className="space-y-4">
-                  {/* Emergency Investor Liquidity Card Inside the Wall Safe */}
                   <div className="rounded-2xl bg-[#1A2530] text-[#F9F6F0] p-4 border-2 border-[#D4AF37]">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <h3 className="font-display text-lg text-[#D4AF37]">
-                          خزينة السيولة والتمويل الطارئ
+                          {tr(uiLanguage, 'Treasury & Emergency Liquidity', 'خزينة السيولة والتمويل الطارئ')}
                         </h3>
                         <p className="text-xs text-[#F9F6F0]/80 mt-0.5">
-                          السيولة المتاحة:{' '}
+                          {tr(uiLanguage, 'Available Cash:', 'السيولة المتاحة:')}{' '}
                           <strong dir="ltr" className="font-typewriter text-[#D4AF37]">
                             {formatMoney(cash)}
                           </strong>{' '}
-                          {currencyLabel} · خصم الأصول الثابتة:{' '}
+                          {currencyLabel} · {tr(uiLanguage, 'Asset Cost Discount:', 'خصم الأصول الثابتة:')}{' '}
                           <strong className="text-emerald-400">
                             -{assetBenefits.totalDiscountPercent}%
                           </strong>
@@ -961,38 +1089,67 @@ export function StudioHubView({
                           className="shrink-0 px-4 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] hover:brightness-105 font-black text-xs transition cursor-pointer text-center shadow"
                         >
                           <div className="font-display text-sm text-[#1A2530]">
-                            تمويل إنقاذ من مستثمر (إعلان)
+                            {tr(uiLanguage, 'Investor Bailout (Watch Ad)', 'تمويل إنقاذ من مستثمر (إعلان)')}
                           </div>
                           <div>
                             +
                             {formatMoney(
                               cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
                             )}{' '}
-                            {currencyLabel} سيولة فورية
+                            {currencyLabel} {tr(uiLanguage, 'Instant Cash', 'سيولة فورية')}
                           </div>
                         </button>
                       ) : (
-                        <div className="shrink-0 rounded-xl border border-[#D4AF37]/35 bg-white/5 px-3.5 py-2.5 text-center sm:text-right max-w-[230px]">
+                        <div
+                          className={`shrink-0 rounded-xl border border-[#D4AF37]/35 bg-white/5 px-3.5 py-2.5 text-center ${
+                            isAr ? 'sm:text-right' : 'sm:text-left'
+                          } max-w-[240px]`}
+                        >
                           <div className="text-[11px] font-black text-[#D4AF37]">
                             {bailoutCooldownRemaining > 0
-                              ? `الإنقاذ متاح بعد ${bailoutCooldownRemaining} يوماً`
-                              : 'خزينة الاستوديو مستقرة'}
+                              ? tr(
+                                  uiLanguage,
+                                  `Bailout available in ${bailoutCooldownRemaining}d`,
+                                  `الإنقاذ متاح بعد ${bailoutCooldownRemaining} يوماً`
+                                )
+                              : tr(uiLanguage, 'Studio Treasury Healthy', 'خزينة الاستوديو مستقرة')}
                           </div>
                           <p className="text-[10px] font-bold text-[#F9F6F0]/75 mt-0.5 leading-snug">
                             {bailoutCooldownRemaining > 0
-                              ? 'تمويل الإنقاذ العاجل يُستخدم مرة واحدة كل 30 يوماً.'
-                              : `يُفتح تمويل الإنقاذ الطارئ تلقائياً فقط عند انخفاض السيولة إلى 10M ${currencyLabel} أو أقل.`}
+                              ? tr(
+                                  uiLanguage,
+                                  'Emergency investor bailout can be triggered once every 30 in-game days.',
+                                  'تمويل الإنقاذ العاجل يُستخدم مرة واحدة كل 30 يوماً.'
+                                )
+                              : tr(
+                                  uiLanguage,
+                                  `Emergency bailout unlocks automatically if cash drops to 10M ${currencyLabel} or below.`,
+                                  `يُفتح تمويل الإنقاذ الطارئ تلقائياً فقط عند انخفاض السيولة إلى 10M ${currencyLabel} أو أقل.`
+                                )}
                           </p>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Fixed Studio Assets */}
                   <div className="space-y-3">
                     {STUDIO_FIXED_ASSETS.map((asset) => {
                       const isOwned = (ownedStudioAssets || []).includes(asset.id);
                       const isBusy = purchasingAssetId === asset.id;
+                      const enAsset = STUDIO_ASSETS_EN[asset.id];
+                      const displayCategory = isAr
+                        ? asset.categoryLabel
+                        : enAsset?.categoryLabel || asset.categoryLabel;
+                      const displayName = isAr
+                        ? asset.name
+                        : enAsset?.name || asset.name;
+                      const displayDesc = isAr
+                        ? asset.description
+                        : enAsset?.description || asset.description;
+                      const displayShield = isAr
+                        ? asset.crisisShieldLabel
+                        : enAsset?.crisisShieldLabel || asset.crisisShieldLabel;
+
                       return (
                         <div
                           key={asset.id}
@@ -1005,10 +1162,10 @@ export function StudioHubView({
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <span className="inline-block rounded bg-[#1A2530] px-2.5 py-0.5 text-[10px] font-bold text-[#D4AF37]">
-                                {asset.categoryLabel}
+                                {displayCategory}
                               </span>
                               <h3 className="mt-1 font-display text-base text-[#1A2530]">
-                                {asset.name}
+                                {displayName}
                               </h3>
                             </div>
                             <span className="shrink-0 rounded-xl bg-[#1A2530] px-3 py-1 font-typewriter text-xs font-black text-[#D4AF37]">
@@ -1017,19 +1174,25 @@ export function StudioHubView({
                           </div>
 
                           <p className="mt-1.5 text-xs font-bold leading-relaxed text-[#1A2530]/80">
-                            {asset.description}
+                            {displayDesc}
                           </p>
 
                           <div className="mt-2 flex items-center gap-1.5 text-xs font-extrabold text-[#15803D]">
                             <ShieldCheck className="h-4 w-4 shrink-0" />
-                            <span>{asset.crisisShieldLabel}</span>
+                            <span>{displayShield}</span>
                           </div>
 
                           <div className="mt-3 pt-2.5 border-t border-[#1A2530]/10">
                             {isOwned ? (
                               <div className="flex items-center justify-center gap-1.5 rounded-xl bg-[#15803D] py-2 text-xs font-black text-white">
                                 <CheckCircle2 className="h-4 w-4" />
-                                <span>أصل ثابت مملوك وموثق في خزنة الاستوديو ✓</span>
+                                <span>
+                                  {tr(
+                                    uiLanguage,
+                                    'Owned & Certified in Studio Vault ✓',
+                                    'أصل ثابت مملوك وموثق في خزنة الاستوديو ✓'
+                                  )}
+                                </span>
                               </div>
                             ) : (
                               <button
@@ -1045,13 +1208,19 @@ export function StudioHubView({
                                 {isBusy ? (
                                   <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
-                                    <span>جاري توثيق الملكية...</span>
+                                    <span>
+                                      {tr(uiLanguage, 'Certifying Deed...', 'جاري توثيق الملكية...')}
+                                    </span>
                                   </>
                                 ) : (
                                   <>
                                     <Building2 className="h-4 w-4" />
                                     <span>
-                                      شراء وتوثيق الأصل ({formatMoney(asset.price)} {currencyLabel})
+                                      {tr(
+                                        uiLanguage,
+                                        `Acquire & Certify Asset (${formatMoney(asset.price)} ${currencyLabel})`,
+                                        `شراء وتوثيق الأصل (${formatMoney(asset.price)} ${currencyLabel})`
+                                      )}
                                     </span>
                                   </>
                                 )}
@@ -1076,15 +1245,21 @@ export function StudioHubView({
                     return (
                       <div
                         key={regId}
-                        className="flex flex-col justify-between rounded-2xl border-2 border-[#1A2530]/20 bg-white p-4 text-right"
+                        className={`flex flex-col justify-between rounded-2xl border-2 border-[#1A2530]/20 bg-white p-4 ${
+                          isAr ? 'text-right' : 'text-left'
+                        }`}
                       >
                         <div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-extrabold text-[#15803D]">
-                              {unlocked ? 'سوق مفتوح ✓' : 'سوق إقليمي'}
+                              {unlocked
+                                ? tr(uiLanguage, 'Market Unlocked ✓', 'سوق مفتوح ✓')
+                                : tr(uiLanguage, 'Expansion Territory', 'سوق إقليمي')}
                             </span>
                             <span className="rounded bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-black text-[#D4AF37]">
-                              {regId === primaryRegion ? '100% أساسي' : `+${bonusPct}% إيرادات`}
+                              {regId === primaryRegion
+                                ? tr(uiLanguage, '100% Home Base', '100% أساسي')
+                                : tr(uiLanguage, `+${bonusPct}% Revenue`, `+${bonusPct}% إيرادات`)}
                             </span>
                           </div>
                           <div className="font-display mt-1.5 text-base text-[#1A2530]">
@@ -1104,10 +1279,10 @@ export function StudioHubView({
                               className="w-full rounded-xl py-2 px-3 text-xs font-black bg-[#1A2530] text-[#F9F6F0] cursor-pointer"
                             >
                               {regId === primaryRegion
-                                ? 'مفعل دائماً كسوق أساسي ✓'
+                                ? tr(uiLanguage, 'Always Active (Home Market) ✓', 'مفعل دائماً كسوق أساسي ✓')
                                 : isSelectedForNextProject
-                                ? 'مفعل لتوزيع عملك القادم ✓'
-                                : 'تفعيل التوزيع لعملك القادم'}
+                                ? tr(uiLanguage, 'Active for Next Release ✓', 'مفعل لتوزيع عملك القادم ✓')
+                                : tr(uiLanguage, 'Enable for Next Release', 'تفعيل التوزيع لعملك القادم')}
                             </button>
                           ) : (
                             <button
@@ -1115,7 +1290,11 @@ export function StudioHubView({
                               onClick={() => unlockMarketRegionWithCash(regId)}
                               className="w-full rounded-xl bg-[#D91624] py-2 px-3 text-xs font-black text-white cursor-pointer"
                             >
-                              فتح مكتب مبكر ({formatMoney(cfg.earlyLicenseCost)} {currencyLabel})
+                              {tr(
+                                uiLanguage,
+                                `Open Early Office (${formatMoney(cfg.earlyLicenseCost)} ${currencyLabel})`,
+                                `فتح مكتب مبكر (${formatMoney(cfg.earlyLicenseCost)} ${currencyLabel})`
+                              )}
                             </button>
                           )}
                         </div>
@@ -1129,15 +1308,20 @@ export function StudioHubView({
                 <div className="space-y-3">
                   {releasedProjects.length === 0 ? (
                     <div className="rounded-2xl bg-white p-8 text-center text-sm font-bold text-[#1A2530]/70">
-                      لم تقم بإصدار أي عمل فني بعد. اضغط على «ورق السيناريو» فوق مكتب الإمبراطور للبدء!
+                      {tr(
+                        uiLanguage,
+                        'No releases in your catalog yet. Tap the Script Stack on your Executive Desk to greenlight your debut hit!',
+                        'لم تقم بإصدار أي عمل فني بعد. اضغط على «ورق السيناريو» فوق مكتب الإمبراطور للبدء!'
+                      )}
                     </div>
                   ) : (
                     <>
                       <div className="space-y-2.5">
                         {visibleArchiveProjects.map((proj) => {
-                          const genreName =
-                            GENRES.find((g) => g.id === proj.primaryGenre)?.name ||
-                            proj.primaryGenre;
+                          const genreName = getLocalizedGenreInfo(
+                            proj.primaryGenre,
+                            uiLanguage
+                          ).name;
                           return (
                             <div
                               key={proj.id}
@@ -1145,19 +1329,29 @@ export function StudioHubView({
                             >
                               <div className="flex items-center justify-between text-xs font-bold">
                                 <span className="text-[#D91624]">
-                                  {proj.format === 'film' ? 'فيلم' : 'مسلسل'} · {genreName}
+                                  {proj.format === 'film'
+                                    ? tr(uiLanguage, 'Feature Film', 'فيلم')
+                                    : tr(uiLanguage, 'TV Series', 'مسلسل')}{' '}
+                                  · {genreName}
                                 </span>
-                                <span className="font-typewriter">عام {proj.year}</span>
+                                <span className="font-typewriter">
+                                  {tr(uiLanguage, `Year ${proj.year}`, `عام ${proj.year}`)}
+                                </span>
                               </div>
                               <div className="font-display mt-1 text-lg text-[#1A2530]">
                                 {proj.title}
                               </div>
                               <div className="mt-1.5 flex items-center justify-between text-xs font-typewriter font-bold">
                                 <span className="text-[#15803D]">
-                                  الإيرادات: {formatMoney(proj.totalGrossRevenue)} {currencyLabel}
+                                  {tr(uiLanguage, 'Revenue:', 'الإيرادات:')}{' '}
+                                  {formatMoney(proj.totalGrossRevenue)} {currencyLabel}
                                 </span>
                                 <span>
-                                  النقاد: {proj.criticScore}/10 · الجمهور: {proj.audienceScore}/10
+                                  {tr(
+                                    uiLanguage,
+                                    `Critics: ${proj.criticScore}/10 · Audience: ${proj.audienceScore}/10`,
+                                    `النقاد: ${proj.criticScore}/10 · الجمهور: ${proj.audienceScore}/10`
+                                  )}
                                 </span>
                               </div>
                             </div>
@@ -1170,12 +1364,16 @@ export function StudioHubView({
                             type="button"
                             disabled={modalPage === 0}
                             onClick={() => setModalPage((p) => Math.max(0, p - 1))}
-                            className="px-4 py-2 rounded-xl bg-white border border-[#1A2530] text-xs font-bold"
+                            className="px-4 py-2 rounded-xl bg-white border border-[#1A2530] text-xs font-bold cursor-pointer disabled:opacity-40"
                           >
-                            السابق
+                            {tr(uiLanguage, 'Previous', 'السابق')}
                           </button>
                           <span className="text-xs font-bold">
-                            صفحة {modalPage + 1} من {archiveTotalPages}
+                            {tr(
+                              uiLanguage,
+                              `Page ${modalPage + 1} of ${archiveTotalPages}`,
+                              `صفحة ${modalPage + 1} من ${archiveTotalPages}`
+                            )}
                           </span>
                           <button
                             type="button"
@@ -1183,9 +1381,9 @@ export function StudioHubView({
                             onClick={() =>
                               setModalPage((p) => Math.min(archiveTotalPages - 1, p + 1))
                             }
-                            className="px-4 py-2 rounded-xl bg-[#D91624] text-white text-xs font-bold"
+                            className="px-4 py-2 rounded-xl bg-[#D91624] text-white text-xs font-bold cursor-pointer disabled:opacity-40"
                           >
-                            التالي
+                            {tr(uiLanguage, 'Next', 'التالي')}
                           </button>
                         </div>
                       )}
@@ -1214,9 +1412,9 @@ export function StudioHubView({
                         type="button"
                         disabled={modalPage === 0}
                         onClick={() => setModalPage((p) => Math.max(0, p - 1))}
-                        className="px-4 py-1.5 rounded-xl bg-white border border-[#1A2530] text-xs font-bold"
+                        className="px-4 py-1.5 rounded-xl bg-white border border-[#1A2530] text-xs font-bold cursor-pointer disabled:opacity-40"
                       >
-                        السابق
+                        {tr(uiLanguage, 'Previous', 'السابق')}
                       </button>
                       <button
                         type="button"
@@ -1224,9 +1422,9 @@ export function StudioHubView({
                         onClick={() =>
                           setModalPage((p) => Math.min(historyTotalPages - 1, p + 1))
                         }
-                        className="px-4 py-1.5 rounded-xl bg-[#D91624] text-white text-xs font-bold"
+                        className="px-4 py-1.5 rounded-xl bg-[#D91624] text-white text-xs font-bold cursor-pointer disabled:opacity-40"
                       >
-                        التالي
+                        {tr(uiLanguage, 'Next', 'التالي')}
                       </button>
                     </div>
                   )}

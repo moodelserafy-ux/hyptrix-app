@@ -4,8 +4,10 @@ import {
   getMarketConfigsForWorld,
   getMarketProfile,
   getPrimaryMarketRegion,
+  type UiLanguageId,
   type WorldMarketId,
 } from './market-profiles';
+import { localizeEntityName } from './i18n';
 export type { ActorItem, CrewItem, GenreId };
 
 export type FounderPerk =
@@ -148,63 +150,68 @@ export interface GenreSynergyResult {
   isWeirdSavedByGenius?: boolean;
 }
 
-const HARMONIOUS_PAIRS: [GenreId, GenreId, string][] = [
-  ['action', 'popular_drama', 'مزيج جماهيري قوي: أكشن + دراما شعبية'],
-  ['action', 'heist', 'مزيج تشويقي: أكشن + سرقة وخطط'],
-  ['crime_mystery', 'psychological_horror', 'مزيج نفسي عميق: جريمة وغموض + رعب نفسي'],
-  ['comedy', 'romance', 'مزيج عائلي محبوب: كوميديا + رومانسي'],
-  ['light_comedy', 'romance', 'كوميديا رومانسية خفيفة وجذابة'],
-  ['sci_fi', 'action', 'إثارة مستقبلية: خيال علمي + أكشن'],
-  ['historical', 'biography', 'ملحمة توثيقية: تاريخي + سيرة ذاتية'],
-  ['fantasy', 'superhero', 'ملحمة خيالية: فانتازيا + أبطال خارقون'],
-  ['supernatural_horror', 'crime_mystery', 'تحقيقات غامضة: ما وراء الطبيعة + جريمة'],
+const HARMONIOUS_PAIRS: [GenreId, GenreId, string, string][] = [
+  ['action', 'popular_drama', 'مزيج جماهيري قوي: أكشن + دراما شعبية', 'Crowd-Pleaser Blend: Action + Street Drama'],
+  ['action', 'heist', 'مزيج تشويقي: أكشن + سرقة وخطط', 'High-Octane Blend: Action + Heist'],
+  ['crime_mystery', 'psychological_horror', 'مزيج نفسي عميق: جريمة وغموض + رعب نفسي', 'Chilling Blend: Crime Mystery + Psychological Horror'],
+  ['comedy', 'romance', 'مزيج عائلي محبوب: كوميديا + رومانسي', 'Beloved Classic Blend: Comedy + Romance'],
+  ['light_comedy', 'romance', 'كوميديا رومانسية خفيفة وجذابة', 'Charming Rom-Com Blend'],
+  ['sci_fi', 'action', 'إثارة مستقبلية: خيال علمي + أكشن', 'Futuristic Spectacle: Sci-Fi + Action'],
+  ['historical', 'biography', 'ملحمة توثيقية: تاريخي + سيرة ذاتية', 'Prestige Epic: Historical + Biopic'],
+  ['fantasy', 'superhero', 'ملحمة خيالية: فانتازيا + أبطال خارقون', 'Mythic Blockbuster: Fantasy + Superhero'],
+  ['supernatural_horror', 'crime_mystery', 'تحقيقات غامضة: ما وراء الطبيعة + جريمة', 'Occult Detective Blend: Supernatural + Crime'],
 ];
 
-const CLASHING_PAIRS: [GenreId, GenreId, string][] = [
-  ['historical', 'sci_fi', 'مزيج تجريبي غير تقليدي: تاريخي + خيال علمي'],
-  ['light_comedy', 'psychological_horror', 'مزيج متباين: كوميديا خفيفة + رعب نفسي'],
-  ['biography', 'superhero', 'مزيج غير مألوف: سيرة ذاتية + أبطال خارقون'],
-  ['popular_drama', 'sci_fi', 'مزيج مغامر: دراما شعبية + خيال علمي'],
+const CLASHING_PAIRS: [GenreId, GenreId, string, string][] = [
+  ['historical', 'sci_fi', 'مزيج تجريبي غير تقليدي: تاريخي + خيال علمي', 'Bold Experimental Mix: Historical + Sci-Fi'],
+  ['light_comedy', 'psychological_horror', 'مزيج متباين: كوميديا خفيفة + رعب نفسي', 'Clashing Tones: Light Comedy + Psychological Horror'],
+  ['biography', 'superhero', 'مزيج غير مألوف: سيرة ذاتية + أبطال خارقون', 'Unusual Mashup: Biopic + Superhero'],
+  ['popular_drama', 'sci_fi', 'مزيج مغامر: دراما شعبية + خيال علمي', 'Risky Fusion: Street Drama + Sci-Fi'],
 ];
 
 export function calculateGenreSynergy(
   primary: GenreId,
   secondary: GenreId | null,
   directorSkill: number,
-  writerSkill: number
+  writerSkill: number,
+  uiLanguage: UiLanguageId = 'ar'
 ): GenreSynergyResult {
+  const isEn = uiLanguage === 'en';
   if (!secondary || primary === secondary) {
     return {
       multiplier: 1.0,
-      label: 'تصنيف منفرد متوازن',
+      label: isEn ? 'Focused Single-Genre Vision' : 'تصنيف منفرد متوازن',
       isHarmonious: true,
       score: 10,
     };
   }
 
-  for (const [g1, g2, desc] of HARMONIOUS_PAIRS) {
+  for (const [g1, g2, descAr, descEn] of HARMONIOUS_PAIRS) {
     if (
       (primary === g1 && secondary === g2) ||
       (primary === g2 && secondary === g1)
     ) {
       return {
         multiplier: 1.15,
-        label: desc,
+        label: isEn ? descEn : descAr,
         isHarmonious: true,
         score: 18,
       };
     }
   }
 
-  for (const [g1, g2, desc] of CLASHING_PAIRS) {
+  for (const [g1, g2, descAr, descEn] of CLASHING_PAIRS) {
     if (
       (primary === g1 && secondary === g2) ||
       (primary === g2 && secondary === g1)
     ) {
+      const desc = isEn ? descEn : descAr;
       if (directorSkill >= 90 && writerSkill >= 90) {
         return {
           multiplier: 1.22,
-          label: `${desc} (معالجة عبقرية بفضل مهارة الطاقم)`,
+          label: isEn
+            ? `${desc} (Elevated into Genius by Elite Crew)`
+            : `${desc} (معالجة عبقرية بفضل مهارة الطاقم)`,
           isHarmonious: true,
           score: 20,
           isWeirdSavedByGenius: true,
@@ -221,7 +228,7 @@ export function calculateGenreSynergy(
 
   return {
     multiplier: 1.05,
-    label: 'دمج درامي متكامل',
+    label: isEn ? 'Balanced Genre Fusion' : 'دمج درامي متكامل',
     isHarmonious: true,
     score: 12,
   };
@@ -237,8 +244,10 @@ export interface CastChemistryReport {
 
 export function evaluateCastChemistry(
   cast: ActorItem[],
-  directorControl = 85
+  directorControl = 85,
+  uiLanguage: UiLanguageId = 'ar'
 ): CastChemistryReport {
+  const isEn = uiLanguage === 'en';
   if (cast.length === 0) {
     return {
       totalEgo: 0,
@@ -259,9 +268,9 @@ export function evaluateCastChemistry(
       hasSevereClash: true,
       synergyBonus: -8,
       egoClashRisk: 75,
-      warningMessage: `صراع نجومية محتمل بين (${highEgoStars
-        .map((s) => s.name)
-        .join(' و ')})! يفضل التعاقد مع مخرج ذي شخصية قيادية قوية (تحكم +88).`,
+      warningMessage: isEn
+        ? `Potential Ego Clash between (${highEgoStars.map((s) => s.name).join(' & ')})! Hire an authoritative Director (Control 88+) to keep the set steady.`
+        : `صراع نجومية محتمل بين (${highEgoStars.map((s) => s.name).join(' و ')})! يفضل التعاقد مع مخرج ذي شخصية قيادية قوية (تحكم +88).`,
     };
   }
 
@@ -426,6 +435,7 @@ export function evaluateTalentOfferDeep(params: {
   directorOverall?: number | null;
   directorName?: string | null;
   currencyLabel?: string;
+  uiLanguage?: UiLanguageId;
 }): DeepTalentEvaluationResult {
   const {
     isActor,
@@ -445,8 +455,12 @@ export function evaluateTalentOfferDeep(params: {
     studioReputation,
     directorOverall = null,
     directorName = null,
-    currencyLabel = 'ج.م',
+    currencyLabel,
+    uiLanguage = 'ar',
   } = params;
+
+  const isEn = uiLanguage === 'en';
+  const cur = currencyLabel || (isEn ? 'EGP' : 'ج.م');
 
   const hasTopDirector = Boolean(directorOverall && directorOverall >= 86);
   const { expectedMinimumSalary } = calculateTalentExpectedSalary({
@@ -467,57 +481,74 @@ export function evaluateTalentOfferDeep(params: {
     : 0;
 
   let roleFitScore = 82;
-  let roleFitVerdict = 'حجم الدور مناسب تماماً لمكانة الفنان في السوق';
+  let roleFitVerdict = isEn
+    ? 'Role billing fits the talent’s market standing perfectly.'
+    : 'حجم الدور مناسب تماماً لمكانة الفنان في السوق';
 
   if (isActor) {
     if (roleBillingSize === 'supporting') {
       if (starTier === 'S' || overall >= 89 || ego >= 86) {
         roleFitScore = 18;
-        roleFitVerdict =
-          'مرفوض فنياً: نجم صف أول (فئة S) لا يقبل بدور مساعد أو ثانوي على الأفيش';
+        roleFitVerdict = isEn
+          ? 'Artistically rejected: S-Tier marquee stars will not accept a supporting billing slot.'
+          : 'مرفوض فنياً: نجم صف أول (فئة S) لا يقبل بدور مساعد أو ثانوي على الأفيش';
       } else if (starTier === 'A' || overall >= 83) {
         roleFitScore = 52;
-        roleFitVerdict =
-          'حجم الدور أصغر من مكانة النجم المعتادة ويتطلب إغراءً مالياً وفنياً كبيراً';
+        roleFitVerdict = isEn
+          ? 'Role is smaller than the star’s usual billing and demands strong financial & creative incentives.'
+          : 'حجم الدور أصغر من مكانة النجم المعتادة ويتطلب إغراءً مالياً وفنياً كبيراً';
       } else {
         roleFitScore = 92;
-        roleFitVerdict = 'فرصة ممتازة ومناسبة جداً لتثبيت أقدام الممثل في السوق';
+        roleFitVerdict = isEn
+          ? 'An ideal opportunity to cement the actor’s footprint in the market.'
+          : 'فرصة ممتازة ومناسبة جداً لتثبيت أقدام الممثل في السوق';
       }
     } else if (roleBillingSize === 'lead_star') {
       if (starTier === 'S' || starTier === 'A') {
         roleFitScore = 96;
-        roleFitVerdict =
-          'البطولة المطلقة تناسب تماماً نجومية الفنان وتاريخه في شباك التذاكر';
+        roleFitVerdict = isEn
+          ? 'Top-billed solo lead matches the star’s marquee box-office stature.'
+          : 'البطولة المطلقة تناسب تماماً نجومية الفنان وتاريخه في شباك التذاكر';
       } else if (starTier === 'B') {
         roleFitScore = 90;
-        roleFitVerdict = 'فرصة ذهبية للبطولة المطلقة يتحمس لها الفنان بشدة';
+        roleFitVerdict = isEn
+          ? 'A golden breakout lead opportunity that genuinely excites the actor.'
+          : 'فرصة ذهبية للبطولة المطلقة يتحمس لها الفنان بشدة';
       } else {
         roleFitScore = 95;
-        roleFitVerdict =
-          'بطولة مطلقة استثنائية تمنح الموهبة الصاعدة انطلاقة كبرى';
+        roleFitVerdict = isEn
+          ? 'An extraordinary marquee lead launchpad for a rising talent.'
+          : 'بطولة مطلقة استثنائية تمنح الموهبة الصاعدة انطلاقة كبرى';
       }
     } else if (roleBillingSize === 'co_lead') {
       if (starTier === 'S' && ego >= 91) {
         roleFitScore = 68;
-        roleFitVerdict =
-          'النجم يفضل البطولة المطلقة المنفردة لكنه قد يقبل البطولة المشتركة بشروط قوية';
+        roleFitVerdict = isEn
+          ? 'The star prefers solo top billing, though a strong deal can lock in a co-lead.'
+          : 'النجم يفضل البطولة المطلقة المنفردة لكنه قد يقبل البطولة المشتركة بشروط قوية';
       } else {
         roleFitScore = 90;
-        roleFitVerdict = 'البطولة المشتركة تمنح توازناً درامياً جذاباً للفنان';
+        roleFitVerdict = isEn
+          ? 'Co-lead billing creates an appealing dramatic balance for the actor.'
+          : 'البطولة المشتركة تمنح توازناً درامياً جذاباً للفنان';
       }
     } else if (roleBillingSize === 'antagonist') {
       if (starTier === 'S' && ego >= 92) {
         roleFitScore = 70;
-        roleFitVerdict =
-          'النجم يشترط أن تكون مساحة الشرير المحوري موازية للبطل على الأفيش';
+        roleFitVerdict = isEn
+          ? 'The star insists the central villain shares equal poster prominence with the hero.'
+          : 'النجم يشترط أن تكون مساحة الشرير المحوري موازية للبطل على الأفيش';
       } else {
         roleFitScore = 91;
-        roleFitVerdict = 'دور الشرير المحوري يمثل تحدياً تمثيلياً مغرياً للفنان';
+        roleFitVerdict = isEn
+          ? 'Playing the central antagonist is a juicy dramatic showcase for the star.'
+          : 'دور الشرير المحوري يمثل تحدياً تمثيلياً مغرياً للفنان';
       }
     } else if (roleBillingSize === 'cameo') {
       roleFitScore = 88;
-      roleFitVerdict =
-        'ظهور خاص كضيف شرف لا يتطلب تفرغاً طويلاً ويضيف ثقلاً للعمل';
+      roleFitVerdict = isEn
+        ? 'A prestigious special cameo requires minimal shoot days while adding marquee weight.'
+        : 'ظهور خاص كضيف شرف لا يتطلب تفرغاً طويلاً ويضيف ثقلاً للعمل';
     }
   }
 
@@ -534,7 +565,9 @@ export function evaluateTalentOfferDeep(params: {
       financialRatio: offeredSalary / Math.max(1, expectedMinimumSalary),
       roleFitVerdict,
       rejectionCategory: 'role_too_small_for_star',
-      detailedReason: `أعتذر عن المشاركة في «${projectTitle}»؛ مكانتي الفنية وتاريخي كبطل صف أول لا يسمحان بقبول دور ثانٍ أو مساعد، ولا أشارك إلا في بطولة العمل أو كضيف شرف استثنائي.`,
+      detailedReason: isEn
+        ? `I must respectfully pass on "${projectTitle}". My box-office stature as an A-list marquee lead doesn't allow me to take a supporting slot—I only sign on as a lead or an iconic special cameo.`
+        : `أعتذر عن المشاركة في «${projectTitle}»؛ مكانتي الفنية وتاريخي كبطل صف أول لا يسمحان بقبول دور ثانٍ أو مساعد، ولا أشارك إلا في بطولة العمل أو كضيف شرف استثنائي.`,
     };
   }
 
@@ -588,7 +621,9 @@ export function evaluateTalentOfferDeep(params: {
       financialRatio,
       roleFitVerdict,
       rejectionCategory: 'weak_character_or_script',
-      detailedReason: `قرأت ملخص «${projectTitle}»، لكن المعالجة الدرامية وتفاصيل الدور لا تزال مختصرة جداً ولا توضح أبعاد الشخصية الكافية للمغامرة بقبول العمل حالياً.`,
+      detailedReason: isEn
+        ? `I read the brief for "${projectTitle}", but the dramatic treatment and character arc are still far too thin to justify staking my name on the project right now.`
+        : `قرأت ملخص «${projectTitle}»، لكن المعالجة الدرامية وتفاصيل الدور لا تزال مختصرة جداً ولا توضح أبعاد الشخصية الكافية للمغامرة بقبول العمل حالياً.`,
     };
   }
 
@@ -601,7 +636,9 @@ export function evaluateTalentOfferDeep(params: {
       financialRatio,
       roleFitVerdict,
       rejectionCategory: 'genre_mismatch',
-      detailedReason: `تصنيف (${genreName}) في «${projectTitle}» بعيد عن منطقتي الفنية المعتادة، ولا يمكنني خوض هذه المجازفة دون جلسة عمل خاصة أو تقدير مالي يعوض هذه النقلة.`,
+      detailedReason: isEn
+        ? `The (${genreName}) genre on "${projectTitle}" falls outside my core wheelhouse. Taking that creative risk requires either a private VIP table read or a compensation package that justifies the leap.`
+        : `تصنيف (${genreName}) في «${projectTitle}» بعيد عن منطقتي الفنية المعتادة، ولا يمكنني خوض هذه المجازفة دون جلسة عمل خاصة أو تقدير مالي يعوض هذه النقلة.`,
     };
   }
 
@@ -620,8 +657,20 @@ export function evaluateTalentOfferDeep(params: {
   const willAccept =
     financialRatio >= 0.82 && totalAcceptanceScore >= requiredThreshold;
 
+  const roleBillingLabelEnMap: Record<RoleBillingSize, string> = {
+    lead_star: 'Lead Role',
+    co_lead: 'Co-Lead Role',
+    antagonist: 'Main Antagonist',
+    supporting: 'Supporting Role',
+    cameo: 'Special Cameo',
+  };
+
   const roleBillingLabel = isActor
-    ? ROLE_BILLING_META[roleBillingSize]?.label.split(' ')[0] || 'الدور'
+    ? isEn
+      ? roleBillingLabelEnMap[roleBillingSize] || 'Role'
+      : ROLE_BILLING_META[roleBillingSize]?.label.split(' ')[0] || 'الدور'
+    : isEn
+    ? 'creative helm'
     : 'قيادة العمل';
 
   const seedVal = Array.from(
@@ -630,23 +679,39 @@ export function evaluateTalentOfferDeep(params: {
 
   if (willAccept) {
     const directorClause = directorName
-      ? ` وبالتعاون مع المخرج ${directorName}`
+      ? isEn
+        ? ` alongside director ${directorName}`
+        : ` وبالتعاون مع المخرج ${directorName}`
       : '';
     const dinnerClause = vipDinner
-      ? ' وبعد جلسة القراءة الخاصة،'
+      ? isEn
+        ? ' especially after our private VIP table read,'
+        : ' وبعد جلسة القراءة الخاصة،'
       : '';
     const roleText = customRoleDescription.trim() || roleBillingLabel;
-    const finText = `${formatMoney(offeredSalary)} ${currencyLabel}${
-      backendPoints > 0 ? ` + ${backendPoints}% من الأرباح` : ''
+    const finText = `${formatMoney(offeredSalary)} ${cur}${
+      backendPoints > 0
+        ? isEn
+          ? ` + ${backendPoints}% backend points`
+          : ` + ${backendPoints}% من الأرباح`
+        : ''
     }`;
 
-    const acceptVariants = [
-      `تحمست جداً لتفاصيل شخصية «${roleText}» في سيناريو «${projectTitle}»${directorClause}،${dinnerClause} كما أن العرض المالي (${finText}) يليق بحجم العمل ومكانتي الفنية. أوافق رسمياً على التوقيع!`,
-      `بعد مراجعة ورق «${projectTitle}» مع مكتب إدارة أعمالي، وجدت أن دور «${roleText}» يمثل نقلة فنية قوية في (${genreName})${directorClause}، والعقد المقدم (${finText}) عادل جداً. يسعدني الانضمام للفريق!`,
-      `أعجبتني حبكة «${projectTitle}» ومساحة دور «${roleText}» على الشاشة${directorClause}،${dinnerClause} والتقدير المادي (${finText}) يحسم قراري بالموافقة الفورية وبدء التحضيرات.`,
-      `مشروع «${projectTitle}» يمتلك كل مقومات النجاح الجماهيري والنقدي، ودور «${roleText}» مكتوب بعناية${directorClause}. أقبل العرض المالي (${finText}) ومستعد لدخول البلاتوه.`,
-      `رهاني هذا الموسم سيكون على «${projectTitle}»؛ شخصية «${roleText}» استفزت طاقتي التمثيلية${directorClause}، وبنود التعاقد (${finText}) مرضية تماماً لطرفينا.`,
-    ];
+    const acceptVariants = isEn
+      ? [
+          `I'm genuinely fired up about "${roleText}" in "${projectTitle}"${directorClause};${dinnerClause} the deal (${finText}) respects both the project's ambition and my stature. Count me in—I'm signing!`,
+          `After reviewing the script for "${projectTitle}" with my agency, "${roleText}" feels like a powerhouse leap in (${genreName})${directorClause}, and the offer (${finText}) is rock-solid. Excited to join the cast!`,
+          `The hook of "${projectTitle}" and screen presence of "${roleText}"${directorClause} won me over,${dinnerClause} and the package (${finText}) seals the deal. Let's roll cameras!`,
+          `"${projectTitle}" has every hallmark of a commercial and critical triumph, and "${roleText}" is sharply written${directorClause}. I accept (${finText}) and am ready for pre-production.`,
+          `I'm betting my season on "${projectTitle}"—"${roleText}" hits every dramatic chord I've been looking for${directorClause}, and (${finText}) works for both sides.`,
+        ]
+      : [
+          `تحمست جداً لتفاصيل شخصية «${roleText}» في سيناريو «${projectTitle}»${directorClause}،${dinnerClause} كما أن العرض المالي (${finText}) يليق بحجم العمل ومكانتي الفنية. أوافق رسمياً على التوقيع!`,
+          `بعد مراجعة ورق «${projectTitle}» مع مكتب إدارة أعمالي، وجدت أن دور «${roleText}» يمثل نقلة فنية قوية في (${genreName})${directorClause}، والعقد المقدم (${finText}) عادل جداً. يسعدني الانضمام للفريق!`,
+          `أعجبتني حبكة «${projectTitle}» ومساحة دور «${roleText}» على الشاشة${directorClause}،${dinnerClause} والتقدير المادي (${finText}) يحسم قراري بالموافقة الفورية وبدء التحضيرات.`,
+          `مشروع «${projectTitle}» يمتلك كل مقومات النجاح الجماهيري والنقدي، ودور «${roleText}» مكتوب بعناية${directorClause}. أقبل العرض المالي (${finText}) ومستعد لدخول البلاتوه.`,
+          `رهاني هذا الموسم سيكون على «${projectTitle}»؛ شخصية «${roleText}» استفزت طاقتي التمثيلية${directorClause}، وبنود التعاقد (${finText}) مرضية تماماً لطرفينا.`,
+        ];
 
     return {
       willAccept: true,
@@ -669,16 +734,25 @@ export function evaluateTalentOfferDeep(params: {
       financialRatio,
       roleFitVerdict,
       rejectionCategory: 'role_too_small_for_star',
-      detailedReason: `دور «${customRoleDescription || 'مساعد'}» في «${projectTitle}» مساحته الدرامية أقل من البطولات التي أقدمها حالياً، ولا يمكنني قبوله بهذا الأجر دون رفع مساحة الدور إلى بطولة أو زيادة العرض المالي ونسبة الأرباح.`,
+      detailedReason: isEn
+        ? `The supporting slot "${customRoleDescription || 'Supporting Role'}" in "${projectTitle}" carries less screen weight than my current billing tier. I'd need either top billing or a significant boost in salary and backend points.`
+        : `دور «${customRoleDescription || 'مساعد'}» في «${projectTitle}» مساحته الدرامية أقل من البطولات التي أقدمها حالياً، ولا يمكنني قبوله بهذا الأجر دون رفع مساحة الدور إلى بطولة أو زيادة العرض المالي ونسبة الأرباح.`,
     };
   }
 
-  const rejectVariants = [
-    `رغم إعجابي بفكرة «${projectTitle}» ودور «${customRoleDescription || roleBillingLabel}»، إلا أن العرض المالي (${formatMoney(offeredSalary)} ${currencyLabel}) يقل عن أجري السوقي المتوقع (${formatMoney(expectedMinimumSalary)} ${currencyLabel}) لحجم التفرغ المطلوب.`,
-    `اعتذر وكيل أعمالي عن عدم إتمام التعاقد على «${projectTitle}»؛ القيمة المالية المعروضة (${formatMoney(offeredSalary)} ${currencyLabel}) لا تتناسب مع أجر الفئة (${starTier}) الذي لا يقل عن ${formatMoney(expectedMinimumSalary)} ${currencyLabel}.`,
-    `النص الدرامي لعمل «${projectTitle}» واعد، لكن الفجوة المالية بين عرضكم (${formatMoney(offeredSalary)} ${currencyLabel}) ومتطلبات التعاقد (${formatMoney(expectedMinimumSalary)} ${currencyLabel}) تحول دون توقيعي حالياً.`,
-    `بعد دراسة عرض «${projectTitle}»، أرى أن الميزانية المخصصة لأجري (${formatMoney(offeredSalary)} ${currencyLabel}) تحتاج إلى مراجعة لتصل إلى حدود ${formatMoney(expectedMinimumSalary)} ${currencyLabel} أو تعويضها بنسبة أرباح أعلى.`,
-  ];
+  const rejectVariants = isEn
+    ? [
+        `While I admire the premise of "${projectTitle}" and the "${customRoleDescription || roleBillingLabel}" arc, the offer (${formatMoney(offeredSalary)} ${cur}) falls short of my market floor (${formatMoney(expectedMinimumSalary)} ${cur}) for this commitment.`,
+        `My agency has advised declining "${projectTitle}" at this figure—(${formatMoney(offeredSalary)} ${cur}) does not reflect Tier-${starTier} rates, which start at ${formatMoney(expectedMinimumSalary)} ${cur}.`,
+        `The screenplay for "${projectTitle}" has real promise, but the gap between your offer (${formatMoney(offeredSalary)} ${cur}) and my contractual minimum (${formatMoney(expectedMinimumSalary)} ${cur}) keeps us from closing.`,
+        `After reviewing the deal memo for "${projectTitle}", my quote needs to move closer to ${formatMoney(expectedMinimumSalary)} ${cur}—or include stronger backend profit points—before I can commit.`,
+      ]
+    : [
+        `رغم إعجابي بفكرة «${projectTitle}» ودور «${customRoleDescription || roleBillingLabel}»، إلا أن العرض المالي (${formatMoney(offeredSalary)} ${cur}) يقل عن أجري السوقي المتوقع (${formatMoney(expectedMinimumSalary)} ${cur}) لحجم التفرغ المطلوب.`,
+        `اعتذر وكيل أعمالي عن عدم إتمام التعاقد على «${projectTitle}»؛ القيمة المالية المعروضة (${formatMoney(offeredSalary)} ${cur}) لا تتناسب مع أجر الفئة (${starTier}) الذي لا يقل عن ${formatMoney(expectedMinimumSalary)} ${cur}.`,
+        `النص الدرامي لعمل «${projectTitle}» واعد، لكن الفجوة المالية بين عرضكم (${formatMoney(offeredSalary)} ${cur}) ومتطلبات التعاقد (${formatMoney(expectedMinimumSalary)} ${cur}) تحول دون توقيعي حالياً.`,
+        `بعد دراسة عرض «${projectTitle}»، أرى أن الميزانية المخصصة لأجري (${formatMoney(offeredSalary)} ${cur}) تحتاج إلى مراجعة لتصل إلى حدود ${formatMoney(expectedMinimumSalary)} ${cur} أو تعويضها بنسبة أرباح أعلى.`,
+      ];
 
   return {
     willAccept: false,
@@ -1435,8 +1509,10 @@ export function generateRivalReleases(
   seedOffset = 0,
   format: ProjectFormat = 'film',
   worldMarket: WorldMarketId = 'egypt',
-  directors?: { name: string }[]
+  directors?: { name: string }[],
+  uiLanguage: UiLanguageId = 'en'
 ): RivalRelease[] {
+  const isEn = uiLanguage === 'en';
   const availableStars = allActors.filter(
     (a) =>
       !excludedActorIds.includes(a.id) &&
@@ -1445,14 +1521,62 @@ export function generateRivalReleases(
       a.status !== 'deceased'
   );
   const profile = getMarketProfile(worldMarket);
-  const titles =
-    format === 'series'
-      ? profile.rivalSeriesTitles.length > 0
-        ? profile.rivalSeriesTitles
-        : getMarketProfile('egypt').rivalSeriesTitles
-      : profile.rivalFilmTitles.length > 0
-      ? profile.rivalFilmTitles
-      : getMarketProfile('egypt').rivalFilmTitles;
+  const EN_RIVAL_FILMS: Partial<Record<WorldMarketId, string[]>> = {
+    egypt: [
+      'Cairo Underground',
+      'The Nile Syndicate',
+      'Operation Citadel',
+      'Midnight on the Corniche',
+      'Shadow of the Pharaoh',
+      'The Downtown Alibi',
+      'Alexandria Express',
+      'Last Train to Aswan',
+    ],
+    saudi: [
+      'Riyadh Horizon',
+      'Dunes of Thunder',
+      'The Diriyah Cipher',
+      'Red Sea Protocol',
+      'AlUla Reckoning',
+      'Boulevard Heat',
+      'Falcon of the Desert',
+      'Jeddah Nightfall',
+    ],
+  };
+  const EN_RIVAL_SERIES: Partial<Record<WorldMarketId, string[]>> = {
+    egypt: [
+      'The Zamalek Dynasty',
+      'Alley of Secrets',
+      'Empire of El-Hussein',
+      'The Velvet Trial',
+      'Nights of Heliopolis',
+      'The Inheritance Pact',
+      'Shadow of the Opera',
+      'Blood & Jasmine',
+    ],
+    saudi: [
+      'House of Najd',
+      'The Diriyah Chronicles',
+      'Crown of the Dunes',
+      'Heirs of the Harbor',
+      'Sands of Ambition',
+      'The Riyadh Verdict',
+      'Echoes of Al-Balad',
+      'Oath of the Desert',
+    ],
+  };
+
+  const titles = isEn
+    ? format === 'series'
+      ? EN_RIVAL_SERIES[worldMarket] || EN_RIVAL_SERIES.egypt!
+      : EN_RIVAL_FILMS[worldMarket] || EN_RIVAL_FILMS.egypt!
+    : format === 'series'
+    ? profile.rivalSeriesTitles.length > 0
+      ? profile.rivalSeriesTitles
+      : getMarketProfile('egypt').rivalSeriesTitles
+    : profile.rivalFilmTitles.length > 0
+    ? profile.rivalFilmTitles
+    : getMarketProfile('egypt').rivalFilmTitles;
 
   const activeSeasonCount = 4;
   const rotatedCompetitors = [...competitors].sort((a, b) => {
@@ -1480,23 +1604,34 @@ export function generateRivalReleases(
         : undefined;
     const title = titles[(idx * 3 + seedOffset) % titles.length];
     const arch = archetypeOrder[idx % archetypeOrder.length];
+    const localizedStudioName = localizeEntityName(studio.name, uiLanguage);
+    const localizedStarName = star?.name
+      ? localizeEntityName(star.name, uiLanguage)
+      : isEn
+      ? 'A-List Star'
+      : 'نجم شباك';
+    const localizedDirectorName = dir?.name
+      ? localizeEntityName(dir.name, uiLanguage)
+      : undefined;
 
     const isRareDelay =
       (seedOffset + idx * 7) % 13 === 0 && idx === selectedStudios.length - 1;
     if (isRareDelay) {
       return {
-        studioName: studio.name,
+        studioName: localizedStudioName,
         title,
         genre: studio.preferred_genres[0] || 'action',
-        leadStarName: star?.name || 'نجم شباك',
-        directorName: dir?.name,
+        leadStarName: localizedStarName,
+        directorName: localizedDirectorName,
         boxOfficeRevenue: 0,
         criticScore: 0,
         audienceScore: 0,
         trajectory: 'steady',
         format,
         status: 'delayed',
-        delayReason: `قررت شركة «${studio.name}» تأجيل طرح «${title}» للموسم القادم لاستكمال مراحل المونتاج.`,
+        delayReason: isEn
+          ? `${localizedStudioName} postponed "${title}" to next season to finalize post-production.`
+          : `قررت شركة «${studio.name}» تأجيل طرح «${title}» للموسم القادم لاستكمال مراحل المونتاج.`,
       };
     }
 
@@ -1541,11 +1676,11 @@ export function generateRivalReleases(
       baseMarketAnchor * powerFactor * starPull * regionMod * revMult * jitter;
 
     return {
-      studioName: studio.name,
+      studioName: localizedStudioName,
       title,
       genre: studio.preferred_genres[0] || 'action',
-      leadStarName: star?.name || 'نجم شباك',
-      directorName: dir?.name,
+      leadStarName: localizedStarName,
+      directorName: localizedDirectorName,
       boxOfficeRevenue: Math.round(Math.max(24_000_000, Math.min(175_000_000, baseRev))),
       criticScore: Number(Math.min(9.4, Math.max(4.4, criticScore)).toFixed(1)),
       audienceScore: Number(Math.min(9.5, Math.max(4.5, audienceScore)).toFixed(1)),

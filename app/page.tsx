@@ -10,6 +10,7 @@ import {
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
 import { getCurrencyLabel } from '@/lib/market-profiles';
+import { detectPreferredUiLanguage, getUiDir, tr } from '@/lib/i18n';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import { prewarmAdNetworks } from '@/lib/ad-mediator';
 import { WelcomeMarketScreen } from '@/components/WelcomeMarketScreen';
@@ -40,6 +41,8 @@ const DAY_DURATION_SECONDS = 18;
 export default function HomePage() {
   const {
     uiLanguage,
+    hasManuallySelectedLanguage,
+    setUiLanguage,
     worldMarket,
     hasSelectedMarket,
     selectLanguageAndMarket,
@@ -73,7 +76,9 @@ export default function HomePage() {
     groqApiKeyClient,
     preferredGroqModel,
   } = useGameStore();
-  const currencyLabel = getCurrencyLabel(worldMarket);
+  const isEn = uiLanguage === 'en';
+  const uiDir = getUiDir(uiLanguage);
+  const currencyLabel = getCurrencyLabel(worldMarket, uiLanguage);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoModalState, setInfoModalState] = useState<{
@@ -119,16 +124,27 @@ export default function HomePage() {
     };
   }, []);
 
-  // Keep warm creamy viewport background unified across onboarding and Emperor's Desk
+  // Auto-detect user's preferred language once on entry if they haven't manually switched yet
+  useEffect(() => {
+    if (typeof window === 'undefined' || hasManuallySelectedLanguage) return;
+    const detected = detectPreferredUiLanguage();
+    if (detected !== uiLanguage) {
+      setUiLanguage(detected, false);
+    }
+  }, [hasManuallySelectedLanguage, uiLanguage, setUiLanguage]);
+
+  // Sync <html dir lang> dynamically on every language switch + keep warm ivory viewport background
   useEffect(() => {
     if (typeof document === 'undefined') return;
+    document.documentElement.dir = uiDir;
+    document.documentElement.lang = uiLanguage;
     document.body.style.backgroundColor = '#F9F6F0';
     document.documentElement.style.backgroundColor = '#F9F6F0';
     return () => {
       document.body.style.backgroundColor = '';
       document.documentElement.style.backgroundColor = '';
     };
-  }, []);
+  }, [uiDir, uiLanguage]);
 
   const isOnboardingChoiceOpen =
     studioCreated &&
@@ -284,7 +300,7 @@ export default function HomePage() {
         : studioName || 'studio';
 
     const buildPoolUrl = (type: string, extra = '') =>
-      `/api/world-pool?market=${encodeURIComponent(worldMarket)}&type=${encodeURIComponent(type)}&seed=${encodeURIComponent(seed)}&gameDay=${gameDay}&currentYear=${currentYear}&studioName=${encodeURIComponent(studioName)}${extra}`;
+      `/api/world-pool?market=${encodeURIComponent(worldMarket)}&lang=${encodeURIComponent(uiLanguage)}&type=${encodeURIComponent(type)}&seed=${encodeURIComponent(seed)}&gameDay=${gameDay}&currentYear=${currentYear}&studioName=${encodeURIComponent(studioName)}${extra}`;
 
     if (gameDay > 6 && gameDay % 16 === 0) {
       lastAiHandledDayRef.current = gameDay;
@@ -348,6 +364,7 @@ export default function HomePage() {
     gameDay,
     studioCreated,
     worldMarket,
+    uiLanguage,
     isPageActive,
     isClockPausedByOverlay,
     activeScreen,
@@ -396,7 +413,7 @@ export default function HomePage() {
         <div className="leading-tight">
           <div className="flex items-center gap-1.5">
             <span className="text-[11px] sm:text-xs font-extrabold tracking-tight text-[#F9F6F0] whitespace-nowrap">
-              {formatGameDate(gameDay, currentYear)}
+              {formatGameDate(gameDay, currentYear, uiLanguage)}
             </span>
             <span
               dir="ltr"
@@ -407,7 +424,9 @@ export default function HomePage() {
               }`}
             >
               <Clock className="w-2.5 h-2.5" />
-              {isClockPausedByOverlay || !isPageActive ? 'مؤقت' : `${secondsLeft}s`}
+              {isClockPausedByOverlay || !isPageActive
+                ? tr(uiLanguage, 'Paused', 'مؤقت')
+                : `${secondsLeft}s`}
             </span>
           </div>
           {/* Animated Daily Progress Bar */}
@@ -428,7 +447,7 @@ export default function HomePage() {
         className={`relative min-h-[100dvh] w-full bg-[#F9F6F0] text-[#1A2530] ${
           studioCreated ? 'pb-14' : 'pb-0'
         }`}
-        dir="rtl"
+        dir={uiDir}
       >
         {/* Telegram Mini App Native Bridge (Safe No-op in Standard Browsers) */}
         <TelegramMiniAppBridge
@@ -465,7 +484,7 @@ export default function HomePage() {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D91624] hover:brightness-110 text-white font-display text-xs sm:text-sm border border-[#D4AF37] shadow cursor-pointer transition shrink-0 whitespace-nowrap"
                 >
                   <DirectorChairIcon className="w-4 h-4 text-[#D4AF37]" />
-                  <span>مكتب الإمبراطور</span>
+                  <span>{tr(uiLanguage, "Emperor's Desk", 'مكتب الإمبراطور')}</span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2 shrink-0 min-w-0">
@@ -511,8 +530,8 @@ export default function HomePage() {
                   type="button"
                   onClick={() => handleOpenInfo('about')}
                   className="p-1.5 rounded-xl bg-[#F9F6F0]/12 hover:bg-[#F9F6F0]/22 text-[#D4AF37] border border-[#D4AF37]/60 shadow cursor-pointer transition"
-                  title="عن Neelyo والخصوصية والتواصل"
-                  aria-label="عن Neelyo والخصوصية والتواصل"
+                  title={isEn ? 'About Neelyo, Privacy & Contact' : 'عن Neelyo والخصوصية والتواصل'}
+                  aria-label={isEn ? 'About Neelyo, Privacy & Contact' : 'عن Neelyo والخصوصية والتواصل'}
                 >
                   <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
@@ -521,7 +540,7 @@ export default function HomePage() {
                   type="button"
                   onClick={() => setSettingsOpen(true)}
                   className="p-1.5 rounded-xl bg-[#D4AF37] hover:brightness-110 text-[#1A2530] border border-[#F9F6F0]/70 shadow cursor-pointer"
-                  title="إعدادات الاستوديو"
+                  title={isEn ? 'Studio Settings & Language' : 'إعدادات الاستوديو واللغة'}
                 >
                   <FilmReelSettingsIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>

@@ -11,6 +11,12 @@ import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
 import { getMarketAiContext, getCurrencyLabel } from '@/lib/market-profiles';
 import {
+  getUiDir,
+  localizeEntityName,
+  PR_CAMPAIGNS_EN,
+  tr,
+} from '@/lib/i18n';
+import {
   Newspaper,
   Sparkles,
   Trophy,
@@ -66,11 +72,14 @@ export function WorldPopupsOverlay() {
     claimEmergencyInvestorBailoutWithAd,
     liquidateAndStartNewStudioInSameWorld,
     worldMarket,
+    uiLanguage,
     customDbPatch,
     showToast,
   } = useGameStore();
 
-  const currencyLabel = getCurrencyLabel(worldMarket);
+  const isEn = uiLanguage !== 'ar';
+  const uiDir = getUiDir(uiLanguage);
+  const currencyLabel = getCurrencyLabel(worldMarket, uiLanguage);
   const marketAiCtx = getMarketAiContext(worldMarket);
   const db = useMemo(
     () => getResolvedDatabase(customDbPatch, worldMarket),
@@ -106,7 +115,14 @@ export function WorldPopupsOverlay() {
   const selectedRivalTarget =
     selectedRivalTargetState && rivalStudioOptions.includes(selectedRivalTargetState)
       ? selectedRivalTargetState
-      : rivalStudioOptions[0] || marketAiCtx.fallbackRivalStudios[0] || 'استوديو منافس';
+      : rivalStudioOptions[0] ||
+        marketAiCtx.fallbackRivalStudios[0] ||
+        tr(uiLanguage, 'Rival Studio', 'استوديو منافس');
+
+  const selectedRivalTargetDisplay = localizeEntityName(
+    selectedRivalTarget,
+    uiLanguage
+  );
 
   const currentFestival = festivalModalQueue[0] || null;
   const currentNews = !currentFestival ? breakingNewsQueue[0] || null : null;
@@ -178,7 +194,7 @@ export function WorldPopupsOverlay() {
                   ? 'border-[#15803D] bg-[#F9F6F0] text-[#1A2530]'
                   : 'border-[#D4AF37] bg-[#F9F6F0] text-[#1A2530]'
               }`}
-              dir="rtl"
+              dir={uiDir}
             >
               <div className="flex min-w-0 items-start gap-2.5">
                 <div
@@ -244,9 +260,9 @@ export function WorldPopupsOverlay() {
             exit={{ opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3.5 backdrop-blur-md overscroll-contain touch-none select-none"
-            dir="rtl"
+            dir={uiDir}
           >
-            {/* 0. MANDATORY BANKRUPTCY & STUDIO LIQUIDATION MODAL (بعد انتهاء مهلة الـ 3 أشهر بدون سداد) */}
+            {/* 0. MANDATORY BANKRUPTCY & STUDIO LIQUIDATION MODAL */}
             {isBankruptLiquidated && (
               <motion.div
                 key="bankruptcy_liquidation_modal"
@@ -258,13 +274,25 @@ export function WorldPopupsOverlay() {
                 <div className="rounded-2xl bg-[#D91624] text-[#F9F6F0] p-4 border-2 border-[#D4AF37] text-center space-y-1.5">
                   <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#1A2530] text-[#D4AF37] text-xs font-extrabold border border-[#D4AF37]">
                     <AlertTriangle className="w-3.5 h-3.5 text-[#D4AF37]" />
-                    <span>انتهاء مهلة السداد القانونية (3 أشهر) · قرار الحراسة القضائية</span>
+                    <span>
+                      {tr(
+                        uiLanguage,
+                        '3-Month Legal Grace Period Expired · Receivership Order',
+                        'انتهاء مهلة السداد القانونية (3 أشهر) · قرار الحراسة القضائية'
+                      )}
+                    </span>
                   </div>
                   <h2 className="font-display text-2xl sm:text-3xl text-white">
-                    إعلان إفلاس وتصفية «{studioName}»!
+                    {tr(
+                      uiLanguage,
+                      `Bankruptcy & Liquidation of "${studioName}"!`,
+                      `إعلان إفلاس وتصفية «${studioName}»!`
+                    )}
                   </h2>
                   <p className="text-xs font-bold text-[#F9F6F0]/90">
-                    التاريخ الحالي: {formatGameDate(gameDay, currentYear)} · عجز الخزينة:{' '}
+                    {tr(uiLanguage, 'Current Date:', 'التاريخ الحالي:')}{' '}
+                    {formatGameDate(gameDay, currentYear, uiLanguage)} ·{' '}
+                    {tr(uiLanguage, 'Treasury Deficit:', 'عجز الخزينة:')}{' '}
                     <span dir="ltr" className="font-typewriter font-black text-[#FFF3B0]">
                       {formatMoney(cash)} {currencyLabel}
                     </span>
@@ -273,14 +301,46 @@ export function WorldPopupsOverlay() {
 
                 <div className="rounded-2xl bg-white border-2 border-[#1A2530]/15 p-4 text-xs font-bold leading-relaxed text-[#1A2530] space-y-2">
                   <p>
-                    انتهت مهلة الشهور الثلاثة الممنوحة لسداد ديون الخزينة دون تغطية العجز المالي، وأصدرت النقابة والبنوك الدائنة قراراً بالحجز على أصول شركة <strong>«{studioName}»</strong> وعرضها للبيع للمستثمرين.
+                    {isEn ? (
+                      <>
+                        The three-month grace period to cover your studio’s treasury debt has expired. Creditor banks and the guild have placed <strong>&ldquo;{studioName}&rdquo;</strong> under receivership and put its assets up for sale.
+                      </>
+                    ) : (
+                      <>
+                        انتهت مهلة الشهور الثلاثة الممنوحة لسداد ديون الخزينة دون تغطية العجز المالي، وأصدرت النقابة والبنوك الدائنة قراراً بالحجز على أصول شركة <strong>«{studioName}»</strong> وعرضها للبيع للمستثمرين.
+                      </>
+                    )}
                   </p>
                   <p className="text-[#D91624] font-extrabold">
-                    ماذا سيحدث إذا بعت الشركة الآن؟
+                    {tr(
+                      uiLanguage,
+                      'What happens if you liquidate now?',
+                      'ماذا سيحدث إذا بعت الشركة الآن؟'
+                    )}
                   </p>
-                  <ul className="list-disc pr-5 space-y-1 text-[11px]">
-                    <li>ستضطر لترك <strong>«{studioName}»</strong> وبيعها لمجموعة استثمارية تديرها كمنافس في السوق.</li>
-                    <li>ستبدأ فوراً بتأسيس شركة إنتاج جديدة برأس مال جديد (75M {currencyLabel}) <strong>في نفس العالم ونفس الزمن ({formatGameDate(gameDay, currentYear)})</strong> مع استمرار نفس النجوم وتطورهم ونفس الشركات المنافسة!</li>
+                  <ul className={`list-disc ${isEn ? 'pl-5' : 'pr-5'} space-y-1 text-[11px]`}>
+                    <li>
+                      {isEn ? (
+                        <>
+                          You will step away from <strong>&ldquo;{studioName}&rdquo;</strong> as an investor group acquires it and operates it as a market rival.
+                        </>
+                      ) : (
+                        <>
+                          ستضطر لترك <strong>«{studioName}»</strong> وبيعها لمجموعة استثمارية تديرها كمنافس في السوق.
+                        </>
+                      )}
+                    </li>
+                    <li>
+                      {isEn ? (
+                        <>
+                          You will immediately found a brand-new studio with fresh capital (75M {currencyLabel}) <strong>in the same living world &amp; timeline ({formatGameDate(gameDay, currentYear, uiLanguage)})</strong> with all evolved stars and rivals intact!
+                        </>
+                      ) : (
+                        <>
+                          ستبدأ فوراً بتأسيس شركة إنتاج جديدة برأس مال جديد (75M {currencyLabel}) <strong>في نفس العالم ونفس الزمن ({formatGameDate(gameDay, currentYear, uiLanguage)})</strong> مع استمرار نفس النجوم وتطورهم ونفس الشركات المنافسة!
+                        </>
+                      )}
+                    </li>
                   </ul>
                 </div>
 
@@ -294,7 +354,9 @@ export function WorldPopupsOverlay() {
                       } else {
                         const errMsg = getRewardedAdErrorMessage(
                           adResult.reason,
-                          'لتفعيل تمويل الإنقاذ'
+                          'لتفعيل تمويل الإنقاذ',
+                          uiLanguage,
+                          'to activate the emergency investor bailout'
                         );
                         if (errMsg) showToast(errMsg, 'warning');
                       }
@@ -303,11 +365,15 @@ export function WorldPopupsOverlay() {
                   >
                     <Sparkles className="w-4 h-4 shrink-0" />
                     <span>
-                      طوق نجاة اللحظة الأخيرة: تمويل إنقاذ مستثمر (+
-                      {formatMoney(
-                        cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
-                      )}{' '}
-                      {currencyLabel}) — مشاهدة إعلان
+                      {tr(
+                        uiLanguage,
+                        `Last-Minute Lifeline: Emergency Investor Bailout (+${formatMoney(
+                          cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
+                        )} ${currencyLabel}) — Watch Ad`,
+                        `طوق نجاة اللحظة الأخيرة: تمويل إنقاذ مستثمر (+${formatMoney(
+                          cash < 0 ? Math.abs(cash) + 15_000_000 : 15_000_000
+                        )} ${currencyLabel}) — مشاهدة إعلان`
+                      )}
                     </span>
                   </button>
 
@@ -318,7 +384,11 @@ export function WorldPopupsOverlay() {
                   >
                     <Building2 className="w-4 h-4 text-[#D4AF37]" />
                     <span>
-                      بيع وتصفية «{studioName}» وتأسيس شركة جديدة في نفس العالم ({currentYear})
+                      {tr(
+                        uiLanguage,
+                        `Liquidate "${studioName}" & Launch a New Studio (${currentYear})`,
+                        `بيع وتصفية «${studioName}» وتأسيس شركة جديدة في نفس العالم (${currentYear})`
+                      )}
                     </span>
                   </button>
                 </div>
@@ -348,12 +418,16 @@ export function WorldPopupsOverlay() {
                           <span className="inline-flex items-center gap-1 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/20 px-2.5 py-0.5 text-[10px] font-black text-[#D4AF37]">
                             <Sparkles className="h-3 w-3" />
                             <span>
-                              البث الرسمي لحفل جوائز نهاية العام ({currentFestival.year})
+                              {tr(
+                                uiLanguage,
+                                `Official Year-End Awards Gala (${currentFestival.year})`,
+                                `البث الرسمي لحفل جوائز نهاية العام (${currentFestival.year})`
+                              )}
                             </span>
                           </span>
                         </div>
                         <h2 className="mt-1 font-display text-base font-black leading-snug text-[#F9F6F0] sm:text-lg">
-                          {currentFestival.festivalName}
+                          {localizeEntityName(currentFestival.festivalName, uiLanguage)}
                         </h2>
                       </div>
                     </div>
@@ -364,7 +438,7 @@ export function WorldPopupsOverlay() {
                         onClick={revealAllCategories}
                         className="shrink-0 rounded-xl border border-[#D4AF37] bg-[#D91624] px-3 py-1.5 text-[11px] font-black text-white transition hover:brightness-110"
                       >
-                        فتح كل المظاريف
+                        {tr(uiLanguage, 'Open All Envelopes', 'فتح كل المظاريف')}
                       </button>
                     )}
                   </div>
@@ -392,8 +466,16 @@ export function WorldPopupsOverlay() {
                               }`}
                             >
                               {playerWonCountInCurrentCeremony > 0
-                                ? `حصد استوديو «${studioName}» ${playerWonCountInCurrentCeremony} جوائز! 🏆`
-                                : 'حسمت اللجان جوائز هذا المهرجان'}
+                                ? tr(
+                                    uiLanguage,
+                                    `"${studioName}" Swept ${playerWonCountInCurrentCeremony} Awards! 🏆`,
+                                    `حصد استوديو «${studioName}» ${playerWonCountInCurrentCeremony} جوائز! 🏆`
+                                  )
+                                : tr(
+                                    uiLanguage,
+                                    'The jury has finalized this festival’s winners',
+                                    'حسمت اللجان جوائز هذا المهرجان'
+                                  )}
                             </span>
                           </div>
                         )}
@@ -406,6 +488,12 @@ export function WorldPopupsOverlay() {
                     {currentFestival.awards.map((aw) => {
                       const isRevealed =
                         !!revealedCategories[`${currentFestival.id}_${aw.category}`];
+                      const locCategory = localizeEntityName(aw.category, uiLanguage);
+                      const locWinner = localizeEntityName(aw.winner, uiLanguage);
+                      const locWinningStudio = localizeEntityName(
+                        aw.winningStudioName,
+                        uiLanguage
+                      );
                       return (
                         <div
                           key={aw.category}
@@ -421,7 +509,7 @@ export function WorldPopupsOverlay() {
                                 <Award className="h-4 w-4" />
                               </div>
                               <h3 className="font-display text-xs font-black leading-snug text-slate-900 sm:text-sm">
-                                {aw.category}
+                                {locCategory}
                               </h3>
                             </div>
                             {!isRevealed ? (
@@ -431,7 +519,9 @@ export function WorldPopupsOverlay() {
                                 className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-xs transition hover:brightness-105"
                               >
                                 <Sparkles className="h-3.5 w-3.5" />
-                                <span>فض المظروف الذهبي</span>
+                                <span>
+                                  {tr(uiLanguage, 'Unseal Envelope', 'فض المظروف الذهبي')}
+                                </span>
                               </button>
                             ) : (
                               <span
@@ -444,8 +534,8 @@ export function WorldPopupsOverlay() {
                                 <Trophy className="h-3 w-3" />
                                 <span>
                                   {aw.isPlayerWinner
-                                    ? `فوز «${studioName}»!`
-                                    : `فوز «${aw.winningStudioName}»`}
+                                    ? tr(uiLanguage, `"${studioName}" Wins!`, `فوز «${studioName}»!`)
+                                    : tr(uiLanguage, `"${locWinningStudio}" Wins`, `فوز «${locWinningStudio}»`)}
                                 </span>
                               </span>
                             )}
@@ -471,7 +561,7 @@ export function WorldPopupsOverlay() {
                                 >
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-xs font-black leading-snug text-[#1A2530]">
-                                      {nomLabel}
+                                      {localizeEntityName(nomLabel, uiLanguage)}
                                     </span>
                                     {isWinnerNominee && (
                                       <Trophy className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
@@ -486,10 +576,14 @@ export function WorldPopupsOverlay() {
                           {isRevealed && (
                             <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D4AF37] bg-[#FFF9E6] px-3 py-2">
                               <span className="text-xs font-black text-[#1A2530]">
-                                الفائز الرسمي: {aw.winner} — عن عمل «{aw.winningProjectTitle}»
+                                {tr(
+                                  uiLanguage,
+                                  `Official Winner: ${locWinner} — for "${aw.winningProjectTitle}"`,
+                                  `الفائز الرسمي: ${locWinner} — عن عمل «${aw.winningProjectTitle}»`
+                                )}
                               </span>
                               <span className="text-[11px] font-bold text-[#D91624]">
-                                إنتاج: {aw.winningStudioName}
+                                {tr(uiLanguage, 'Studio:', 'إنتاج:')} {locWinningStudio}
                               </span>
                             </div>
                           )}
@@ -502,8 +596,16 @@ export function WorldPopupsOverlay() {
                   <div className="flex items-center justify-between border-t border-[#1A2530]/15 pt-3">
                     <span className="text-[11px] font-bold text-[#1A2530]/65">
                       {festivalModalQueue.length > 1
-                        ? `متبقي ${festivalModalQueue.length - 1} مهرجان في ختام الموسم`
-                        : 'اكتملت مراسم توزيع جوائز هذا العام'}
+                        ? tr(
+                            uiLanguage,
+                            `${festivalModalQueue.length - 1} more festival ceremony remaining`,
+                            `متبقي ${festivalModalQueue.length - 1} مهرجان في ختام الموسم`
+                          )
+                        : tr(
+                            uiLanguage,
+                            'All awards for this season have been presented',
+                            'اكتملت مراسم توزيع جوائز هذا العام'
+                          )}
                     </span>
                     {!allRevealed ? (
                       <button
@@ -512,7 +614,9 @@ export function WorldPopupsOverlay() {
                         className="inline-flex min-h-[42px] items-center gap-1.5 rounded-2xl border border-[#1A2530] bg-[#D4AF37] px-5 py-2 text-xs font-black text-[#1A2530] shadow-md transition hover:brightness-105"
                       >
                         <Sparkles className="h-4 w-4" />
-                        <span>إعلان جميع الفائزين الآن</span>
+                        <span>
+                          {tr(uiLanguage, 'Reveal All Winners Now', 'إعلان جميع الفائزين الآن')}
+                        </span>
                       </button>
                     ) : (
                       <button
@@ -523,8 +627,8 @@ export function WorldPopupsOverlay() {
                         <Check className="h-4 w-4" />
                         <span>
                           {festivalModalQueue.length > 1
-                            ? 'المهرجان التالي'
-                            : 'اعتماد الجوائز ومواصلة العمل'}
+                            ? tr(uiLanguage, 'Next Festival', 'المهرجان التالي')
+                            : tr(uiLanguage, 'Accept Trophies & Continue', 'اعتماد الجوائز ومواصلة العمل')}
                         </span>
                       </button>
                     )}
@@ -567,7 +671,7 @@ export function WorldPopupsOverlay() {
                           {currentNews.badgeLabel}
                         </span>
                         <span className="block text-[10px] font-bold text-[#F9F6F0]/80">
-                          {formatGameDate(currentNews.day, currentNews.year)}
+                          {formatGameDate(currentNews.day, currentNews.year, uiLanguage)}
                         </span>
                       </div>
                     </div>
@@ -579,7 +683,11 @@ export function WorldPopupsOverlay() {
                           onClick={dismissAllNews}
                           className="rounded-lg bg-white/15 px-2 py-1 text-[10px] font-black text-white transition hover:bg-white/25"
                         >
-                          تخطي الكل ({breakingNewsQueue.length})
+                          {tr(
+                            uiLanguage,
+                            `Skip All (${breakingNewsQueue.length})`,
+                            `تخطي الكل (${breakingNewsQueue.length})`
+                          )}
                         </button>
                       )}
                       <button
@@ -621,10 +729,10 @@ export function WorldPopupsOverlay() {
                         </div>
                         <div className="min-w-0">
                           <span className="block text-[10px] font-bold text-[#1A2530]/60">
-                            محور التغطية الصحفية
+                            {tr(uiLanguage, 'Press Spotlight', 'محور التغطية الصحفية')}
                           </span>
                           <span className="block font-display text-sm font-black leading-snug text-[#1A2530]">
-                            {currentNews.highlightName}
+                            {localizeEntityName(currentNews.highlightName, uiLanguage)}
                           </span>
                         </div>
                       </div>
@@ -657,11 +765,11 @@ export function WorldPopupsOverlay() {
                     </div>
                   )}
 
-                  {/* Contextual AI Media Response (يظهر فقط في المواقف التي تستدعي رداً إعلامياً وليس عمال على بطال) */}
+                  {/* Contextual AI Media Response (Only triggered for controversy/rival clash) */}
                   {(() => {
                     const textBlob = `${currentNews.headline} ${currentNews.detail} ${currentNews.extraStatBadge || ''}`;
                     const isControversialOrNegative =
-                      /رفض|أزمة|خلاف|هجوم|تحدي|منافس|تسريب|انسحاب|اعتذار|جدل|انتقاد|تراجع|كارثة|سخرية|إشاعة|-/.test(
+                      /refus|declin|reject|crisis|clash|feud|attack|rival|leak|walkout|controversy|backlash|scandal|rumor|drop|slump|رفض|أزمة|خلاف|هجوم|تحدي|منافس|تسريب|انسحاب|اعتذار|جدل|انتقاد|تراجع|كارثة|سخرية|إشاعة|-/i.test(
                         textBlob
                       );
                     const warrantsMediaResponse =
@@ -680,7 +788,9 @@ export function WorldPopupsOverlay() {
                           className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-[#1A2530] hover:bg-[#1A2530]/90 border-2 border-[#D4AF37] px-5 py-2.5 text-xs font-black text-[#F9F6F0] shadow-md transition cursor-pointer"
                         >
                           <Check className="h-4 w-4 text-[#D4AF37]" />
-                          <span>متابعة إدارة الاستوديو</span>
+                          <span>
+                            {tr(uiLanguage, 'Continue Managing Studio', 'متابعة إدارة الاستوديو')}
+                          </span>
                         </button>
                       );
                     }
@@ -689,11 +799,17 @@ export function WorldPopupsOverlay() {
                       <div className="space-y-2.5 rounded-2xl border-2 border-[#D4AF37] bg-[#F9F6F0] p-3">
                         <div className="flex items-center justify-between gap-2">
                           <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-[#D91624]">
-                            <Megaphone className="h-3.5 w-3.5" />
-                            <span>موقف ساخن يستدعي تحركاً من المكتب الإعلامي</span>
+                            <Megaphone className="h-3.5 w-3.5 shrink-0" />
+                            <span>
+                              {tr(
+                                uiLanguage,
+                                'Flashpoint requiring PR Desk action',
+                                'موقف ساخن يستدعي تحركاً من المكتب الإعلامي'
+                              )}
+                            </span>
                           </span>
-                          <span className="rounded-lg bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-bold text-[#D4AF37]">
-                            تكلفة الحملة: 2.0M {currencyLabel}
+                          <span className="rounded-lg bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-bold text-[#D4AF37] shrink-0" dir="ltr">
+                            2.0M {currencyLabel}
                           </span>
                         </div>
 
@@ -710,8 +826,11 @@ export function WorldPopupsOverlay() {
                                 {
                                   headline: currentNews.headline,
                                   detail: currentNews.detail,
-                                  customAngle:
-                                    'بيان صحفي رسمي حاسم من الاستوديو يقلب الموقف لصالحنا ويشعل حماس الجمهور',
+                                  customAngle: tr(
+                                    uiLanguage,
+                                    'Decisive official press statement from the studio that flips the narrative in our favor and ignites fan excitement',
+                                    'بيان صحفي رسمي حاسم من الاستوديو يقلب الموقف لصالحنا ويشعل حماس الجمهور'
+                                  ),
                                 }
                               );
                               if (ok) playCashRegisterChaChing();
@@ -725,7 +844,9 @@ export function WorldPopupsOverlay() {
                             ) : (
                               <Sparkles className="h-3.5 w-3.5 text-[#D4AF37]" />
                             )}
-                            <span>إصدار بيان صحفي حاسم للصحافة</span>
+                            <span>
+                              {tr(uiLanguage, 'Issue Decisive Press Statement', 'إصدار بيان صحفي حاسم للصحافة')}
+                            </span>
                           </button>
 
                           <button
@@ -738,7 +859,9 @@ export function WorldPopupsOverlay() {
                             className="flex items-center justify-center gap-1.5 rounded-xl bg-[#D91624] hover:brightness-110 px-3 py-2 text-[11px] font-black text-white border border-[#D4AF37] shadow transition cursor-pointer"
                           >
                             <Flame className="h-3.5 w-3.5 text-[#D4AF37]" />
-                            <span>فتح غرفة اللجان والهجوم المضاد</span>
+                            <span>
+                              {tr(uiLanguage, 'Open PR War Room', 'فتح غرفة اللجان والهجوم المضاد')}
+                            </span>
                           </button>
                         </div>
 
@@ -748,7 +871,9 @@ export function WorldPopupsOverlay() {
                           className="flex min-h-[40px] w-full items-center justify-center gap-2 rounded-xl bg-[#1A2530] hover:bg-[#1A2530]/90 px-4 py-2 text-xs font-black text-[#F9F6F0] transition cursor-pointer"
                         >
                           <Check className="h-4 w-4 text-[#D4AF37]" />
-                          <span>تجاهل الموقف ومتابعة العمل</span>
+                          <span>
+                            {tr(uiLanguage, 'Ignore & Continue', 'تجاهل الموقف ومتابعة العمل')}
+                          </span>
                         </button>
                       </div>
                     );
@@ -757,7 +882,7 @@ export function WorldPopupsOverlay() {
               </motion.div>
             )}
 
-            {/* 3. ELECTRONIC COMMITTEES & TREND WAR ROOM (تصميم موبايل متناسق وأنيق للجان الإلكترونية والتريند) */}
+            {/* 3. ELECTRONIC COMMITTEES & TREND WAR ROOM */}
             {!isBankruptLiquidated &&
               !currentFestival &&
               !currentNews &&
@@ -768,27 +893,34 @@ export function WorldPopupsOverlay() {
                   {
                     id: 'default_chatter_1',
                     platform: 'X' as const,
-                    authorName: 'ناقد سينمائي مستقل',
+                    authorName: tr(uiLanguage, 'Independent Film Critic', 'ناقد سينمائي مستقل'),
                     handle: marketAiCtx.socialHandles[0],
-                    content: `الجمهور مترقب بشدة خطوة شركة «${studioName}» القادمة أمام أفلام «${selectedRivalTarget}» هذا الموسم!`,
-                    hashtag: '#سباق_الإيرادات',
+                    content: tr(
+                      uiLanguage,
+                      `Audiences are closely watching "${studioName}"’s next move head-to-head against "${selectedRivalTargetDisplay}" this season!`,
+                      `الجمهور مترقب بشدة خطوة شركة «${studioName}» القادمة أمام أفلام «${selectedRivalTargetDisplay}» هذا الموسم!`
+                    ),
+                    hashtag: tr(uiLanguage, '#BoxOfficeRace', '#سباق_الإيرادات'),
                     likes: '18.4K',
                     shares: '4.2K',
                     sentiment: 'viral_boost' as const,
-                    timestampLabel: 'منذ دقيقة',
+                    timestampLabel: tr(uiLanguage, '1m ago', 'منذ دقيقة'),
                   },
                   {
                     id: 'default_chatter_2',
                     platform: 'TikTok' as const,
-                    authorName: 'تريندات الشارع',
+                    authorName: tr(uiLanguage, 'Cinema Trends Live', 'تريندات الشارع'),
                     handle: marketAiCtx.socialHandles[2],
-                    content:
-                      'منافسة تكسير عظام على شباك التذاكر.. يا ترى من سيحسم الصدارة هذا الأسبوع؟',
-                    hashtag: '#شباك_التذاكر',
+                    content: tr(
+                      uiLanguage,
+                      'An all-out showdown at the box office… who is taking the #1 crown this weekend?',
+                      'منافسة تكسير عظام على شباك التذاكر.. يا ترى من سيحسم الصدارة هذا الأسبوع؟'
+                    ),
+                    hashtag: tr(uiLanguage, '#BoxOffice', '#شباك_التذاكر'),
                     likes: '42.1K',
                     shares: '9.8K',
                     sentiment: 'rival_attack' as const,
-                    timestampLabel: 'منذ 3 دقائق',
+                    timestampLabel: tr(uiLanguage, '3m ago', 'منذ 3 دقائق'),
                   },
                 ];
 
@@ -834,10 +966,14 @@ export function WorldPopupsOverlay() {
                           </div>
                           <div className="min-w-0">
                             <h2 className="font-display text-base sm:text-lg text-[#F9F6F0] leading-tight truncate">
-                              اللجان الإلكترونية والتريند
+                              {tr(uiLanguage, 'PR & Viral Trend War Room', 'اللجان الإلكترونية والتريند')}
                             </h2>
                             <p className="text-[11px] font-bold text-[#D4AF37] truncate">
-                              موبايل الإمبراطور · غرفة إدارة الرأي العام
+                              {tr(
+                                uiLanguage,
+                                'Emperor’s Phone · Public Opinion HQ',
+                                'موبايل الإمبراطور · غرفة إدارة الرأي العام'
+                              )}
                             </p>
                           </div>
                         </div>
@@ -845,7 +981,7 @@ export function WorldPopupsOverlay() {
                         <button
                           type="button"
                           onClick={() => setPrWarRoomOpen(false)}
-                          aria-label="إغلاق غرفة اللجان"
+                          aria-label={tr(uiLanguage, 'Close PR War Room', 'إغلاق غرفة اللجان')}
                           className="w-10 h-10 rounded-xl bg-[#F9F6F0]/10 hover:bg-[#D91624] text-white flex items-center justify-center border border-[#D4AF37]/40 transition cursor-pointer shrink-0"
                         >
                           <X className="w-4 h-4" />
@@ -856,7 +992,7 @@ export function WorldPopupsOverlay() {
                       <div className="grid grid-cols-2 gap-2 mt-3">
                         <div className="rounded-xl bg-[#0F171E]/60 border border-[#D4AF37]/35 px-3 py-2 flex items-center justify-between">
                           <span className="text-[10px] font-bold text-[#F9F6F0]/75">
-                            السيولة المتاحة
+                            {tr(uiLanguage, 'Available Cash', 'السيولة المتاحة')}
                           </span>
                           <span
                             dir="ltr"
@@ -867,7 +1003,9 @@ export function WorldPopupsOverlay() {
                         </div>
                         <div className="rounded-xl bg-[#0F171E]/60 border border-[#D4AF37]/35 px-3 py-2">
                           <div className="flex items-center justify-between text-[10px] font-bold mb-1">
-                            <span className="text-[#F9F6F0]/75">ضجة العمل</span>
+                            <span className="text-[#F9F6F0]/75">
+                              {tr(uiLanguage, 'Project Hype', 'ضجة العمل')}
+                            </span>
                             <span className="font-typewriter font-black text-[#FFF3B0]">
                               {draft.hypeScore}%
                             </span>
@@ -896,7 +1034,7 @@ export function WorldPopupsOverlay() {
                         }`}
                       >
                         <Megaphone className="w-4 h-4 shrink-0" />
-                        <span>إطلاق الحملات</span>
+                        <span>{tr(uiLanguage, 'Launch Campaigns', 'إطلاق الحملات')}</span>
                       </button>
 
                       <button
@@ -909,7 +1047,13 @@ export function WorldPopupsOverlay() {
                         }`}
                       >
                         <MessageSquare className="w-4 h-4 shrink-0" />
-                        <span>رادار التريند ({combinedFeed.length})</span>
+                        <span>
+                          {tr(
+                            uiLanguage,
+                            `Trend Radar (${combinedFeed.length})`,
+                            `رادار التريند (${combinedFeed.length})`
+                          )}
+                        </span>
                       </button>
                     </div>
 
@@ -920,7 +1064,13 @@ export function WorldPopupsOverlay() {
                         <div className="rounded-2xl bg-white border border-[#1A2530]/15 p-3">
                           <div className="flex items-center gap-1.5 text-[11px] font-black text-[#1A2530] mb-2">
                             <Target className="w-3.5 h-3.5 text-[#D91624]" />
-                            <span>الشركة المنافسة المستهدفة بالحملات المضادة:</span>
+                            <span>
+                              {tr(
+                                uiLanguage,
+                                'Target Rival Studio for Counter-PR:',
+                                'الشركة المنافسة المستهدفة بالحملات المضادة:'
+                              )}
+                            </span>
                           </div>
                           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                             {rivalStudioOptions.map((stName) => {
@@ -936,7 +1086,7 @@ export function WorldPopupsOverlay() {
                                       : 'bg-[#F9F6F0] text-[#1A2530] border-[#1A2530]/15 hover:border-[#D4AF37]'
                                   }`}
                                 >
-                                  {stName}
+                                  {localizeEntityName(stName, uiLanguage)}
                                 </button>
                               );
                             })}
@@ -951,7 +1101,7 @@ export function WorldPopupsOverlay() {
                             onClick={() =>
                               runCampaignAndFocusFeed('support_film_trolls')
                             }
-                            className="w-full min-h-[58px] p-3.5 rounded-2xl bg-[#15803D] hover:brightness-110 text-white border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between gap-3 text-right cursor-pointer disabled:opacity-55"
+                            className="w-full min-h-[58px] p-3.5 rounded-2xl bg-[#15803D] hover:brightness-110 text-white border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between gap-3 text-start cursor-pointer disabled:opacity-55"
                           >
                             <div className="min-w-0">
                               <div className="font-display text-sm sm:text-base flex items-center gap-1.5">
@@ -960,10 +1110,20 @@ export function WorldPopupsOverlay() {
                                 ) : (
                                   <TrendingUp className="w-4 h-4 text-[#FFF3B0] shrink-0" />
                                 )}
-                                <span>توجيه اللجان لدعم الفيلم</span>
+                                <span>
+                                  {tr(
+                                    uiLanguage,
+                                    'Activate Fan Buzz Boost',
+                                    'توجيه اللجان لدعم الفيلم'
+                                  )}
+                                </span>
                               </div>
                               <p className="text-[11px] font-bold text-white/85 mt-0.5">
-                                إشعال هاشتاجات الدعم ورفع الضجة الجماهيرية فوراً
+                                {tr(
+                                  uiLanguage,
+                                  'Ignite fan hashtags and spike public hype immediately',
+                                  'إشعال هاشتاجات الدعم ورفع الضجة الجماهيرية فوراً'
+                                )}
                               </p>
                             </div>
                             <span
@@ -983,7 +1143,7 @@ export function WorldPopupsOverlay() {
                                 selectedRivalTarget
                               )
                             }
-                            className="w-full min-h-[58px] p-3.5 rounded-2xl bg-[#D91624] hover:brightness-110 text-white border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between gap-3 text-right cursor-pointer disabled:opacity-55"
+                            className="w-full min-h-[58px] p-3.5 rounded-2xl bg-[#D91624] hover:brightness-110 text-white border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between gap-3 text-start cursor-pointer disabled:opacity-55"
                           >
                             <div className="min-w-0">
                               <div className="font-display text-sm sm:text-base flex items-center gap-1.5">
@@ -992,10 +1152,20 @@ export function WorldPopupsOverlay() {
                                 ) : (
                                   <Flame className="w-4 h-4 text-[#FFF3B0] shrink-0" />
                                 )}
-                                <span>نشر إشاعة عن فيلم المنافس</span>
+                                <span>
+                                  {tr(
+                                    uiLanguage,
+                                    'Leak Rumor on Rival Film',
+                                    'نشر إشاعة عن فيلم المنافس'
+                                  )}
+                                </span>
                               </div>
                               <p className="text-[11px] font-bold text-white/85 mt-0.5 truncate">
-                                استهداف مباشر ضد «{selectedRivalTarget}» لتقليص إيراداته
+                                {tr(
+                                  uiLanguage,
+                                  `Direct PR strike against "${selectedRivalTargetDisplay}" to erode box office`,
+                                  `استهداف مباشر ضد «${selectedRivalTargetDisplay}» لتقليص إيراداته`
+                                )}
                               </p>
                             </div>
                             <span
@@ -1010,34 +1180,39 @@ export function WorldPopupsOverlay() {
                         {/* Additional Tactical Campaigns */}
                         {extraCampaigns.length > 0 && (
                           <div className="grid grid-cols-2 gap-2.5">
-                            {extraCampaigns.map((camp) => (
-                              <button
-                                key={camp.id}
-                                type="button"
-                                disabled={launchingCampaignId !== null}
-                                onClick={() =>
-                                  runCampaignAndFocusFeed(
-                                    camp.id,
-                                    camp.type === 'attack_rival'
-                                      ? selectedRivalTarget
-                                      : undefined
-                                  )
-                                }
-                                className="min-h-[68px] p-3 rounded-2xl bg-[#1A2530] text-[#F9F6F0] hover:bg-[#22313F] border border-[#D4AF37]/75 text-right flex flex-col justify-between gap-1.5 transition cursor-pointer disabled:opacity-55"
-                              >
-                                <div className="text-xs font-extrabold leading-snug line-clamp-2">
-                                  {launchingCampaignId === camp.id
-                                    ? 'جاري التنفيذ...'
-                                    : camp.title}
-                                </div>
-                                <div
-                                  dir="ltr"
-                                  className="font-typewriter text-[11px] font-black text-[#D4AF37]"
+                            {extraCampaigns.map((camp) => {
+                              const campTitle = isEn
+                                ? PR_CAMPAIGNS_EN[camp.id]?.title || camp.title
+                                : camp.title;
+                              return (
+                                <button
+                                  key={camp.id}
+                                  type="button"
+                                  disabled={launchingCampaignId !== null}
+                                  onClick={() =>
+                                    runCampaignAndFocusFeed(
+                                      camp.id,
+                                      camp.type === 'attack_rival'
+                                        ? selectedRivalTarget
+                                        : undefined
+                                    )
+                                  }
+                                  className="min-h-[68px] p-3 rounded-2xl bg-[#1A2530] text-[#F9F6F0] hover:bg-[#22313F] border border-[#D4AF37]/75 text-start flex flex-col justify-between gap-1.5 transition cursor-pointer disabled:opacity-55"
                                 >
-                                  {formatMoney(camp.cost)} {currencyLabel}
-                                </div>
-                              </button>
-                            ))}
+                                  <div className="text-xs font-extrabold leading-snug line-clamp-2">
+                                    {launchingCampaignId === camp.id
+                                      ? tr(uiLanguage, 'Launching...', 'جاري التنفيذ...')
+                                      : campTitle}
+                                  </div>
+                                  <div
+                                    dir="ltr"
+                                    className="font-typewriter text-[11px] font-black text-[#D4AF37]"
+                                  >
+                                    {formatMoney(camp.cost)} {currencyLabel}
+                                  </div>
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
 
@@ -1046,14 +1221,22 @@ export function WorldPopupsOverlay() {
                           <button
                             type="button"
                             onClick={() => setPrActiveTab('feed')}
-                            className="w-full rounded-2xl bg-[#1A2530] text-[#F9F6F0] p-3 border border-[#D4AF37]/45 text-right hover:border-[#D4AF37] transition cursor-pointer"
+                            className="w-full rounded-2xl bg-[#1A2530] text-[#F9F6F0] p-3 border border-[#D4AF37]/45 text-start hover:border-[#D4AF37] transition cursor-pointer"
                           >
                             <div className="flex items-center justify-between text-[10px] font-bold text-[#D4AF37] mb-1">
-                              <span>آخر منشور متداول الآن ({latestPost.platform})</span>
-                              <span>عرض كل التعليقات ←</span>
+                              <span>
+                                {tr(
+                                  uiLanguage,
+                                  `Latest Trending Post (${latestPost.platform})`,
+                                  `آخر منشور متداول الآن (${latestPost.platform})`
+                                )}
+                              </span>
+                              <span>
+                                {tr(uiLanguage, 'View All Posts →', 'عرض كل التعليقات ←')}
+                              </span>
                             </div>
                             <p className="text-xs font-bold leading-relaxed text-[#F9F6F0]/90 line-clamp-2">
-                              «{latestPost.content}»
+                              {tr(uiLanguage, `"${latestPost.content}"`, `«${latestPost.content}»`)}
                             </p>
                           </button>
                         )}
@@ -1126,7 +1309,9 @@ export function WorldPopupsOverlay() {
                             className="w-full min-h-[44px] rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-display text-sm shadow flex items-center justify-center gap-2 cursor-pointer hover:brightness-105 transition"
                           >
                             <Megaphone className="w-4 h-4" />
-                            <span>إطلاق حملة تريند جديدة الآن</span>
+                            <span>
+                              {tr(uiLanguage, 'Launch New Trend Campaign', 'إطلاق حملة تريند جديدة الآن')}
+                            </span>
                           </button>
                         </div>
                       </div>

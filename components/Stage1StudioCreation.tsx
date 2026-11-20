@@ -4,6 +4,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore, StudioLogoConfig, formatGameDate } from '@/lib/store';
 import { FounderPerk } from '@/lib/game-engine';
 import { getMarketProfile } from '@/lib/market-profiles';
+import {
+  getLocalizedFounderPerk,
+  getLocalizedMarketInfo,
+  getUiDir,
+  tr,
+} from '@/lib/i18n';
 import { WorldFlagArt } from './WorldFlagArt';
 import { triggerTelegramHaptic } from './TelegramMiniAppBridge';
 import { playHeavyIronStamp, playClapperboardSnap } from '@/lib/sound-fx';
@@ -34,6 +40,7 @@ import {
   X,
   Upload,
   Trash2,
+  Globe,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { NeelyoInfoTab } from './NeelyoInfoModal';
@@ -43,39 +50,31 @@ import {
   isCloudinaryConfigured,
 } from '@/lib/cloudinary';
 
-const PERKS: {
+const PERK_ITEMS: {
   id: FounderPerk;
-  title: string;
-  shortTitle: string;
-  metric: string;
-  desc: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  {
-    id: 'visionary_director',
-    title: 'المخرج العبقري',
-    shortTitle: 'المخرج',
-    metric: '+8% جودة',
-    desc: 'دفعة دائمة +8% في الجودة الفنية وتقييمات النقاد والمهرجانات.',
-    icon: Film,
-  },
-  {
-    id: 'marketing_whale',
-    title: 'حوت الدعاية',
-    shortTitle: 'الدعاية',
-    metric: '+10% شباك',
-    desc: 'يرفع إيرادات الافتتاح +10% وصفقات المنصات والقنوات.',
-    icon: Megaphone,
-  },
-  {
-    id: 'shark_negotiator',
-    title: 'صديق النجوم',
-    shortTitle: 'النجوم',
-    metric: '-15% أجور',
-    desc: 'يخفض أجور النجوم والمخرجين 15% ويقلل صدامات الغرور.',
-    icon: Handshake,
-  },
+  { id: 'visionary_director', icon: Film },
+  { id: 'marketing_whale', icon: Megaphone },
+  { id: 'shark_negotiator', icon: Handshake },
 ];
+
+const STUDIO_SUGGESTIONS_EN: Record<string, string[]> = {
+  egypt: [
+    'Nile Crown Pictures',
+    'Zamalek Studios',
+    'Pharaoh Film House',
+    'Cairo Horizon Films',
+    'Golden Lotus Cinema',
+  ],
+  saudi: [
+    'AlUla Grand Studios',
+    'Riyadh Horizon Pictures',
+    'Red Sea Royal Films',
+    'Diriyah Cinema House',
+    'Oasis Gold Studios',
+  ],
+};
 
 type LogoDesignerTab = 'presets' | 'emblems' | 'frames' | 'palettes';
 
@@ -85,6 +84,8 @@ export function Stage1StudioCreation({
   onOpenInfo?: (tab: NeelyoInfoTab) => void;
 } = {}) {
   const {
+    uiLanguage,
+    setUiLanguage,
     worldMarket,
     openMarketSelector,
     initializeStudio,
@@ -95,9 +96,15 @@ export function Stage1StudioCreation({
     setChildModalOpen,
   } = useGameStore();
 
+  const isEn = uiLanguage === 'en';
+  const uiDir = getUiDir(uiLanguage);
   const marketProfile = getMarketProfile(worldMarket);
-  const currencyLabel = marketProfile.currencyLabel;
+  const marketLoc = getLocalizedMarketInfo(worldMarket, uiLanguage);
+  const currencyLabel = marketLoc.currencyLabel;
   const isSaudi = worldMarket === 'saudi';
+  const studioSuggestions = isEn
+    ? STUDIO_SUGGESTIONS_EN[worldMarket] || STUDIO_SUGGESTIONS_EN.egypt
+    : marketProfile.studioNameSuggestions;
 
   const [step, setStep] = useState<1 | 2>(1);
   const [isLogoSheetOpen, setIsLogoSheetOpen] = useState(false);
@@ -121,9 +128,8 @@ export function Stage1StudioCreation({
     EMBLEM_OPTIONS.find((e) => e.id === logoConfig.emblem) || EMBLEM_OPTIONS[0];
   const activeFrame =
     FRAME_OPTIONS.find((f) => f.id === logoConfig.frame) || FRAME_OPTIONS[0];
-  const activePerkObj = PERKS.find((p) => p.id === selectedPerk) || PERKS[0];
+  const activePerkLoc = getLocalizedFounderPerk(selectedPerk, uiLanguage);
 
-  // Sync bottom sheet modal with store & Telegram native BackButton
   useEffect(() => {
     setChildModalOpen(isLogoSheetOpen);
     return () => setChildModalOpen(false);
@@ -143,7 +149,6 @@ export function Stage1StudioCreation({
     };
   }, [isLogoSheetOpen]);
 
-  // Cleanup stamp timers on unmount
   useEffect(() => {
     return () => {
       if (launchTimerRef.current) clearTimeout(launchTimerRef.current);
@@ -171,19 +176,30 @@ export function Stage1StudioCreation({
   const handleLogoFileSelect = async (file?: File | null) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      showToast('اختر ملف صورة صحيح (JPG أو PNG أو WEBP)', 'warning');
+      showToast(
+        tr(
+          uiLanguage,
+          'Please pick a valid image file (JPG, PNG, or WEBP)',
+          'اختر ملف صورة صحيح (JPG أو PNG أو WEBP)'
+        ),
+        'warning'
+      );
       return;
     }
     const compressed = await compressImageToWebp320(file, 320, 0.82);
     if (!compressed.ok || !compressed.dataUrl || !compressed.blob) {
       showToast(
-        compressed.error || 'تعذر تجهيز صورة الشعار، جرب صورة أخرى',
+        compressed.error ||
+          tr(
+            uiLanguage,
+            'Could not process logo image—try another file.',
+            'تعذر تجهيز صورة الشعار، جرب صورة أخرى'
+          ),
         'warning'
       );
       return;
     }
     triggerTelegramHaptic('success');
-    // Local preview only — uploaded to Cloudinary neelyo/logos only when signing contract!
     setPendingLogoBlob(compressed.blob);
     setLogoConfig((prev) => ({
       ...prev,
@@ -195,7 +211,11 @@ export function Stage1StudioCreation({
     if (!studioName.trim() || !ceoName.trim()) {
       triggerTelegramHaptic('warning');
       showToast(
-        'يرجى كتابة اسم شركة الإنتاج واسم المدير التنفيذي أولاً',
+        tr(
+          uiLanguage,
+          'Please enter both your studio name and CEO name first',
+          'يرجى كتابة اسم شركة الإنتاج واسم المدير التنفيذي أولاً'
+        ),
         'warning'
       );
       return false;
@@ -224,7 +244,6 @@ export function Stage1StudioCreation({
       triggerTelegramHaptic('success');
     }, 320);
 
-    // Upload custom studio logo to Cloudinary ONLY upon final contract signing (0 wasted uploads)
     const uploadPromise: Promise<string | undefined> =
       pendingLogoBlob && logoConfig.customImageUrl && isCloudinaryConfigured()
         ? Promise.race([
@@ -256,12 +275,15 @@ export function Stage1StudioCreation({
     }, 900);
   };
 
+  const BackArrow = isEn ? ArrowLeft : ArrowRight;
+  const ForwardArrow = isEn ? ArrowRight : ArrowLeft;
+
   return (
     <div
       className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-[#F9F6F0] text-[#1A2530]"
-      dir="rtl"
+      dir={uiDir}
     >
-      {/* Warm Creamy Ivory & Golden Ambient Glow matching the Main Interface */}
+      {/* Warm Creamy Ivory & Golden Ambient Glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-28 left-1/2 h-[320px] w-[540px] -translate-x-1/2 rounded-full bg-[#D4AF37]/18 blur-[90px]" />
         <div
@@ -273,7 +295,7 @@ export function Stage1StudioCreation({
 
       {/* ==================== TOP UTILITY BAR ==================== */}
       <header className="relative z-20 mx-auto flex w-full max-w-5xl items-center justify-between gap-2 px-4 pt-3 pb-1 sm:px-6 sm:pt-4">
-        {/* Right: Back Trigger */}
+        {/* Back Trigger */}
         {step === 2 ? (
           <button
             type="button"
@@ -284,8 +306,8 @@ export function Stage1StudioCreation({
             }}
             className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-[#1A2530]/15 bg-[#FFFDF8] px-3 text-xs font-extrabold text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer disabled:opacity-40"
           >
-            <ArrowRight className="h-4 w-4 text-[#D91624]" />
-            <span>الهوية والشعار</span>
+            <BackArrow className="h-4 w-4 text-[#D91624]" />
+            <span>{tr(uiLanguage, 'Identity & Logo', 'الهوية والشعار')}</span>
           </button>
         ) : gameDay <= 1 ? (
           <button
@@ -296,12 +318,12 @@ export function Stage1StudioCreation({
             }}
             className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-[#1A2530]/15 bg-[#FFFDF8] px-3 text-xs font-extrabold text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer"
           >
-            <ArrowRight className="h-4 w-4 text-[#D91624]" />
-            <span>تغيير الدولة</span>
+            <BackArrow className="h-4 w-4 text-[#D91624]" />
+            <span>{tr(uiLanguage, 'Change Market', 'تغيير الدولة')}</span>
           </button>
         ) : (
           <div className="flex items-center gap-2 text-xs font-extrabold text-[#9A7209]">
-            <span>{formatGameDate(gameDay, currentYear)}</span>
+            <span>{formatGameDate(gameDay, currentYear, uiLanguage)}</span>
           </div>
         )}
 
@@ -309,30 +331,45 @@ export function Stage1StudioCreation({
         <div className="inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/70 bg-[#FFFDF8] px-3 py-1.5 shadow-2xs">
           <WorldFlagArt market={worldMarket} className="h-3.5 w-5 shrink-0" />
           <span className="text-[11px] font-black text-[#1A2530] whitespace-nowrap">
-            {marketProfile.countryNameAr}
+            {marketLoc.countryName}
           </span>
-          <span className="text-[10px] font-black text-[#9A7209]">
+          <span className="text-[10px] font-black text-[#9A7209]" dir="ltr">
             · 75M {currencyLabel}
           </span>
         </div>
 
-        {/* Left: Info Button */}
-        {onOpenInfo ? (
+        {/* Right/End: Quick Language Toggle + Info */}
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => {
-              triggerTelegramHaptic('light');
-              onOpenInfo('about');
+              triggerTelegramHaptic('selection');
+              setUiLanguage(isEn ? 'ar' : 'en', true);
             }}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#D4AF37]/60 bg-[#FFFDF8] px-2.5 text-xs font-extrabold text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer"
-            aria-label="عن Neelyo"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-[#D4AF37]/60 bg-[#FFFDF8] px-2.5 text-xs font-black text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer"
+            title={tr(uiLanguage, 'Switch to Arabic', 'التبديل إلى الإنجليزية')}
           >
-            <BookOpen className="h-4 w-4 text-[#D91624]" />
-            <span className="hidden sm:inline">عن Neelyo</span>
+            <Globe className="h-3.5 w-3.5 text-[#D91624]" />
+            <span>{isEn ? 'العربية' : 'EN'}</span>
           </button>
-        ) : (
-          <div className="w-[44px]" />
-        )}
+
+          {onOpenInfo && (
+            <button
+              type="button"
+              onClick={() => {
+                triggerTelegramHaptic('light');
+                onOpenInfo('about');
+              }}
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#D4AF37]/60 bg-[#FFFDF8] px-2.5 text-xs font-extrabold text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer"
+              aria-label={tr(uiLanguage, 'About Neelyo', 'عن Neelyo')}
+            >
+              <BookOpen className="h-4 w-4 text-[#D91624]" />
+              <span className="hidden sm:inline">
+                {tr(uiLanguage, 'About', 'عن Neelyo')}
+              </span>
+            </button>
+          )}
+        </div>
       </header>
 
       {/* ==================== MAIN CONTENT STAGE ==================== */}
@@ -340,9 +377,17 @@ export function Stage1StudioCreation({
         {gameDay > 1 && step === 1 && (
           <div className="mb-3 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530] px-4 py-2.5 text-xs font-bold text-[#F9F6F0] shadow-md">
             <span className="font-black text-[#D4AF37]">
-              عودة للسوق ({formatGameDate(gameDay, currentYear)}):{' '}
+              {tr(
+                uiLanguage,
+                `Market Comeback (${formatGameDate(gameDay, currentYear, uiLanguage)}): `,
+                `عودة للسوق (${formatGameDate(gameDay, currentYear, uiLanguage)}): `
+              )}
             </span>
-            تبدأ شركة جديدة برأس مال 75M {currencyLabel} في نفس الزمن ومع نفس النجوم.
+            {tr(
+              uiLanguage,
+              `You're launching a fresh studio with 75M ${currencyLabel} in the same live timeline and star roster.`,
+              `تبدأ شركة جديدة برأس مال 75M ${currencyLabel} في نفس الزمن ومع نفس النجوم.`
+            )}
           </div>
         )}
 
@@ -357,13 +402,12 @@ export function Stage1StudioCreation({
               transition={{ duration: 0.22 }}
               className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-7 items-center"
             >
-              {/* RIGHT / TOP: MINI LUXURY CREST CARD (Warm Creamy-Gold Plaque) */}
+              {/* MINI LUXURY CREST CARD */}
               <div className="lg:col-span-5">
                 <div className="relative overflow-hidden rounded-[24px] border-2 border-[#D4AF37] bg-gradient-to-br from-[#FFFDF8] via-[#FBF4E0] to-[#F4E6C3] p-3.5 sm:p-5 lg:p-6 shadow-[0_14px_34px_rgba(26,37,48,0.10)]">
                   <div className="pointer-events-none absolute -top-14 left-1/2 h-36 w-44 -translate-x-1/2 rounded-full bg-[#D4AF37]/20 blur-3xl" />
 
                   <div className="relative flex items-center gap-3.5 lg:flex-col lg:text-center">
-                    {/* Illuminated Live Studio Crest */}
                     <motion.div
                       key={`${logoConfig.emblem}_${logoConfig.frame}_${logoConfig.palette}_${logoConfig.customImageUrl ? 'img' : 'svg'}`}
                       initial={{ scale: 0.9, opacity: 0.7 }}
@@ -378,22 +422,22 @@ export function Stage1StudioCreation({
                       />
                     </motion.div>
 
-                    {/* Live Studio Title & CEO */}
                     <div className="min-w-0 flex-1 lg:w-full">
                       <span className="text-[10px] font-black tracking-wide text-[#9A7209]">
-                        بطاقة الإمبراطور الرسمية
+                        {tr(uiLanguage, 'OFFICIAL MOGUL CREST', 'بطاقة الإمبراطور الرسمية')}
                       </span>
                       <h1 className="mt-0.5 font-display text-lg sm:text-xl lg:text-2xl font-black text-[#1A2530] truncate lg:whitespace-normal">
-                        {studioName.trim() || 'اسم شركة الإنتاج'}
+                        {studioName.trim() ||
+                          tr(uiLanguage, 'Production Studio Name', 'اسم شركة الإنتاج')}
                       </h1>
                       <p className="text-xs font-bold text-[#1A2530]/70 truncate">
-                        المدير التنفيذي:{' '}
+                        {tr(uiLanguage, 'CEO:', 'المدير التنفيذي:')}{' '}
                         <span className="font-black text-[#9A7209]">
-                          {ceoName.trim() || 'اكتب اسمك أدناه'}
+                          {ceoName.trim() ||
+                            tr(uiLanguage, 'Enter your name below', 'اكتب اسمك أدناه')}
                         </span>
                       </p>
 
-                      {/* 2 Direct Logo Controls Right Inside Card */}
                       <div className="mt-2.5 lg:mt-4 flex items-center gap-2 lg:justify-center">
                         <button
                           type="button"
@@ -401,7 +445,7 @@ export function Stage1StudioCreation({
                           className="inline-flex min-h-[40px] flex-1 lg:flex-none items-center justify-center gap-1.5 rounded-xl border border-[#1A2530]/20 bg-[#FFFDF8] px-3 py-1.5 text-xs font-extrabold text-[#1A2530] shadow-2xs hover:border-[#D4AF37] hover:bg-white transition cursor-pointer whitespace-nowrap"
                         >
                           <Shuffle className="h-3.5 w-3.5 text-[#D91624]" />
-                          <span>عشوائي</span>
+                          <span>{tr(uiLanguage, 'Shuffle', 'عشوائي')}</span>
                         </button>
                         <button
                           type="button"
@@ -412,7 +456,7 @@ export function Stage1StudioCreation({
                           className="inline-flex min-h-[40px] flex-1 lg:flex-none items-center justify-center gap-1.5 rounded-xl border border-[#D4AF37] bg-[#1A2530] px-3.5 py-1.5 text-xs font-black text-[#FFF3B0] shadow-xs hover:brightness-110 transition cursor-pointer whitespace-nowrap"
                         >
                           <Palette className="h-3.5 w-3.5 text-[#D4AF37]" />
-                          <span>تخصيص الشعار</span>
+                          <span>{tr(uiLanguage, 'Customize Logo', 'تخصيص الشعار')}</span>
                         </button>
                       </div>
                     </div>
@@ -420,14 +464,18 @@ export function Stage1StudioCreation({
                 </div>
               </div>
 
-              {/* LEFT / BOTTOM: TWO CLEAN SPACIOUS INPUTS + HORIZONTAL SWIPE SUGGESTIONS */}
+              {/* INPUTS + SUGGESTIONS */}
               <div className="lg:col-span-7 space-y-3.5 sm:space-y-4">
                 <div className="hidden lg:block mb-1">
                   <span className="text-xs font-black text-[#D91624]">
-                    الخطوة 2 من 3 · هوية الاستوديو
+                    {tr(uiLanguage, 'STEP 2 OF 3 · STUDIO IDENTITY', 'الخطوة 2 من 3 · هوية الاستوديو')}
                   </span>
                   <h2 className="font-display text-2xl font-black text-[#1A2530] mt-0.5">
-                    أطلق اسم إمبراطوريتك ووقّع باسمك
+                    {tr(
+                      uiLanguage,
+                      'Name Your Empire & Sign Your Charter',
+                      'أطلق اسم إمبراطوريتك ووقّع باسمك'
+                    )}
                   </h2>
                 </div>
 
@@ -438,23 +486,23 @@ export function Stage1StudioCreation({
                     className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-[#1A2530]"
                   >
                     <Building2 className="h-4 w-4 text-[#D91624]" />
-                    <span>اسم شركة الإنتاج</span>
+                    <span>{tr(uiLanguage, 'Production Studio Name', 'اسم شركة الإنتاج')}</span>
                   </label>
                   <input
                     id="neelyo-studio-name"
                     type="text"
                     value={studioName}
                     onChange={(e) => setStudioName(e.target.value)}
-                    placeholder={`مثال: ${
-                      marketProfile.studioNameSuggestions[0] ||
-                      marketProfile.defaultStudioName
-                    }`}
+                    placeholder={tr(
+                      uiLanguage,
+                      `e.g. ${studioSuggestions[0]}`,
+                      `مثال: ${studioSuggestions[0] || marketProfile.defaultStudioName}`
+                    )}
                     className="w-full min-h-[50px] rounded-2xl border-2 border-[#1A2530]/18 bg-[#FFFDF8] px-4 py-3 text-base font-extrabold text-[#1A2530] placeholder:text-[#1A2530]/40 shadow-2xs focus:border-[#D91624] focus:bg-white focus:outline-hidden transition"
                   />
 
-                  {/* Single-Row Horizontally Swipeable Suggestions Strip */}
                   <div className="flex flex-nowrap items-center gap-2 overflow-x-auto py-0.5">
-                    {marketProfile.studioNameSuggestions.map((name) => {
+                    {studioSuggestions.map((name) => {
                       const active = studioName.trim() === name;
                       return (
                         <button
@@ -485,10 +533,16 @@ export function Stage1StudioCreation({
                       className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-[#1A2530]"
                     >
                       <UserCheck className="h-4 w-4 text-[#D91624]" />
-                      <span>اسم المؤسس والمدير التنفيذي</span>
+                      <span>
+                        {tr(uiLanguage, 'Founder & CEO Name', 'اسم المؤسس والمدير التنفيذي')}
+                      </span>
                     </label>
                     {ceoName.trim() && (
-                      <span className="font-ruqaa text-base text-[#9A7209] truncate max-w-[140px]">
+                      <span
+                        className={`${
+                          isEn ? 'italic font-serif' : 'font-ruqaa'
+                        } text-base text-[#9A7209] truncate max-w-[140px]`}
+                      >
                         {ceoName.trim()}
                       </span>
                     )}
@@ -498,7 +552,11 @@ export function Stage1StudioCreation({
                     type="text"
                     value={ceoName}
                     onChange={(e) => setCeoName(e.target.value)}
-                    placeholder="اكتب اسمك كما سيظهر في توقيع العقد..."
+                    placeholder={tr(
+                      uiLanguage,
+                      'Type your executive signature name...',
+                      'اكتب اسمك كما سيظهر في توقيع العقد...'
+                    )}
                     className="w-full min-h-[50px] rounded-2xl border-2 border-[#1A2530]/18 bg-[#FFFDF8] px-4 py-3 text-base font-extrabold text-[#1A2530] placeholder:text-[#1A2530]/40 shadow-2xs focus:border-[#D91624] focus:bg-white focus:outline-hidden transition"
                   />
                 </div>
@@ -506,7 +564,7 @@ export function Stage1StudioCreation({
             </motion.div>
           )}
 
-          {/* ==================== SCREEN 3: PERK + MAGICAL FOUNDING CERTIFICATE ==================== */}
+          {/* ==================== SCREEN 3: PERK + FOUNDING CERTIFICATE ==================== */}
           {step === 2 && (
             <motion.div
               key="screen3_charter"
@@ -516,32 +574,33 @@ export function Stage1StudioCreation({
               transition={{ duration: 0.22 }}
               className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-7 items-center"
             >
-              {/* RIGHT / TOP: 3 CRISP FOUNDER PERK CARDS */}
+              {/* 3 FOUNDER PERK CARDS */}
               <div className="lg:col-span-5 space-y-2.5">
                 <div className="flex items-center justify-between px-0.5">
                   <h1 className="font-display text-base sm:text-xl font-black text-[#1A2530]">
-                    اختر شخصيتك القيادية
+                    {tr(uiLanguage, 'Choose Your Executive Archetype', 'اختر شخصيتك القيادية')}
                   </h1>
                   <span className="text-[11px] font-black text-[#9A7209]">
-                    ميزة دائمة
+                    {tr(uiLanguage, 'Permanent Perk', 'ميزة دائمة')}
                   </span>
                 </div>
 
-                {/* 3-Up Compact Cards on Mobile, Generous Stacked on Desktop */}
                 <div className="grid grid-cols-3 lg:grid-cols-1 gap-2 sm:gap-2.5">
-                  {PERKS.map((perk) => {
-                    const Icon = perk.icon;
-                    const isSelected = selectedPerk === perk.id;
+                  {PERK_ITEMS.map(({ id, icon: Icon }) => {
+                    const perk = getLocalizedFounderPerk(id, uiLanguage);
+                    const isSelected = selectedPerk === id;
                     return (
                       <button
-                        key={perk.id}
+                        key={id}
                         type="button"
                         disabled={isSigning}
                         onClick={() => {
                           triggerTelegramHaptic('selection');
-                          setSelectedPerk(perk.id);
+                          setSelectedPerk(id);
                         }}
-                        className={`relative flex flex-col lg:flex-row items-center lg:items-start gap-1.5 lg:gap-3 rounded-2xl border-2 p-2.5 sm:p-3.5 text-center lg:text-right transition-all cursor-pointer ${
+                        className={`relative flex flex-col lg:flex-row items-center lg:items-start gap-1.5 lg:gap-3 rounded-2xl border-2 p-2.5 sm:p-3.5 text-center ${
+                          isEn ? 'lg:text-left' : 'lg:text-right'
+                        } transition-all cursor-pointer ${
                           isSelected
                             ? 'border-[#D91624] bg-gradient-to-b lg:bg-gradient-to-l from-[#FFFDF7] to-[#FDF1CC] shadow-[0_10px_24px_rgba(217,22,36,0.12)] ring-1 ring-[#D4AF37]'
                             : 'border-[#1A2530]/14 bg-[#FFFDF8] hover:border-[#D4AF37] shadow-2xs'
@@ -559,17 +618,16 @@ export function Stage1StudioCreation({
 
                         <div className="min-w-0 flex-1">
                           <div className="font-display text-xs sm:text-sm font-black text-[#1A2530] leading-tight truncate">
-                            <span className="sm:hidden">{perk.shortTitle}</span>
-                            <span className="hidden sm:inline">{perk.title}</span>
+                            {perk.title}
                           </div>
                           <div
                             dir="ltr"
                             className="mt-0.5 text-[11px] sm:text-xs font-black text-[#D91624] tabular-nums"
                           >
-                            {perk.metric}
+                            {perk.badge}
                           </div>
                           <p className="mt-1 hidden lg:block text-xs font-bold leading-relaxed text-[#1A2530]/75">
-                            {perk.desc}
+                            {perk.description}
                           </p>
                         </div>
 
@@ -583,32 +641,26 @@ export function Stage1StudioCreation({
                   })}
                 </div>
 
-                {/* Crisp 1-Line Active Perk Summary on Mobile */}
                 <p className="lg:hidden rounded-xl border border-[#D4AF37]/50 bg-[#FFFDF8] px-3 py-2 text-[11px] font-bold text-[#1A2530]/80 text-center leading-relaxed shadow-2xs">
                   <strong className="text-[#D91624]">
-                    {activePerkObj.title}:{' '}
+                    {activePerkLoc.title}:{' '}
                   </strong>
-                  {activePerkObj.desc}
+                  {activePerkLoc.description}
                 </p>
               </div>
 
-              {/* LEFT / BOTTOM: OFFICIAL LUXURY FOUNDING CERTIFICATE + CALLIGRAPHY + STAMP */}
+              {/* OFFICIAL FOUNDING CERTIFICATE */}
               <div className="lg:col-span-7">
                 <motion.div
                   animate={
                     isSigning
-                      ? {
-                          x: [0, -5, 5, -3, 2, 0],
-                          y: [0, 3, -2, 1, 0],
-                        }
+                      ? { x: [0, -5, 5, -3, 2, 0], y: [0, 3, -2, 1, 0] }
                       : undefined
                   }
                   transition={{ duration: 0.36 }}
                   className="relative overflow-hidden rounded-[24px] border-2 border-[#D4AF37] bg-gradient-to-br from-[#FFFDF8] via-[#FBF3DC] to-[#F2E3B8] p-3.5 sm:p-5 text-[#1A2530] shadow-[0_18px_42px_rgba(26,37,48,0.14)]"
                 >
-                  {/* Inner Decorative Charter Frame */}
                   <div className="relative rounded-[18px] border border-[#B8860B]/45 bg-[#FFFDF8]/50 p-3.5 sm:p-5">
-                    {/* Top Charter Crest Row */}
                     <div className="flex items-center justify-between gap-2 border-b border-[#1A2530]/15 pb-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="shrink-0 rounded-xl border border-[#D4AF37] bg-[#1A2530] p-1 shadow-sm">
@@ -616,7 +668,11 @@ export function Stage1StudioCreation({
                         </div>
                         <div className="min-w-0">
                           <div className="text-[10px] font-black tracking-wide text-[#9A7209]">
-                            ميثاق تأسيس رسمي · Neelyo {currentYear}
+                            {tr(
+                              uiLanguage,
+                              `OFFICIAL STUDIO CHARTER · Neelyo ${currentYear}`,
+                              `ميثاق تأسيس رسمي · Neelyo ${currentYear}`
+                            )}
                           </div>
                           <h2 className="font-display text-lg sm:text-2xl font-black text-[#1A2530] truncate">
                             {studioName.trim()}
@@ -630,16 +686,15 @@ export function Stage1StudioCreation({
                           className="h-5 w-8 shadow-xs"
                         />
                         <span className="mt-0.5 text-[10px] font-black text-[#1A2530]/75">
-                          {marketProfile.countryNameAr}
+                          {marketLoc.countryName}
                         </span>
                       </div>
                     </div>
 
-                    {/* Charter Key Terms */}
-                    <div className="mt-3 grid grid-cols-2 gap-2.5 text-right">
+                    <div className={`mt-3 grid grid-cols-2 gap-2.5 ${isEn ? 'text-left' : 'text-right'}`}>
                       <div className="rounded-xl border border-[#1A2530]/10 bg-white/80 px-3 py-2">
                         <span className="block text-[10px] font-bold text-[#1A2530]/60">
-                          رأس المال التأسيسي
+                          {tr(uiLanguage, 'Seed Capital', 'رأس المال التأسيسي')}
                         </span>
                         <span
                           dir="ltr"
@@ -651,35 +706,38 @@ export function Stage1StudioCreation({
 
                       <div className="rounded-xl border border-[#1A2530]/10 bg-white/80 px-3 py-2">
                         <span className="block text-[10px] font-bold text-[#1A2530]/60">
-                          الميزة القيادية
+                          {tr(uiLanguage, 'Founder Perk', 'الميزة القيادية')}
                         </span>
                         <span className="mt-0.5 block text-xs sm:text-sm font-black text-[#1A2530] truncate">
-                          {activePerkObj.title}{' '}
+                          {activePerkLoc.title}{' '}
                           <span className="text-[#D91624]">
-                            ({activePerkObj.metric})
+                            ({activePerkLoc.badge})
                           </span>
                         </span>
                       </div>
                     </div>
 
-                    {/* Live Arabic Ruqaa Signature Area */}
+                    {/* Signature Area */}
                     <div className="mt-3.5 flex items-end justify-between gap-3 border-t border-dashed border-[#1A2530]/20 pt-3">
                       <div className="min-w-0 flex-1">
                         <span className="block text-[10px] font-extrabold text-[#1A2530]/60">
-                          توقيع المؤسس والمدير التنفيذي
+                          {tr(uiLanguage, 'Founder & CEO Signature', 'توقيع المؤسس والمدير التنفيذي')}
                         </span>
-                        <div className="mt-0.5 font-ruqaa text-2xl sm:text-3xl font-bold text-[#1A2530] leading-tight truncate">
+                        <div
+                          className={`mt-0.5 ${
+                            isEn ? 'italic font-serif' : 'font-ruqaa'
+                          } text-2xl sm:text-3xl font-bold text-[#1A2530] leading-tight truncate`}
+                        >
                           {ceoName.trim()}
                         </div>
                         <div className="mt-1 h-[2px] w-36 bg-gradient-to-l from-[#1A2530]/60 to-transparent" />
                       </div>
 
-                      {/* Resting Unstamped Seal Outline (Replaced by Animated Stamp on Launch) */}
                       <div className="relative flex h-16 w-24 shrink-0 items-center justify-center">
                         {!isSigning && (
                           <div className="flex h-14 w-24 -rotate-6 flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#B8860B]/50 text-center opacity-75">
                             <span className="text-[9px] font-black text-[#9A7209]">
-                              بانتظار الختم
+                              {tr(uiLanguage, 'AWAITING SEAL', 'بانتظار الختم')}
                             </span>
                             <span
                               dir="ltr"
@@ -692,7 +750,6 @@ export function Stage1StudioCreation({
                       </div>
                     </div>
 
-                    {/* DRAMATIC ANIMATED CRIMSON-GOLD IRON STAMP SEAL ("معتمد · 75M") */}
                     <AnimatePresence>
                       {isSigning && (
                         <>
@@ -700,7 +757,9 @@ export function Stage1StudioCreation({
                             initial={{ scale: 0.4, opacity: 0.85 }}
                             animate={{ scale: 2.1, opacity: 0 }}
                             transition={{ duration: 0.55, ease: 'easeOut' }}
-                            className="pointer-events-none absolute bottom-5 left-7 h-16 w-16 rounded-full border-4 border-[#D4AF37]"
+                            className={`pointer-events-none absolute bottom-5 ${
+                              isEn ? 'right-7' : 'left-7'
+                            } h-16 w-16 rounded-full border-4 border-[#D4AF37]`}
                           />
                           <motion.div
                             initial={{ scale: 2.8, opacity: 0, rotate: -28 }}
@@ -711,10 +770,12 @@ export function Stage1StudioCreation({
                               damping: 20,
                               mass: 0.85,
                             }}
-                            className="pointer-events-none absolute bottom-3 left-4 sm:bottom-4 sm:left-6 z-20 flex flex-col items-center justify-center rounded-2xl border-[3px] border-[#B91C1C] bg-[#991B1B]/95 px-3.5 py-2 text-center shadow-[0_12px_28px_rgba(185,28,28,0.42)] ring-2 ring-[#D4AF37]"
+                            className={`pointer-events-none absolute bottom-3 ${
+                              isEn ? 'right-4 sm:right-6' : 'left-4 sm:left-6'
+                            } sm:bottom-4 z-20 flex flex-col items-center justify-center rounded-2xl border-[3px] border-[#B91C1C] bg-[#991B1B]/95 px-3.5 py-2 text-center shadow-[0_12px_28px_rgba(185,28,28,0.42)] ring-2 ring-[#D4AF37]`}
                           >
                             <span className="font-display text-sm sm:text-base font-black text-[#FFF3B0] leading-none">
-                              معتمد
+                              {tr(uiLanguage, 'APPROVED', 'معتمد')}
                             </span>
                             <span
                               dir="ltr"
@@ -734,12 +795,15 @@ export function Stage1StudioCreation({
         </AnimatePresence>
       </div>
 
-      {/* ==================== PINNED THUMB-ZONE BOTTOM CTA ==================== */}
+      {/* ==================== PINNED BOTTOM CTA ==================== */}
       <footer className="relative z-20 mx-auto w-full max-w-5xl px-4 pt-2 pb-5 sm:px-6 sm:pb-7">
-        {/* Unified 3-Step Opening Progress Indicator */}
         <div
           className="mb-3 flex items-center justify-center gap-2"
-          aria-label={step === 1 ? 'الخطوة 2 من 3' : 'الخطوة 3 من 3'}
+          aria-label={
+            step === 1
+              ? tr(uiLanguage, 'Step 2 of 3', 'الخطوة 2 من 3')
+              : tr(uiLanguage, 'Step 3 of 3', 'الخطوة 3 من 3')
+          }
         >
           <span className="h-1.5 w-2 rounded-full bg-[#D4AF37]" />
           <span
@@ -772,8 +836,14 @@ export function Stage1StudioCreation({
                 : 'bg-gradient-to-l from-[#D91624] via-[#B8121E] to-[#8C0E18]'
             }`}
           >
-            <span>التالي: الشخصية وتوقيع العقد</span>
-            <ArrowLeft className="h-5 w-5 text-[#FFF3B0]" />
+            <span>
+              {tr(
+                uiLanguage,
+                'Next: Founder Perk & Sign Charter',
+                'التالي: الشخصية وتوقيع العقد'
+              )}
+            </span>
+            <ForwardArrow className="h-5 w-5 text-[#FFF3B0]" />
           </button>
         ) : (
           <button
@@ -785,23 +855,30 @@ export function Stage1StudioCreation({
             {isSigning ? (
               <>
                 <Crown className="h-5 w-5 text-[#D4AF37]" />
-                <span>جارٍ اعتماد العقد وفتح مكتب الإمبراطور...</span>
+                <span>
+                  {tr(
+                    uiLanguage,
+                    "Stamping charter & opening Emperor's Desk...",
+                    'جارٍ اعتماد العقد وفتح مكتب الإمبراطور...'
+                  )}
+                </span>
               </>
             ) : (
               <>
                 <PenTool className="h-5 w-5 text-[#D4AF37]" />
-                <span>وقّع العقد وافتتح الاستوديو</span>
+                <span>
+                  {tr(uiLanguage, 'Sign Charter & Open Studio', 'وقّع العقد وافتتح الاستوديو')}
+                </span>
               </>
             )}
           </button>
         )}
       </footer>
 
-      {/* ==================== LUXURY CREAMY BOTTOM SHEET: LOGO ATELIER ==================== */}
+      {/* ==================== LOGO ATELIER BOTTOM SHEET ==================== */}
       <AnimatePresence>
         {isLogoSheetOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -811,7 +888,6 @@ export function Stage1StudioCreation({
               className="absolute inset-0 bg-[#1A2530]/55 backdrop-blur-sm"
             />
 
-            {/* Sliding Creamy Sheet Container */}
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
@@ -819,13 +895,11 @@ export function Stage1StudioCreation({
               transition={{ type: 'spring', stiffness: 360, damping: 34 }}
               role="dialog"
               aria-modal="true"
-              aria-label="تخصيص شعار الاستوديو"
+              aria-label={tr(uiLanguage, 'Customize Studio Logo', 'تخصيص شعار الاستوديو')}
               className="relative z-10 flex max-h-[84dvh] w-full sm:max-w-xl flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px] border-t-2 sm:border-2 border-[#D4AF37] bg-[#F9F6F0] text-[#1A2530] shadow-[0_-18px_55px_rgba(26,37,48,0.35)]"
             >
-              {/* Drag Handle Affordance */}
               <div className="mx-auto mt-2.5 mb-1 h-1.5 w-12 rounded-full bg-[#1A2530]/20 sm:hidden" />
 
-              {/* Sheet Header with Live Crest Preview */}
               <div className="flex items-center justify-between gap-3 border-b border-[#1A2530]/12 px-4 py-3 sm:px-5">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="shrink-0 rounded-xl border-2 border-[#D4AF37] bg-[#1A2530] p-1.5 shadow-sm">
@@ -833,11 +907,17 @@ export function Stage1StudioCreation({
                   </div>
                   <div className="min-w-0">
                     <h2 className="font-display text-base font-black text-[#1A2530]">
-                      استوديو تصميم الشعار
+                      {tr(uiLanguage, 'Logo Design Atelier', 'استوديو تصميم الشعار')}
                     </h2>
                     <p className="text-[11px] font-bold text-[#9A7209] truncate">
                       {logoConfig.customImageUrl
-                        ? 'شعار مخصص من المعرض · مضغوط WebP 320×320'
+                        ? tr(
+                            uiLanguage,
+                            'Custom uploaded crest · Compressed WebP 320×320',
+                            'شعار مخصص من المعرض · مضغوط WebP 320×320'
+                          )
+                        : isEn
+                        ? '24 Emblems · 12 Royal Frames · 18 Palettes'
                         : `${activeEmblem.name} · ${activeFrame.name} · ${activePalette.name}`}
                     </p>
                   </div>
@@ -850,20 +930,20 @@ export function Stage1StudioCreation({
                     className="inline-flex min-h-[40px] items-center gap-1 rounded-xl border border-[#D4AF37] bg-[#FFF9E6] px-3 text-xs font-black text-[#1A2530] hover:bg-[#FFF3B0] transition cursor-pointer"
                   >
                     <Shuffle className="h-3.5 w-3.5 text-[#D91624]" />
-                    <span>عشوائي</span>
+                    <span>{tr(uiLanguage, 'Shuffle', 'عشوائي')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsLogoSheetOpen(false)}
                     className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#1A2530]/15 bg-[#FFFDF8] text-[#1A2530]/75 hover:text-[#1A2530] cursor-pointer"
-                    aria-label="إغلاق"
+                    aria-label={tr(uiLanguage, 'Close', 'إغلاق')}
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               </div>
 
-              {/* Custom Gallery Image Uploader Bar (Local Preview Only until Signing) */}
+              {/* Custom Gallery Image Uploader Bar */}
               <div className="px-4 pt-3 sm:px-5">
                 <input
                   ref={logoFileInputRef}
@@ -880,11 +960,11 @@ export function Stage1StudioCreation({
                     <div className="min-w-0">
                       <span className="block text-xs font-black text-[#1A2530] truncate">
                         {logoConfig.customImageUrl
-                          ? 'تم اختيار صورة شعار من معرضك'
-                          : 'أو ارفع شعارك الخاص من المعرض'}
+                          ? tr(uiLanguage, 'Custom gallery logo selected', 'تم اختيار صورة شعار من معرضك')
+                          : tr(uiLanguage, 'Or upload your own studio logo', 'أو ارفع شعارك الخاص من المعرض')}
                       </span>
                       <span className="block text-[10px] font-bold text-[#1A2530]/60">
-                        ضغط فوري 320×320 WebP · خاص باستوديوك
+                        {tr(uiLanguage, 'Auto-optimized 320×320 WebP', 'ضغط فوري 320×320 WebP · خاص باستوديوك')}
                       </span>
                     </div>
                   </div>
@@ -897,8 +977,8 @@ export function Stage1StudioCreation({
                       <Upload className="h-3.5 w-3.5 text-[#D4AF37]" />
                       <span>
                         {logoConfig.customImageUrl
-                          ? 'تغيير الصورة'
-                          : 'رفع صورة من المعرض'}
+                          ? tr(uiLanguage, 'Change', 'تغيير الصورة')
+                          : tr(uiLanguage, 'Upload Image', 'رفع صورة من المعرض')}
                       </span>
                     </button>
                     {logoConfig.customImageUrl && (
@@ -915,7 +995,7 @@ export function Stage1StudioCreation({
                           }
                         }}
                         className="inline-flex min-h-[36px] items-center gap-1 rounded-xl bg-[#D91624] px-2.5 text-[11px] font-black text-white hover:brightness-110 transition cursor-pointer"
-                        aria-label="حذف الصورة المخصصة"
+                        aria-label={tr(uiLanguage, 'Remove custom image', 'حذف الصورة المخصصة')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -929,10 +1009,10 @@ export function Stage1StudioCreation({
                 <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-[#1A2530]/12 bg-[#EFE9DC] p-1">
                   {(
                     [
-                      { id: 'presets', label: 'جاهزة', icon: Sparkles },
-                      { id: 'emblems', label: 'الرمز 24', icon: Shapes },
-                      { id: 'frames', label: 'الإطار 12', icon: Shield },
-                      { id: 'palettes', label: 'الألوان 18', icon: Palette },
+                      { id: 'presets', label: tr(uiLanguage, 'Presets', 'جاهزة'), icon: Sparkles },
+                      { id: 'emblems', label: tr(uiLanguage, '24 Icons', 'الرمز 24'), icon: Shapes },
+                      { id: 'frames', label: tr(uiLanguage, '12 Frames', 'الإطار 12'), icon: Shield },
+                      { id: 'palettes', label: tr(uiLanguage, '18 Colors', 'الألوان 18'), icon: Palette },
                     ] as const
                   ).map((t) => {
                     const Icon = t.icon;
@@ -959,9 +1039,7 @@ export function Stage1StudioCreation({
                 </div>
               </div>
 
-              {/* Scrollable Sheet Body */}
               <div className="flex-1 overflow-y-auto px-4 py-2 sm:px-5">
-                {/* Tab 1: Curated Presets */}
                 {logoTab === 'presets' && (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 pb-2">
                     {PREMADE_LOGO_COMBINATIONS.map((preset, idx) => {
@@ -991,7 +1069,6 @@ export function Stage1StudioCreation({
                   </div>
                 )}
 
-                {/* Tab 2: 24 Emblems */}
                 {logoTab === 'emblems' && (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pb-2">
                     {EMBLEM_OPTIONS.map((emb) => {
@@ -1024,7 +1101,7 @@ export function Stage1StudioCreation({
                             size={44}
                           />
                           <span className="max-w-full truncate text-[10px] font-extrabold text-[#1A2530]">
-                            {emb.name}
+                            {isEn ? emb.id.replace(/_/g, ' ') : emb.name}
                           </span>
                         </button>
                       );
@@ -1032,7 +1109,6 @@ export function Stage1StudioCreation({
                   </div>
                 )}
 
-                {/* Tab 3: 12 Frames */}
                 {logoTab === 'frames' && (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pb-2">
                     {FRAME_OPTIONS.map((fr) => {
@@ -1065,7 +1141,7 @@ export function Stage1StudioCreation({
                             size={46}
                           />
                           <span className="max-w-full truncate text-[10px] font-extrabold text-[#1A2530]">
-                            {fr.name}
+                            {isEn ? fr.id.replace(/_/g, ' ') : fr.name}
                           </span>
                         </button>
                       );
@@ -1073,7 +1149,6 @@ export function Stage1StudioCreation({
                   </div>
                 )}
 
-                {/* Tab 4: 18 Palettes */}
                 {logoTab === 'palettes' && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pb-2">
                     {PALETTE_OPTIONS.map((pal) => {
@@ -1089,7 +1164,9 @@ export function Stage1StudioCreation({
                               palette: pal.id,
                             }));
                           }}
-                          className={`flex items-center gap-2.5 rounded-2xl border-2 p-2.5 text-right transition cursor-pointer ${
+                          className={`flex items-center gap-2.5 rounded-2xl border-2 p-2.5 ${
+                            isEn ? 'text-left' : 'text-right'
+                          } transition cursor-pointer ${
                             active
                               ? 'border-[#D91624] bg-[#FFF9E6] shadow-xs'
                               : 'border-[#1A2530]/12 bg-[#FFFDF8] hover:border-[#D4AF37]'
@@ -1109,11 +1186,13 @@ export function Stage1StudioCreation({
                             />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <span className="block truncate text-[11px] font-black text-[#1A2530]">
-                              {pal.name}
+                            <span className="block truncate text-[11px] font-black text-[#1A2530] capitalize">
+                              {isEn ? pal.id.replace(/_/g, ' ') : pal.name}
                             </span>
                             <span className="block text-[10px] font-bold text-[#1A2530]/55">
-                              {pal.isDark ? 'داكن فاخر' : 'فاتح كلاسيكي'}
+                              {pal.isDark
+                                ? tr(uiLanguage, 'Luxury Dark', 'داكن فاخر')
+                                : tr(uiLanguage, 'Classic Light', 'فاتح كلاسيكي')}
                             </span>
                           </div>
                         </button>
@@ -1123,7 +1202,6 @@ export function Stage1StudioCreation({
                 )}
               </div>
 
-              {/* Pinned Bottom Confirmation Bar */}
               <div className="border-t border-[#1A2530]/12 bg-[#F4EFE4] px-4 py-3 sm:px-5">
                 <button
                   type="button"
@@ -1134,7 +1212,7 @@ export function Stage1StudioCreation({
                   className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530] px-5 text-sm font-display font-black text-[#FFF3B0] shadow-md transition hover:brightness-110 cursor-pointer"
                 >
                   <Check className="h-4 w-4 stroke-[3] text-[#D4AF37]" />
-                  <span>اعتماد الشعار</span>
+                  <span>{tr(uiLanguage, 'Confirm Studio Logo', 'اعتماد الشعار')}</span>
                 </button>
               </div>
             </motion.div>

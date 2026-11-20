@@ -11,6 +11,12 @@ import {
 } from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { getCurrencyLabel } from '@/lib/market-profiles';
+import {
+  getUiDir,
+  localizeEntityName,
+  STUDIO_ASSETS_EN,
+  tr,
+} from '@/lib/i18n';
 import { composeProceduralFilmingNews } from '@/lib/procedural-dialogue';
 import { formatMoney } from '@/lib/game-engine';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
@@ -58,7 +64,9 @@ export function Stage4ProductionCrises() {
     uiLanguage,
   } = useGameStore();
 
-  const currencyLabel = getCurrencyLabel(worldMarket);
+  const isEn = uiLanguage !== 'ar';
+  const uiDir = getUiDir(uiLanguage);
+  const currencyLabel = getCurrencyLabel(worldMarket, uiLanguage);
 
   const studioAssetBenefits = useMemo(
     () => getStudioAssetBenefits(ownedStudioAssets),
@@ -94,16 +102,25 @@ export function Stage4ProductionCrises() {
         : [];
     const names = ids
       .map((id) => db.crew.find((c) => c.id === id)?.name)
-      .filter(Boolean);
-    return names.length > 0 ? names.join(' و') : 'مخرج العمل';
-  }, [db.crew, draft.directorIds, draft.directorId]);
+      .filter((n): n is string => Boolean(n))
+      .map((n) => localizeEntityName(n, uiLanguage));
+    return names.length > 0
+      ? names.join(isEn ? ' & ' : ' و')
+      : tr(uiLanguage, 'Project Director', 'مخرج العمل');
+  }, [db.crew, draft.directorIds, draft.directorId, uiLanguage, isEn]);
 
-  const leadActorName = useMemo(
-    () =>
-      liveActors.find((a) => a.id === draft.leadActorIds[0])?.name ||
-      'بطل العمل',
-    [liveActors, draft.leadActorIds]
-  );
+  const leadActorName = useMemo(() => {
+    const raw = liveActors.find((a) => a.id === draft.leadActorIds[0])?.name;
+    return raw
+      ? localizeEntityName(raw, uiLanguage)
+      : tr(uiLanguage, 'Lead Star', 'بطل العمل');
+  }, [liveActors, draft.leadActorIds, uiLanguage]);
+
+  const primaryOwnedAssetName = useMemo(() => {
+    const first = studioAssetBenefits.ownedItems[0];
+    if (!first) return '';
+    return isEn ? STUDIO_ASSETS_EN[first.id]?.name || first.name : first.name;
+  }, [studioAssetBenefits.ownedItems, isEn]);
 
   const generateProductionCrises = async () => {
     setIsLoadingCrises(true);
@@ -172,6 +189,7 @@ export function Stage4ProductionCrises() {
     try {
       const generated = composeProceduralFilmingNews({
         worldMarket,
+        uiLanguage,
         projectTitle: draft.title,
         studioName,
         directorName,
@@ -197,20 +215,30 @@ export function Stage4ProductionCrises() {
         hypeScore: Math.min(100, Math.max(10, draft.hypeScore + newsItem.hypeDelta)),
         productionNews: [newsItem, ...(draft.productionNews || [])].slice(0, 6),
       });
+      const currYear = useGameStore.getState().currentYear;
       pushBreakingNewsModal({
         id: `modal_${newsItem.id}`,
         day: gameDay,
-        year: useGameStore.getState().currentYear,
+        year: currYear,
         category: 'production_news',
-        badgeLabel: `تغطية كواليس البلاتوه · ${formatGameDate(
-          gameDay,
-          useGameStore.getState().currentYear
-        )}`,
+        badgeLabel: tr(
+          uiLanguage,
+          `On-Set Press Dispatch · ${formatGameDate(gameDay, currYear, uiLanguage)}`,
+          `تغطية كواليس البلاتوه · ${formatGameDate(gameDay, currYear, uiLanguage)}`
+        ),
         headline: newsItem.headline,
         detail: newsItem.detail,
         highlightName: draft.title,
-        extraStatBadge: `ضجة ${newsItem.hypeDelta >= 0 ? `+${newsItem.hypeDelta}` : newsItem.hypeDelta}`,
-        gameImpactLabel: `تفاعل الإعلام مع تصوير «${draft.title}»`,
+        extraStatBadge: tr(
+          uiLanguage,
+          `Hype ${newsItem.hypeDelta >= 0 ? `+${newsItem.hypeDelta}` : newsItem.hypeDelta}`,
+          `ضجة ${newsItem.hypeDelta >= 0 ? `+${newsItem.hypeDelta}` : newsItem.hypeDelta}`
+        ),
+        gameImpactLabel: tr(
+          uiLanguage,
+          `Media buzz around filming "${draft.title}"`,
+          `تفاعل الإعلام مع تصوير «${draft.title}»`
+        ),
       });
     } finally {
       setIsLoadingNews(false);
@@ -225,7 +253,11 @@ export function Stage4ProductionCrises() {
     const chosen = option === 'A' ? crisis.optionA : crisis.optionB;
     if (chosen.cost > 0 && cash < chosen.cost) {
       showToast(
-        'سيولة الخزينة الحالية لا تكفي لتغطية تكلفة هذا الخيار! استخدم «تسوية إعلامية مجانية (مشاهدة إعلان)» لتوفير فلوسك.',
+        tr(
+          uiLanguage,
+          'Insufficient studio liquidity for this option! Use "Free PR Settlement (Watch Ad)" to save your cash.',
+          'سيولة الخزينة الحالية لا تكفي لتغطية تكلفة هذا الخيار! استخدم «تسوية إعلامية مجانية (مشاهدة إعلان)» لتوفير فلوسك.'
+        ),
         'warning'
       );
       return;
@@ -235,18 +267,32 @@ export function Stage4ProductionCrises() {
 
   const handleFinishFilming = () => {
     if (draft.crises.length === 0) {
-      showToast('يرجى بدء تصوير المشاهد ومواجهة أحداث البلاتوه أولاً!', 'warning');
+      showToast(
+        tr(
+          uiLanguage,
+          'Please roll cameras and complete on-set production events first!',
+          'يرجى بدء تصوير المشاهد ومواجهة أحداث البلاتوه أولاً!'
+        ),
+        'warning'
+      );
       return;
     }
     if (!allCrisesResolved) {
-      showToast('يرجى حسم كافة المواقف الإنتاجية العالقة في البلاتوه قبل الانتقال للعرض!', 'warning');
+      showToast(
+        tr(
+          uiLanguage,
+          'Please resolve all open on-set production crises before heading to release!',
+          'يرجى حسم كافة المواقف الإنتاجية العالقة في البلاتوه قبل الانتقال للعرض!'
+        ),
+        'warning'
+      );
       return;
     }
     setActiveScreen('RELEASE_SIMULATION');
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 pb-28" dir="rtl">
+    <div className="mx-auto max-w-4xl space-y-4 pb-28" dir={uiDir}>
       {/* Unified Royal Cinema Header */}
       <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] px-4 py-3.5 text-[#F9F6F0] shadow-lg">
         <div className="flex items-center justify-between gap-2">
@@ -256,10 +302,14 @@ export function Stage4ProductionCrises() {
             </div>
             <div>
               <span className="text-[10px] font-black text-[#D4AF37]">
-                بلاتوه التصوير الميداني
+                {tr(uiLanguage, 'Principal Photography & Soundstage', 'بلاتوه التصوير الميداني')}
               </span>
               <h2 className="font-display text-sm font-black text-[#F9F6F0] sm:text-base">
-                تصوير المشاهد وإدارة البلاتوه: «{draft.title}»
+                {tr(
+                  uiLanguage,
+                  `On-Set Production & Crisis Control: "${draft.title}"`,
+                  `تصوير المشاهد وإدارة البلاتوه: «${draft.title}»`
+                )}
               </h2>
             </div>
           </div>
@@ -281,19 +331,20 @@ export function Stage4ProductionCrises() {
       <div className="grid grid-cols-3 gap-2.5 text-center">
         <div className="rounded-2xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-3">
           <span className="block text-[10px] font-bold text-[#1A2530]/65">
-            تأثير القرارات على الجودة
+            {tr(uiLanguage, 'Quality Modifier', 'تأثير القرارات على الجودة')}
           </span>
           <span
             className={`font-mono text-sm font-black ${
               draft.qualityModifier >= 0 ? 'text-[#15803D]' : 'text-[#D91624]'
             }`}
           >
-            {draft.qualityModifier >= 0 ? `+${draft.qualityModifier}` : draft.qualityModifier} نقطة
+            {draft.qualityModifier >= 0 ? `+${draft.qualityModifier}` : draft.qualityModifier}{' '}
+            {tr(uiLanguage, 'pts', 'نقطة')}
           </span>
         </div>
         <div className="rounded-2xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-3">
           <span className="block text-[10px] font-bold text-[#1A2530]/65">
-            مؤشر الضجة الجماهيرية (Hype)
+            {tr(uiLanguage, 'Public Hype Meter', 'مؤشر الضجة الجماهيرية (Hype)')}
           </span>
           <span className="font-mono text-sm font-black text-[#B8860B]">
             {draft.hypeScore}/100
@@ -301,9 +352,9 @@ export function Stage4ProductionCrises() {
         </div>
         <div className="rounded-2xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-3">
           <span className="block text-[10px] font-bold text-[#1A2530]/65">
-            السيولة المتاحة
+            {tr(uiLanguage, 'Available Treasury', 'السيولة المتاحة')}
           </span>
-          <span className="font-mono text-sm font-black text-[#1A2530]">
+          <span className="font-mono text-sm font-black text-[#1A2530]" dir="ltr">
             {formatMoney(cash)} {currencyLabel}
           </span>
         </div>
@@ -314,10 +365,18 @@ export function Stage4ProductionCrises() {
         <div className="rounded-3xl border-2 border-[#D4AF37] bg-white p-6 text-center space-y-3 shadow-md">
           <Clapperboard className="mx-auto h-10 w-10 text-[#D91624]" />
           <h3 className="font-display text-base font-black text-[#1A2530]">
-            الكاميرات جاهزة للدوران في بلاتوه «{draft.title}»
+            {tr(
+              uiLanguage,
+              `Cameras Ready to Roll on "${draft.title}"`,
+              `الكاميرات جاهزة للدوران في بلاتوه «${draft.title}»`
+            )}
           </h3>
           <p className="text-xs font-bold text-[#1A2530]/70">
-            اضغط لبدء التصوير الفعلي وخوض مواقف وكواليس البلاتوه الميدانية
+            {tr(
+              uiLanguage,
+              'Start principal photography and navigate live behind-the-scenes challenges on set.',
+              'اضغط لبدء التصوير الفعلي وخوض مواقف وكواليس البلاتوه الميدانية'
+            )}
           </p>
           <button
             type="button"
@@ -330,12 +389,16 @@ export function Stage4ProductionCrises() {
             {isLoadingCrises ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>جاري تجهيز مشاهد وكواليس التصوير...</span>
+                <span>
+                  {tr(uiLanguage, 'Preparing soundstage & shooting schedule...', 'جاري تجهيز مشاهد وكواليس التصوير...')}
+                </span>
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                <span>دوران الكاميرا وبدء تصوير المشاهد الآن</span>
+                <span>
+                  {tr(uiLanguage, 'Action! Start Filming Now', 'دوران الكاميرا وبدء تصوير المشاهد الآن')}
+                </span>
               </>
             )}
           </button>
@@ -354,14 +417,14 @@ export function Stage4ProductionCrises() {
               : 'border-[#D4AF37] border-b-[#9A7A16] bg-white'
           }`}
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#FFF9E6] border border-[#D4AF37]/70 px-2.5 py-1 text-[11px] font-black text-[#1A2530]">
-              <AlertTriangle className="h-3.5 w-3.5 text-[#D91624]" />
-              موقف ميداني #{idx + 1}: {crisis.title}
+              <AlertTriangle className="h-3.5 w-3.5 text-[#D91624] shrink-0" />
+              {tr(uiLanguage, `On-Set Incident #${idx + 1}`, `موقف ميداني #${idx + 1}`)}: {crisis.title}
             </span>
             {crisis.resolved && (
-              <span className="inline-flex items-center gap-1 rounded-lg bg-[#15803D] px-2.5 py-0.5 text-[10px] font-black text-white">
-                <Check className="h-3 w-3" /> تم الحسم
+              <span className="inline-flex items-center gap-1 rounded-lg bg-[#15803D] px-2.5 py-0.5 text-[10px] font-black text-white shrink-0">
+                <Check className="h-3 w-3" /> {tr(uiLanguage, 'Resolved', 'تم الحسم')}
               </span>
             )}
           </div>
@@ -377,17 +440,21 @@ export function Stage4ProductionCrises() {
                 <button
                   type="button"
                   onClick={() => resolveCrisisWithCash8M(crisis.id)}
-                  className="flex flex-col justify-between gap-1.5 rounded-xl bg-[#F9F6F0] hover:bg-white p-3 text-right transition cursor-pointer border-2 border-[#D91624]"
+                  className="flex flex-col justify-between gap-1.5 rounded-xl bg-[#F9F6F0] hover:bg-white p-3 text-start transition cursor-pointer border-2 border-[#D91624]"
                 >
                   <span className="text-xs font-black text-[#1A2530]">
-                    تدخل مالي سريع لحسم الأزمة من الخزينة
+                    {tr(
+                      uiLanguage,
+                      'Rapid Treasury Cash Intervention',
+                      'تدخل مالي سريع لحسم الأزمة من الخزينة'
+                    )}
                   </span>
                   <div className="flex flex-wrap items-center justify-between gap-1">
-                    <span className="rounded-md bg-[#D91624] px-2 py-0.5 font-mono text-[10px] font-black text-white">
-                      دفع 8.0M {currencyLabel}
+                    <span className="rounded-md bg-[#D91624] px-2 py-0.5 font-mono text-[10px] font-black text-white" dir="ltr">
+                      {tr(uiLanguage, `Pay 8.0M ${currencyLabel}`, `دفع 8.0M ${currencyLabel}`)}
                     </span>
                     <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-900">
-                      جودة +3 · ضجة +4
+                      {tr(uiLanguage, 'Quality +3 · Hype +4', 'جودة +3 · ضجة +4')}
                     </span>
                   </div>
                 </button>
@@ -401,22 +468,28 @@ export function Stage4ProductionCrises() {
                     } else {
                       const errMsg = getRewardedAdErrorMessage(
                         adResult.reason,
-                        'للتسوية المجانية'
+                        'للتسوية المجانية',
+                        uiLanguage,
+                        'to claim the free PR settlement'
                       );
                       if (errMsg) showToast(errMsg, 'warning');
                     }
                   }}
-                  className="flex flex-col justify-between gap-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] hover:brightness-105 p-3 text-right transition cursor-pointer shadow-md"
+                  className="flex flex-col justify-between gap-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] hover:brightness-105 p-3 text-start transition cursor-pointer shadow-md"
                 >
                   <span className="text-xs font-black text-[#1A2530]">
-                    تسوية إعلامية مجانية (مشاهدة إعلان) — وفر فلوسك!
+                    {tr(
+                      uiLanguage,
+                      'Free PR Settlement (Watch Ad) — Save Your Cash!',
+                      'تسوية إعلامية مجانية (مشاهدة إعلان) — وفر فلوسك!'
+                    )}
                   </span>
                   <div className="flex flex-wrap items-center justify-between gap-1">
                     <span className="rounded-md bg-[#1A2530] px-2 py-0.5 font-mono text-[10px] font-black text-[#D4AF37]">
-                      مجاناً (0 {currencyLabel} · إعلان)
+                      {tr(uiLanguage, `Free (0 ${currencyLabel} · Ad)`, `مجاناً (0 ${currencyLabel} · إعلان)`)}
                     </span>
                     <span className="rounded-md bg-[#15803D] px-2 py-0.5 text-[10px] font-black text-white">
-                      جودة +4 · ضجة +5
+                      {tr(uiLanguage, 'Quality +4 · Hype +5', 'جودة +4 · ضجة +5')}
                     </span>
                   </div>
                 </button>
@@ -425,23 +498,25 @@ export function Stage4ProductionCrises() {
               <button
                 type="button"
                 onClick={() => handleResolveChoice(crisis, 'A')}
-                className="flex w-full flex-col justify-between gap-2 rounded-xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] p-3 text-right transition hover:border-[#D4AF37] hover:bg-white sm:flex-row sm:items-center"
+                className="flex w-full flex-col justify-between gap-2 rounded-xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] p-3 text-start transition hover:border-[#D4AF37] hover:bg-white sm:flex-row sm:items-center"
               >
                 <span className="text-xs font-black text-[#1A2530]">
                   {crisis.optionA.label}
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                   {crisis.optionA.cost > 0 && (
-                    <span className="rounded-md bg-[#D91624]/15 px-2 py-0.5 font-mono text-[10px] font-black text-[#D91624]">
+                    <span className="rounded-md bg-[#D91624]/15 px-2 py-0.5 font-mono text-[10px] font-black text-[#D91624]" dir="ltr">
                       -{formatMoney(crisis.optionA.cost)} {currencyLabel}
                     </span>
                   )}
                   <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-900">
-                    جودة {crisis.optionA.qualityDelta >= 0 ? '+' : ''}
+                    {tr(uiLanguage, 'Quality', 'جودة')}{' '}
+                    {crisis.optionA.qualityDelta >= 0 ? '+' : ''}
                     {crisis.optionA.qualityDelta}
                   </span>
                   <span className="rounded-md bg-[#FFF9E6] border border-[#D4AF37]/60 px-2 py-0.5 text-[10px] font-black text-[#1A2530]">
-                    ضجة {crisis.optionA.hypeDelta >= 0 ? '+' : ''}
+                    {tr(uiLanguage, 'Hype', 'ضجة')}{' '}
+                    {crisis.optionA.hypeDelta >= 0 ? '+' : ''}
                     {crisis.optionA.hypeDelta}
                   </span>
                 </div>
@@ -450,23 +525,25 @@ export function Stage4ProductionCrises() {
               <button
                 type="button"
                 onClick={() => handleResolveChoice(crisis, 'B')}
-                className="flex w-full flex-col justify-between gap-2 rounded-xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] p-3 text-right transition hover:border-[#D4AF37] hover:bg-white sm:flex-row sm:items-center"
+                className="flex w-full flex-col justify-between gap-2 rounded-xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] p-3 text-start transition hover:border-[#D4AF37] hover:bg-white sm:flex-row sm:items-center"
               >
                 <span className="text-xs font-black text-[#1A2530]">
                   {crisis.optionB.label}
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                   {crisis.optionB.cost > 0 && (
-                    <span className="rounded-md bg-[#D91624]/15 px-2 py-0.5 font-mono text-[10px] font-black text-[#D91624]">
+                    <span className="rounded-md bg-[#D91624]/15 px-2 py-0.5 font-mono text-[10px] font-black text-[#D91624]" dir="ltr">
                       -{formatMoney(crisis.optionB.cost)} {currencyLabel}
                     </span>
                   )}
                   <span className="rounded-md bg-[#1A2530]/10 px-2 py-0.5 text-[10px] font-black text-[#1A2530]">
-                    جودة {crisis.optionB.qualityDelta >= 0 ? '+' : ''}
+                    {tr(uiLanguage, 'Quality', 'جودة')}{' '}
+                    {crisis.optionB.qualityDelta >= 0 ? '+' : ''}
                     {crisis.optionB.qualityDelta}
                   </span>
                   <span className="rounded-md bg-[#FFF9E6] border border-[#D4AF37]/60 px-2 py-0.5 text-[10px] font-black text-[#1A2530]">
-                    ضجة {crisis.optionB.hypeDelta >= 0 ? '+' : ''}
+                    {tr(uiLanguage, 'Hype', 'ضجة')}{' '}
+                    {crisis.optionB.hypeDelta >= 0 ? '+' : ''}
                     {crisis.optionB.hypeDelta}
                   </span>
                 </div>
@@ -478,24 +555,32 @@ export function Stage4ProductionCrises() {
                   onClick={() => {
                     resolveCrisisWithStudioAsset(crisis.id);
                     showToast(
-                      `تم احتواء الموقف مجاناً بفضل أصول الاستوديو الثابتة (${studioAssetBenefits.ownedItems[0].name})!`,
+                      tr(
+                        uiLanguage,
+                        `Crisis neutralized for free thanks to your studio asset (${primaryOwnedAssetName})!`,
+                        `تم احتواء الموقف مجاناً بفضل أصول الاستوديو الثابتة (${primaryOwnedAssetName})!`
+                      ),
                       'success'
                     );
                   }}
-                  className="flex w-full flex-col justify-between gap-2 rounded-xl border-2 border-[#15803D] bg-emerald-50 p-3 text-right shadow-xs transition hover:bg-emerald-100/70 sm:flex-row sm:items-center"
+                  className="flex w-full flex-col justify-between gap-2 rounded-xl border-2 border-[#15803D] bg-emerald-50 p-3 text-start shadow-xs transition hover:bg-emerald-100/70 sm:flex-row sm:items-center"
                 >
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 shrink-0 text-[#15803D]" />
                     <span className="text-xs font-black text-emerald-950">
-                      درع أصول الاستوديو ({studioAssetBenefits.ownedItems[0].name}): حسم الموقف فوراً بدون تكلفة
+                      {tr(
+                        uiLanguage,
+                        `Studio Asset Shield (${primaryOwnedAssetName}): Resolve Instantly at Zero Cost`,
+                        `درع أصول الاستوديو (${primaryOwnedAssetName}): حسم الموقف فوراً بدون تكلفة`
+                      )}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     <span className="rounded-md bg-[#15803D] px-2 py-0.5 font-mono text-[10px] font-black text-white">
-                      مجاناً (0 {currencyLabel})
+                      {tr(uiLanguage, `Free (0 ${currencyLabel})`, `مجاناً (0 ${currencyLabel})`)}
                     </span>
                     <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-900">
-                      جودة +4 · ضجة +4
+                      {tr(uiLanguage, 'Quality +4 · Hype +4', 'جودة +4 · ضجة +4')}
                     </span>
                   </div>
                 </button>
@@ -510,7 +595,11 @@ export function Stage4ProductionCrises() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
             <Newspaper className="h-4 w-4 text-[#D91624]" />
-            تغطية الصحافة الفنية لكواليس تصوير «{draft.title}»
+            {tr(
+              uiLanguage,
+              `Entertainment Press Coverage from the Set of "${draft.title}"`,
+              `تغطية الصحافة الفنية لكواليس تصوير «${draft.title}»`
+            )}
           </h3>
           <button
             type="button"
@@ -523,7 +612,9 @@ export function Stage4ProductionCrises() {
             ) : (
               <Sparkles className="h-3 w-3 text-[#D91624]" />
             )}
-            <span>رصد تسريبات صحفية جديدة</span>
+            <span>
+              {tr(uiLanguage, 'Check Latest Set Leaks', 'رصد تسريبات صحفية جديدة')}
+            </span>
           </button>
         </div>
 
@@ -538,8 +629,9 @@ export function Stage4ProductionCrises() {
                   <span className="text-xs font-black text-[#1A2530]">
                     {item.headline}
                   </span>
-                  <span className="rounded border border-[#D4AF37]/60 bg-[#FFF9E6] px-1.5 py-0.5 text-[10px] font-black text-[#1A2530]">
-                    ضجة {item.hypeDelta >= 0 ? `+${item.hypeDelta}` : item.hypeDelta}
+                  <span className="rounded border border-[#D4AF37]/60 bg-[#FFF9E6] px-1.5 py-0.5 text-[10px] font-black text-[#1A2530] shrink-0">
+                    {tr(uiLanguage, 'Hype', 'ضجة')}{' '}
+                    {item.hypeDelta >= 0 ? `+${item.hypeDelta}` : item.hypeDelta}
                   </span>
                 </div>
                 <p className="mt-1 text-[11px] font-bold text-[#1A2530]/75">
@@ -550,7 +642,11 @@ export function Stage4ProductionCrises() {
           </div>
         ) : (
           <p className="text-xs font-bold text-[#1A2530]/60">
-            اضغط على «رصد تسريبات صحفية جديدة» لمتابعة تفاعل الإعلام مع كواليس التصوير.
+            {tr(
+              uiLanguage,
+              'Tap "Check Latest Set Leaks" to track media buzz during production.',
+              'اضغط على «رصد تسريبات صحفية جديدة» لمتابعة تفاعل الإعلام مع كواليس التصوير.'
+            )}
           </p>
         )}
       </div>
@@ -563,13 +659,17 @@ export function Stage4ProductionCrises() {
             onClick={() => setActiveScreen('CREW_CAST_CARDS')}
             className="rounded-xl border border-white/20 bg-white/10 px-5 py-2 text-xs font-black text-[#F9F6F0] transition hover:bg-white/20"
           >
-            السابق
+            {tr(uiLanguage, 'Previous', 'السابق')}
           </button>
 
           <span className="text-[11px] font-black text-[#D4AF37]">
             {allCrisesResolved
-              ? 'اكتمل التصوير ✓'
-              : `المواقف المتبقية: ${unresolvedCrises.length}`}
+              ? tr(uiLanguage, 'Filming Wrapped ✓', 'اكتمل التصوير ✓')
+              : tr(
+                  uiLanguage,
+                  `Open Incidents: ${unresolvedCrises.length}`,
+                  `المواقف المتبقية: ${unresolvedCrises.length}`
+                )}
           </span>
 
           <button
@@ -577,7 +677,7 @@ export function Stage4ProductionCrises() {
             onClick={handleFinishFilming}
             className="rounded-xl border-2 border-[#D4AF37] bg-[#D91624] px-5 py-2 text-xs font-black text-white shadow-md transition hover:brightness-110"
           >
-            الانتقال للتوزيع والعرض
+            {tr(uiLanguage, 'Proceed to Distribution', 'الانتقال للتوزيع والعرض')}
           </button>
         </div>
       </div>

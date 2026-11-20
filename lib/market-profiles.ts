@@ -15,6 +15,15 @@ export interface UiLanguageOption {
 
 export const UI_LANGUAGE_OPTIONS: UiLanguageOption[] = [
   {
+    id: 'en',
+    nativeLabel: 'English',
+    arabicLabel: 'الإنجليزية',
+    dir: 'ltr',
+    available: true,
+    statusBadge: 'Available Now · LTR',
+    subtitle: 'Full Cinema & TV Tycoon Experience in English',
+  },
+  {
     id: 'ar',
     nativeLabel: 'العربية',
     arabicLabel: 'اللغة العربية',
@@ -22,15 +31,6 @@ export const UI_LANGUAGE_OPTIONS: UiLanguageOption[] = [
     available: true,
     statusBadge: 'متاحة الآن · RTL',
     subtitle: 'التجربة الكاملة بجميع تفاصيلها الدرامية والسينمائية',
-  },
-  {
-    id: 'en',
-    nativeLabel: 'English',
-    arabicLabel: 'الإنجليزية',
-    dir: 'ltr',
-    available: false,
-    statusBadge: 'Coming Soon · قريباً',
-    subtitle: 'Global Hollywood & International Interface',
   },
   {
     id: 'tr',
@@ -720,7 +720,25 @@ export function getMarketProfile(worldMarket?: WorldMarketId | null): WorldMarke
   return MARKET_PROFILES.egypt;
 }
 
-export function getCurrencyLabel(worldMarket?: WorldMarketId | null): string {
+export function getCurrencyLabel(
+  worldMarket?: WorldMarketId | null,
+  uiLanguage?: UiLanguageId | null
+): string {
+  if (uiLanguage === 'en') {
+    switch (worldMarket) {
+      case 'saudi':
+        return 'SAR';
+      case 'turkey':
+        return 'TRY';
+      case 'korea':
+        return 'KRW';
+      case 'usa':
+        return 'USD';
+      case 'egypt':
+      default:
+        return 'EGP';
+    }
+  }
   return getMarketProfile(worldMarket).currencyLabel;
 }
 

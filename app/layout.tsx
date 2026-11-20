@@ -373,8 +373,9 @@ export default async function RootLayout({
 
   return (
     <html
-      lang="ar"
-      dir="rtl"
+      lang="en"
+      dir="ltr"
+      suppressHydrationWarning
       className={`${cairo.variable} ${changa.variable} ${arefRuqaa.variable} ${spaceMono.variable}`}
     >
       <head>
@@ -386,13 +387,15 @@ export default async function RootLayout({
           src="https://telegram.org/js/telegram-web-app.js"
           defer
         />
-        {/* Monetag Rewarded Interstitial SDK (Zone 12307661) */}
-        <script
-          src="https://libtl.com/sdk.js"
-          data-zone="12307661"
-          data-sdk="show_12307661"
-          async
-        />
+        {/* Monetag Rewarded Interstitial SDK (disabled during AdsGram review; enable via NEXT_PUBLIC_ENABLE_MONETAG=true) */}
+        {process.env.NEXT_PUBLIC_ENABLE_MONETAG === 'true' && (
+          <script
+            src="https://libtl.com/sdk.js"
+            data-zone="12307661"
+            data-sdk="show_12307661"
+            async
+          />
+        )}
         {/* AdsGram Rewarded Video SDK (Block ID 60901) */}
         <script
           src="https://sad.adsgram.ai/js/sad.min.js"
@@ -418,7 +421,7 @@ export default async function RootLayout({
           </p>
           <h2>غرفة صناعة النجوم (The Star Forge — 99 OVR Diamond Card)</h2>
           <p>
-            على مكتب الإمبراطور التفاعلي يوجد الملف السري الأحمر المقفول بـ 5 أقفال ذهبية، والذي يفتح للاعب كابينة الكاستينج لتصميم نجم شباك (ممثل) أو نجمة شباك (ممثلة) من الصفر مع رفع الصورة أو توليد بورتريه الحرف التلقائي وتوزيع 6 طاقات احترافية على الرادار السداسي حتى التقييم الأسطوري 99 OVR.
+            على مكتب الإمبراطور التفاعلي يوجد الملف السري الأحمر المقفول بقفلين ذهبيين، والذي يفتح للاعب كابينة الكاستينج لتصميم نجم شباك (ممثل) أو نجمة شباك (ممثلة) من الصفر مع رفع الصورة أو توليد بورتريه الحرف التلقائي وتوزيع 6 طاقات احترافية على الرادار السداسي حتى التقييم الأسطوري 99 OVR.
           </p>
           <p>التواصل الرسمي: neelyotycoon@gmail.com</p>
           <nav aria-label="روابط التعريف والوثائق القانونية">

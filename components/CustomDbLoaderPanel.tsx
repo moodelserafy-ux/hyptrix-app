@@ -7,6 +7,8 @@ import {
   validateCustomDatabase,
   MasterDatabase,
 } from '@/lib/db-resolver';
+import type { UiLanguageId } from '@/lib/market-profiles';
+import { getUiDir, tr } from '@/lib/i18n';
 import {
   Database,
   Upload,
@@ -34,19 +36,36 @@ function normalizeClientDirectUrl(rawUrl: string): string {
   return trimmed;
 }
 
-function summarizePackChanges(data: Partial<MasterDatabase>): string {
+function summarizePackChanges(
+  data: Partial<MasterDatabase>,
+  lang: UiLanguageId
+): string {
   const parts: string[] = [];
   if (Array.isArray(data.actors) && data.actors.length > 0) {
-    parts.push(`${data.actors.length} ممثل`);
+    parts.push(
+      lang === 'ar' ? `${data.actors.length} ممثل` : `${data.actors.length} actors`
+    );
   }
   if (Array.isArray(data.crew) && data.crew.length > 0) {
-    parts.push(`${data.crew.length} طاقم إخراج/تصوير`);
+    parts.push(
+      lang === 'ar'
+        ? `${data.crew.length} طاقم إخراج/تصوير`
+        : `${data.crew.length} crew members`
+    );
   }
   if (Array.isArray(data.streaming_platforms) && data.streaming_platforms.length > 0) {
-    parts.push(`${data.streaming_platforms.length} منصة/قناة`);
+    parts.push(
+      lang === 'ar'
+        ? `${data.streaming_platforms.length} منصة/قناة`
+        : `${data.streaming_platforms.length} platforms`
+    );
   }
   if (Array.isArray(data.competitor_studios) && data.competitor_studios.length > 0) {
-    parts.push(`${data.competitor_studios.length} شركة منافسة`);
+    parts.push(
+      lang === 'ar'
+        ? `${data.competitor_studios.length} شركة منافسة`
+        : `${data.competitor_studios.length} rival studios`
+    );
   }
   return parts.length > 0 ? ` (${parts.join(' · ')})` : '';
 }
@@ -54,6 +73,7 @@ function summarizePackChanges(data: Partial<MasterDatabase>): string {
 export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) {
   const {
     worldMarket,
+    uiLanguage,
     customDbPatch,
     customDbUrl,
     importCustomDatabase,
@@ -68,13 +88,19 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resolvedDb = getResolvedDatabase(customDbPatch, worldMarket);
+  const dir = getUiDir(uiLanguage);
+  const isAr = uiLanguage === 'ar';
 
   const handleFetchFromUrl = async () => {
     const raw = urlInput.trim();
     if (!raw) {
       setStatusMsg({
         type: 'error',
-        text: 'يرجى لصق رابط ملف JSON مباشر أولاً (مثل GitHub Raw أو jsDelivr أو Cloudflare Pages).',
+        text: tr(
+          uiLanguage,
+          'Please paste a direct raw JSON URL first (e.g., GitHub Raw, jsDelivr, or Cloudflare Pages).',
+          'يرجى لصق رابط ملف JSON مباشر أولاً (مثل GitHub Raw أو jsDelivr أو Cloudflare Pages).'
+        ),
       });
       return;
     }
@@ -82,7 +108,11 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
     if (/^https?:\/\/(www\.)?(t\.me|telegram\.me)\//i.test(raw)) {
       setStatusMsg({
         type: 'error',
-        text: 'روابط منشورات تيليجرام ليست ملفات JSON خام. استخدم رابطاً مباشراً (GitHub Raw / jsDelivr / Cloudflare Pages) أو نزّل الملف واضغط على زر «رفع ملف المود من جهازك» بالأسفل.',
+        text: tr(
+          uiLanguage,
+          'Telegram post links are not raw JSON files. Paste a direct raw URL (GitHub Raw / jsDelivr) or download the file and use "Upload Mod File" below.',
+          'روابط منشورات تيليجرام ليست ملفات JSON خام. استخدم رابطاً مباشراً (GitHub Raw / jsDelivr / Cloudflare Pages) أو نزّل الملف واضغط على زر «رفع ملف المود من جهازك» بالأسفل.'
+        ),
       });
       return;
     }
@@ -92,7 +122,6 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
     const directUrl = normalizeClientDirectUrl(raw);
 
     try {
-      // 1. Fast path: Direct browser fetch for CORS-enabled raw hosts (GitHub Raw, jsDelivr, Cloudflare Pages)
       let loadedData: Partial<MasterDatabase> | null = null;
       let finalSavedUrl = directUrl;
 
@@ -117,7 +146,6 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         // Blocked by CORS or non-raw host -> automatically fall back to server proxy
       }
 
-      // 2. Fallback path: Server-side proxy (handles CORS restrictions + Google Drive / Dropbox / GitHub links)
       if (!loadedData) {
         const proxyRes = await fetch('/api/fetch-mod-json', {
           method: 'POST',
@@ -136,7 +164,11 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
             type: 'error',
             text:
               proxyPayload.error ||
-              'تعذر تحميل الرابط المباشر. تأكد أنه رابط JSON خام أو ارفع الملف من جهازك.',
+              tr(
+                uiLanguage,
+                'Could not fetch the direct URL. Ensure it points to a raw JSON file or upload from your device.',
+                'تعذر تحميل الرابط المباشر. تأكد أنه رابط JSON خام أو ارفع الملف من جهازك.'
+              ),
           });
           return;
         }
@@ -147,14 +179,24 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
 
       importCustomDatabase(loadedData, finalSavedUrl);
       setUrlInput(finalSavedUrl);
+      const packName =
+        loadedData.meta?.pack_name || tr(uiLanguage, 'Custom Pack', 'حزمة مخصصة');
       setStatusMsg({
         type: 'success',
-        text: `تم تفعيل الحزمة بنجاح: ${loadedData.meta?.pack_name || 'حزمة مخصصة'}${summarizePackChanges(loadedData)}`,
+        text: tr(
+          uiLanguage,
+          `Pack activated successfully: ${packName}${summarizePackChanges(loadedData, uiLanguage)}`,
+          `تم تفعيل الحزمة بنجاح: ${packName}${summarizePackChanges(loadedData, uiLanguage)}`
+        ),
       });
     } catch {
       setStatusMsg({
         type: 'error',
-        text: 'تعذر تحميل الرابط المباشر. تأكد من صحة الرابط أو استخدم زر رفع الملف من جهازك.',
+        text: tr(
+          uiLanguage,
+          'Could not load the URL. Verify the link or upload the JSON file directly from your device.',
+          'تعذر تحميل الرابط المباشر. تأكد من صحة الرابط أو استخدم زر رفع الملف من جهازك.'
+        ),
       });
     } finally {
       setLoading(false);
@@ -163,7 +205,6 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    // Reset input value so re-uploading an edited file with the same name always triggers onChange
     e.target.value = '';
     if (!file) return;
 
@@ -175,19 +216,30 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         if (!validation.valid || !validation.data) {
           setStatusMsg({
             type: 'error',
-            text: validation.error || 'ملف الحزمة غير متوافق.',
+            text:
+              validation.error ||
+              tr(uiLanguage, 'Incompatible mod pack file.', 'ملف الحزمة غير متوافق.'),
           });
         } else {
           importCustomDatabase(validation.data, file.name);
+          const packLabel = validation.data.meta?.pack_name || file.name;
           setStatusMsg({
             type: 'success',
-            text: `تم استيراد ودمج حزمة "${validation.data.meta?.pack_name || file.name}" بنجاح${summarizePackChanges(validation.data)}!`,
+            text: tr(
+              uiLanguage,
+              `Imported and merged "${packLabel}" successfully${summarizePackChanges(validation.data, uiLanguage)}!`,
+              `تم استيراد ودمج حزمة "${packLabel}" بنجاح${summarizePackChanges(validation.data, uiLanguage)}!`
+            ),
           });
         }
       } catch {
         setStatusMsg({
           type: 'error',
-          text: 'فشل قراءة ملف JSON. تأكد أن الملف سليم وغير تالف.',
+          text: tr(
+            uiLanguage,
+            'Failed to parse JSON file. Make sure the file is valid and uncorrupted.',
+            'فشل قراءة ملف JSON. تأكد أن الملف سليم وغير تالف.'
+          ),
         });
       }
     };
@@ -195,7 +247,12 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
   };
 
   return (
-    <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-4 text-right text-[#1A2530] shadow-xs space-y-3">
+    <div
+      dir={dir}
+      className={`rounded-3xl border-2 border-[#1A2530]/20 bg-white p-4 ${
+        isAr ? 'text-right' : 'text-left'
+      } text-[#1A2530] shadow-xs space-y-3`}
+    >
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1A2530]/15 pb-3">
         <div className="flex items-center gap-2">
@@ -204,11 +261,19 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
           </div>
           <div>
             <h3 className="text-sm font-black text-[#1A2530]">
-              إدارة حزم المود والأسماء والصور المخصصة
+              {tr(
+                uiLanguage,
+                'Custom Mod Packs, Names & Portraits',
+                'إدارة حزم المود والأسماء والصور المخصصة'
+              )}
             </h3>
             {!compact && (
               <p className="text-[11px] font-bold text-[#1A2530]/65">
-                يدمج أسماء وصور الممثلين والمخرجين وشعارات المنصات تلقائياً
+                {tr(
+                  uiLanguage,
+                  'Automatically merges custom talent names, portraits, and platform logos',
+                  'يدمج أسماء وصور الممثلين والمخرجين وشعارات المنصات تلقائياً'
+                )}
               </p>
             )}
           </div>
@@ -223,10 +288,16 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         <div className="flex items-center justify-between gap-2">
           <label className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
             <Globe className="h-3.5 w-3.5 text-[#D91624]" />
-            <span>الطريقة 1: لصق رابط ملف JSON مباشر</span>
+            <span>
+              {tr(
+                uiLanguage,
+                'Method 1: Paste a Direct JSON URL',
+                'الطريقة 1: لصق رابط ملف JSON مباشر'
+              )}
+            </span>
           </label>
           <span className="text-[10px] font-bold text-[#1A2530]/60">
-            GitHub Raw · jsDelivr · Cloudflare Pages
+            GitHub Raw · jsDelivr · Cloudflare
           </span>
         </div>
 
@@ -238,7 +309,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://raw.githubusercontent.com/.../mod.json"
-              aria-label="رابط حزمة البيانات الخارجية"
+              aria-label={tr(uiLanguage, 'External database pack URL', 'رابط حزمة البيانات الخارجية')}
               className="w-full rounded-xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] py-2 pr-9 pl-3 text-left text-sm font-medium text-[#1A2530] focus:border-[#D4AF37] focus:bg-white focus:outline-none"
               dir="ltr"
             />
@@ -249,7 +320,9 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
             disabled={loading}
             className="min-h-[42px] shrink-0 rounded-xl border border-[#D4AF37] bg-[#D91624] px-4 py-2 text-xs font-black text-white shadow-xs transition hover:brightness-110 disabled:opacity-60 cursor-pointer"
           >
-            {loading ? 'جاري التحميل...' : 'تفعيل الرابط'}
+            {loading
+              ? tr(uiLanguage, 'Loading...', 'جاري التحميل...')
+              : tr(uiLanguage, 'Activate URL', 'تفعيل الرابط')}
           </button>
         </div>
       </div>
@@ -262,13 +335,15 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
           accept=".json,application/json"
           onChange={handleFileUpload}
           className="hidden"
-          aria-label="رفع ملف المود JSON من جهازك"
+          aria-label={tr(uiLanguage, 'Upload JSON mod file from device', 'رفع ملف المود JSON من جهازك')}
         />
 
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="group flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-[#D4AF37] bg-[#FFF9E6] px-4 py-3 text-right transition hover:border-[#D91624] hover:bg-[#FEF3C7] cursor-pointer"
+          className={`group flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-[#D4AF37] bg-[#FFF9E6] px-4 py-3 ${
+            isAr ? 'text-right' : 'text-left'
+          } transition hover:border-[#D91624] hover:bg-[#FEF3C7] cursor-pointer`}
         >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1A2530] text-[#D4AF37] shadow-xs transition group-hover:scale-105">
@@ -276,16 +351,24 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
             </div>
             <div>
               <div className="text-xs sm:text-sm font-black text-[#1A2530]">
-                الطريقة 2: رفع ملف المود (.json) من جهازك
+                {tr(
+                  uiLanguage,
+                  'Method 2: Upload Mod File (.json) from Device',
+                  'الطريقة 2: رفع ملف المود (.json) من جهازك'
+                )}
               </div>
               <div className="text-[11px] font-bold text-[#1A2530]/70">
-                اضغط هنا لاختيار ملف JSON المحفوظ على هاتفك أو جهازك وتفعيله فوراً
+                {tr(
+                  uiLanguage,
+                  'Tap to select a local JSON mod pack from your phone or computer',
+                  'اضغط هنا لاختيار ملف JSON المحفوظ على هاتفك أو جهازك وتفعيله فوراً'
+                )}
               </div>
             </div>
           </div>
           <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#1A2530] px-3 py-2 text-xs font-black text-[#D4AF37] shadow-xs">
             <Upload className="h-3.5 w-3.5" />
-            <span>اختيار ملف</span>
+            <span>{tr(uiLanguage, 'Choose File', 'اختيار ملف')}</span>
           </span>
         </button>
 
@@ -298,13 +381,23 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
                 setUrlInput('');
                 setStatusMsg({
                   type: 'success',
-                  text: 'تمت استعادة قاعدة البيانات الافتراضية بنجاح.',
+                  text: tr(
+                    uiLanguage,
+                    'Default database restored successfully.',
+                    'تمت استعادة قاعدة البيانات الافتراضية بنجاح.'
+                  ),
                 });
               }}
               className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[#D91624]/40 bg-[#D91624]/10 px-3 py-1.5 text-xs font-black text-[#D91624] hover:bg-[#D91624]/15 cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>استعادة قاعدة البيانات الافتراضية</span>
+              <span>
+                {tr(
+                  uiLanguage,
+                  'Restore Default Database',
+                  'استعادة قاعدة البيانات الافتراضية'
+                )}
+              </span>
             </button>
           </div>
         )}

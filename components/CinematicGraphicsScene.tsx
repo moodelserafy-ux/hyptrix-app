@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { GenreId } from '@/lib/db-resolver';
+import { useGameStore } from '@/lib/store';
+import { tr } from '@/lib/i18n';
 import { Clapperboard, Film, Sparkles, Trophy, Tv } from 'lucide-react';
 
 function hashString(str: string): number {
@@ -28,12 +30,13 @@ export function AnimatedStudioLotGraphic({
   activeProjectTitle?: string;
   isFilming?: boolean;
 }) {
+  const uiLanguage = useGameStore((s) => s.uiLanguage);
   return (
     <div className="relative w-full overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-gradient-to-b from-[#0F171E] via-[#1A2530] to-[#233242] shadow-lg">
       <svg
         viewBox="0 0 600 200"
         className="h-40 w-full sm:h-48"
-        aria-label={`مقر استوديو ${studioName}`}
+        aria-label={tr(uiLanguage, `${studioName} Studio Lot`, `مقر استوديو ${studioName}`)}
       >
         <defs>
           <linearGradient id="skyBeamGold" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -159,11 +162,21 @@ export function AnimatedStudioLotGraphic({
       <div className="pointer-events-none absolute inset-x-3 bottom-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D4AF37]/40 bg-[#0F171E]/88 px-3 py-1.5 text-[11px] font-bold text-[#F9F6F0] backdrop-blur-md">
         <span className="leading-snug text-[#FFF3B0]">
           {hasActiveProject
-            ? `${studioName} · البلاتوه الرئيسي: «${activeProjectTitle}»`
-            : `${studioName} · مدينة الإنتاج جاهزة لانطلاق مشروعك القادم`}
+            ? tr(
+                uiLanguage,
+                `${studioName} · Main Soundstage: "${activeProjectTitle}"`,
+                `${studioName} · البلاتوه الرئيسي: «${activeProjectTitle}»`
+              )
+            : tr(
+                uiLanguage,
+                `${studioName} · Studio Lot Ready for Your Next Production`,
+                `${studioName} · مدينة الإنتاج جاهزة لانطلاق مشروعك القادم`
+              )}
         </span>
         <span className="shrink-0 text-[10px] font-black text-[#D4AF37]">
-          {isFilming ? 'ON AIR · جاري التصوير' : 'المقر الرئيسي'}
+          {isFilming
+            ? tr(uiLanguage, 'ON AIR · FILMING', 'ON AIR · جاري التصوير')
+            : tr(uiLanguage, 'STUDIO HQ', 'المقر الرئيسي')}
         </span>
       </div>
     </div>
@@ -423,6 +436,7 @@ export function AnimatedFilmingSetGraphic({
   dayTotal: number;
   isComplete?: boolean;
 }) {
+  const uiLanguage = useGameStore((s) => s.uiLanguage);
   return (
     <div className="relative overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-gradient-to-br from-[#0F171E] via-[#1A2530] to-[#253545] text-[#F9F6F0] shadow-xl">
       <div className="flex flex-col items-center justify-center px-4 py-6 text-center">
@@ -435,19 +449,28 @@ export function AnimatedFilmingSetGraphic({
         </motion.div>
 
         <div className="font-display mt-2.5 text-sm font-black text-[#D4AF37] sm:text-base">
-          بلاتوه تصوير «{title}»
+          {tr(uiLanguage, `Soundstage Set · "${title}"`, `بلاتوه تصوير «${title}»`)}
         </div>
         <div className="mt-1 text-xs font-bold text-[#F9F6F0]/80">
-          إخراج: {directorName} · البطولة: {leadName}
+          {tr(
+            uiLanguage,
+            `Director: ${directorName} · Starring: ${leadName}`,
+            `إخراج: ${directorName} · البطولة: ${leadName}`
+          )}
         </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#D4AF37]/30 bg-[#0F171E]/90 px-3.5 py-2 text-[11px] font-bold">
         <span className="text-[#D4AF37]">
-          مشهد اليوم {dayCurrent} من {dayTotal}{' '}
-          {isComplete ? '(اكتمل التصوير ✓)' : '(REC ● جاري التصوير)'}
+          {tr(
+            uiLanguage,
+            `Shoot Day ${dayCurrent} of ${dayTotal} ${isComplete ? '(Wrap Complete ✓)' : '(REC ● FILMING)'}`,
+            `مشهد اليوم ${dayCurrent} من ${dayTotal} ${isComplete ? '(اكتمل التصوير ✓)' : '(REC ● جاري التصوير)'}`
+          )}
         </span>
-        <span className="text-emerald-400">كاميرات البلاتوه نشطة</span>
+        <span className="text-emerald-400">
+          {tr(uiLanguage, 'Cameras Rolling', 'كاميرات البلاتوه نشطة')}
+        </span>
       </div>
     </div>
   );
@@ -462,7 +485,7 @@ export function AnimatedCinemaPremiereGraphic({
   currentStep,
   maxSteps,
   liveRevenueFormatted,
-  currencyLabel = 'ج.م',
+  currencyLabel = 'EGP',
   rank,
   criticScore,
 }: {
@@ -475,29 +498,42 @@ export function AnimatedCinemaPremiereGraphic({
   rank: number;
   criticScore: number;
 }) {
+  const uiLanguage = useGameStore((s) => s.uiLanguage);
   return (
     <div className="relative overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-gradient-to-b from-[#0F171E] via-[#1A2530] to-[#2B171D] p-5 text-center text-[#F9F6F0] shadow-xl">
       <div className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-0.5 text-[10px] font-black text-amber-300">
         {isSeries ? <Tv className="h-3.5 w-3.5" /> : <Film className="h-3.5 w-3.5" />}
         <span>
           {isSeries
-            ? `البث التلفزيوني والرقمي · الحلقة ${currentStep} من ${maxSteps}`
-            : `شاشة العرض الكبرى · اليوم ${currentStep} من ${maxSteps}`}
+            ? tr(
+                uiLanguage,
+                `TV & Digital Broadcast · Episode ${currentStep} of ${maxSteps}`,
+                `البث التلفزيوني والرقمي · الحلقة ${currentStep} من ${maxSteps}`
+              )
+            : tr(
+                uiLanguage,
+                `Theatrical Premiere Screen · Day ${currentStep} of ${maxSteps}`,
+                `شاشة العرض الكبرى · اليوم ${currentStep} من ${maxSteps}`
+              )}
         </span>
       </div>
 
       <h3 className="font-display mt-2 text-xl font-black text-white sm:text-2xl">
-        « {title} »
+        {tr(uiLanguage, `"${title}"`, `« ${title} »`)}
       </h3>
 
-      <div className="font-display mt-2 text-2xl font-black text-emerald-400 tabular-nums sm:text-3xl">
+      <div className="font-display mt-2 text-2xl font-black text-emerald-400 tabular-nums sm:text-3xl" dir="ltr">
         {liveRevenueFormatted} {currencyLabel}
       </div>
 
       <div className="mt-2 flex items-center justify-center gap-3 text-xs font-bold text-amber-200">
-        <span>المركز #{rank} في الموسم</span>
+        <span>
+          {tr(uiLanguage, `Season Rank #${rank}`, `المركز #${rank} في الموسم`)}
+        </span>
         <span>·</span>
-        <span>تقييم النقاد {criticScore}/10</span>
+        <span>
+          {tr(uiLanguage, `Critics ${criticScore}/10`, `تقييم النقاد ${criticScore}/10`)}
+        </span>
       </div>
     </div>
   );
@@ -515,6 +551,7 @@ export function AnimatedRedCarpetFestivalGraphic({
   year: number;
   wonCount: number;
 }) {
+  const uiLanguage = useGameStore((s) => s.uiLanguage);
   return (
     <div className="relative overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-gradient-to-br from-[#0F171E] via-[#1A2530] to-[#3B151A] p-5 text-center text-[#F9F6F0] shadow-xl">
       <motion.div
@@ -532,8 +569,16 @@ export function AnimatedRedCarpetFestivalGraphic({
         <Sparkles className="h-3.5 w-3.5 text-amber-400" />
         <span>
           {wonCount > 0
-            ? `تتويج شركتك بـ ${wonCount} جوائز ذهبية في المهرجان 🏆`
-            : 'السجادة الحمراء والمسرح الذهبي للمهرجان'}
+            ? tr(
+                uiLanguage,
+                `Your studio has won ${wonCount} Golden Trophies 🏆`,
+                `تتويج شركتك بـ ${wonCount} جوائز ذهبية في المهرجان 🏆`
+              )
+            : tr(
+                uiLanguage,
+                'The Red Carpet & Golden Festival Stage',
+                'السجادة الحمراء والمسرح الذهبي للمهرجان'
+              )}
         </span>
       </div>
     </div>
