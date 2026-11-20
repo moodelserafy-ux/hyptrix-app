@@ -51,107 +51,107 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(siteUrl),
-  title: {
-    default: 'Neelyo | لعبة محاكاة إدارة استوديو الإنتاج السينمائي والتلفزيوني',
-    template: '%s | Neelyo',
-  },
-  description:
-    'Neelyo هي اللعبة الاستراتيجية العربية المتكاملة لمحاكاة تأسيس وإدارة شركات الإنتاج السينمائي والدرامي. اكتب السيناريو، تفاوض مع أكثر من 180 ممثلاً ومخرجاً، أدر التصوير، وتصدّر شباك التذاكر وموسم رمضان.',
-  applicationName: 'Neelyo',
-  keywords: [
-    'Neelyo',
-    'نيليو',
-    'لعبة Neelyo',
-    'لعبة إدارة استوديو سينمائي',
-    'لعبة إنتاج أفلام ومسلسلات',
-    'محاكاة السينما المصرية والعربية',
-    'لعبة شباك التذاكر',
-    'لعبة منتج سينمائي',
-    'لعبة دراما رمضان',
-    'ألعاب استراتيجية عربية في المتصفح',
-    'لعبة التفاوض مع الممثلين والمخرجين',
-    'محاكاة صناعة الأفلام والمسلسلات',
-    'Neelyo Cinema & TV Tycoon',
-    'Arabic Movie Studio Tycoon',
-    'Cinema Production Simulation Game',
-    'TV Series Tycoon Game',
-    'Box Office Strategy Game',
-  ],
-  authors: [{ name: 'Neelyo Studio' }],
-  creator: 'Neelyo',
-  publisher: 'Neelyo',
-  category: 'Simulation Game',
-  classification: 'Business & Entertainment Studio Tycoon Simulation Game',
-  alternates: {
-    canonical: '/',
-    languages: {
-      'ar-EG': '/',
-      ar: '/',
+    title: {
+      default: 'Neelyo | Cinema & TV Production Studio Tycoon Game',
+      template: '%s | Neelyo',
     },
-  },
-  icons: {
-    icon: [
-      { url: '/favicon.png', sizes: '96x96', type: 'image/png' },
-      { url: '/images/neelyo-icon-192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/images/neelyo-icon.png', sizes: '512x512', type: 'image/png' },
-    ],
-    shortcut: ['/favicon.png'],
-    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
-  },
-  openGraph: {
-    type: 'website',
-    locale: 'ar_EG',
-    url: siteUrl,
-    siteName: 'Neelyo',
-    title: 'Neelyo | لعبة محاكاة شركات الإنتاج وشباك التذاكر والدراما',
     description:
-      'أسّس شركة إنتاجك السينمائي والدرامي في Neelyo، اكتب قصص أعمالك، تفاوض مع أكثر من 180 نجماً ومخرجاً حسب حجم الدور والميزانية، أدر كواليس التصوير، وتصدّر إيرادات السينما والمنصات الرقمية والقنوات الفضائية.',
-    images: [
-      {
-        url: `${siteUrl}/images/neelyo-og.png`,
-        width: 1200,
-        height: 630,
-        alt: 'Neelyo — لعبة محاكاة إدارة شركات الإنتاج السينمائي والدرامي',
-      },
-      {
-        url: `${siteUrl}/images/neelyo-icon.png`,
-        width: 512,
-        height: 512,
-        alt: 'شعار Neelyo',
-      },
+      'Build and run your own film and television production empire in Neelyo. Write scripts, negotiate with 180+ stars and directors, manage on-set crises, dominate the box office & streaming platforms, and sweep annual awards.',
+    applicationName: 'Neelyo',
+    keywords: [
+      'Neelyo',
+      'Neelyo Cinema & TV Tycoon',
+      'Movie Studio Tycoon Game',
+      'Film Production Simulation Game',
+      'TV Series Tycoon Game',
+      'Box Office Strategy Game',
+      'Cinema Management Browser Game',
+      'Telegram Mini App Tycoon Game',
+      'AI Film Studio Simulator',
+      'Actor Negotiation Game',
+      'نيليو',
+      'لعبة إدارة استوديو سينمائي',
+      'لعبة إنتاج أفلام ومسلسلات',
+      'محاكاة شباك التذاكر ودراما رمضان',
     ],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Neelyo | محاكاة صناعة الأفلام والمسلسلات العربية',
-    description:
-      'تجربة استراتيجية متكاملة في Neelyo لإدارة استوديو إنتاج سينمائي وتلفزيوني: تأليف السيناريو، التعاقد مع النجوم والمخرجين، إدارة البلاتوه، التوزيع الإقليمي والعالمي، وحصد الجوائز السنوية.',
-    images: [`${siteUrl}/images/neelyo-og.png`],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    nocache: false,
-    googleBot: {
+    authors: [{ name: 'Neelyo Studio' }],
+    creator: 'Neelyo',
+    publisher: 'Neelyo',
+    category: 'Simulation Game',
+    classification: 'Business & Entertainment Studio Tycoon Simulation Game',
+    alternates: {
+      canonical: '/',
+      languages: {
+        en: '/',
+        'en-US': '/',
+        ar: '/',
+        'ar-EG': '/',
+      },
+    },
+    icons: {
+      icon: [
+        { url: '/favicon.png', sizes: '96x96', type: 'image/png' },
+        { url: '/images/neelyo-icon-192.png', sizes: '192x192', type: 'image/png' },
+        { url: '/images/neelyo-icon.png', sizes: '512x512', type: 'image/png' },
+      ],
+      shortcut: ['/favicon.png'],
+      apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+    },
+    openGraph: {
+      type: 'website',
+      locale: 'en_US',
+      alternateLocale: ['ar_EG', 'ar_SA'],
+      url: siteUrl,
+      siteName: 'Neelyo',
+      title: 'Neelyo | Cinema & TV Production Studio Tycoon',
+      description:
+        'Found your own movie & TV production studio in Neelyo. Write scripts, negotiate with 180+ stars & directors, handle on-set crises, conquer regional & global box offices, and win annual festival awards.',
+      images: [
+        {
+          url: `${siteUrl}/images/neelyo-og.png`,
+          width: 1200,
+          height: 630,
+          alt: 'Neelyo — Cinema & TV Production Studio Tycoon Game',
+        },
+        {
+          url: `${siteUrl}/images/neelyo-icon.png`,
+          width: 512,
+          height: 512,
+          alt: 'Neelyo Logo',
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: 'Neelyo | Cinema & TV Production Studio Tycoon',
+      description:
+        'Lead a full-scale cinema & TV studio in Neelyo: write screenplays, negotiate contracts with 180+ stars and directors, manage shoots, sign streaming deals, and top the global box office.',
+      images: [`${siteUrl}/images/neelyo-og.png`],
+    },
+    robots: {
       index: true,
       follow: true,
-      noimageindex: false,
-      'max-snippet': -1,
-      'max-image-preview': 'large',
-      'max-video-preview': -1,
+      nocache: false,
+      googleBot: {
+        index: true,
+        follow: true,
+        noimageindex: false,
+        'max-snippet': -1,
+        'max-image-preview': 'large',
+        'max-video-preview': -1,
+      },
     },
-  },
-  other: {
-    'llms-txt': `${siteUrl}/llms.txt`,
-    'llms-full-txt': `${siteUrl}/llms-full.txt`,
-    'ai-crawl-policy': 'allow-all',
-    'geo-entity-name': 'Neelyo (Cinema & TV Tycoon)',
-    'geo-entity-type': 'VideoGame, WebApplication, SimulationGame',
-    'geo-language': 'ar-EG, ar',
-    'geo-domain': 'Cinema & Television Production Studio Management Simulation',
-    'geo-core-features':
-      'تأسيس استوديو إنتاج، كتابة سيناريو أفلام ومسلسلات، تفاوض مع 180+ ممثل وممثلة، التعاقد مع 1 إلى 2 مخرج، انتظار ردود العقود 2-3 أيام، إدارة أزمات التصوير، توزيع في مصر والخليج وأوروبا وهوليوود، سباق شباك التذاكر ومشاهدات رمضان، وحفل جوائز سنوي تلقائي.',
-  },
+    other: {
+      'llms-txt': `${siteUrl}/llms.txt`,
+      'llms-full-txt': `${siteUrl}/llms-full.txt`,
+      'ai-crawl-policy': 'allow-all',
+      'geo-entity-name': 'Neelyo (Cinema & TV Tycoon)',
+      'geo-entity-type': 'VideoGame, WebApplication, SimulationGame',
+      'geo-language': 'en, en-US, ar, ar-EG',
+      'geo-domain': 'Cinema & Television Production Studio Management Simulation',
+      'geo-core-features':
+        'Studio founding, film & TV scriptwriting, contract negotiations with 180+ actors and 1-2 directors, 2-3 day agent response windows, on-set crisis management, regional & global theatrical/streaming distribution, daily box office & viewership races, Star Forge 99 OVR custom talent creator, and automatic annual awards galas.',
+    },
   };
 }
 
@@ -170,12 +170,12 @@ export default async function RootLayout({
         name: 'Neelyo',
         alternateName: [
           'Neelyo — Cinema & TV Tycoon',
+          'Neelyo Movie & TV Studio Simulator',
           'نيليو — لعبة محاكاة الإنتاج السينمائي والدرامي',
-          'Arabic Cinema & TV Studio Tycoon',
         ],
         url: siteUrl,
         image: `${siteUrl}/images/neelyo-og.png`,
-        inLanguage: ['ar', 'ar-EG'],
+        inLanguage: ['en', 'ar', 'ar-EG'],
         applicationCategory: 'GameApplication',
         applicationSubCategory: 'Business & Cinema Studio Tycoon Simulation',
         genre: [
@@ -190,24 +190,24 @@ export default async function RootLayout({
           'Any Web Browser (iOS, Android, Telegram Mini App, Windows, macOS, Linux)',
         isAccessibleForFree: true,
         abstract:
-          'Neelyo هي لعبة محاكاة استراتيجية واقتصادية عربية تضع اللاعب في مقعد المنتج والمؤسس لشركة إنتاج سينمائي وتلفزيوني لإنتاج الأفلام والمسلسلات والتفاوض مع النجوم والمخرجين والمنافسة على إيرادات شباك التذاكر ومشاهدات المنصات والجوائز السنوية.',
+          'Neelyo is an AI-powered cinema and television studio tycoon simulation available in English and Arabic. Step into the founder’s chair to produce films and series, negotiate contracts with stars and directors, manage budgets and on-set crises, and compete for box office supremacy and annual festival awards.',
         description:
-          'Neelyo هي لعبة محاكاة استراتيجية واقتصادية متكاملة باللغة العربية تضع اللاعب في مقعد المنتج والمؤسس لشركة إنتاج سينمائي وتلفزيوني. تشمل اللعبة تأسيس هوية الشركة، كتابة سيناريوهات الأفلام والمسلسلات، اختيار التصنيفات الدرامية، التفاوض العميق مع أكثر من 180 ممثلاً وممثلة والتعاقد مع 1 إلى 2 مخرج ومدير تصوير ومؤلف موسيقي ومهندس مونتاج بناءً على حجم الدور ومكانة النجم وتوافقه الفني والأجر المالي ونسبة الأرباح مع انتظار الرد خلال 2 إلى 3 أيام، إدارة ميزانيات التصوير والديكور والخدع البصرية، التعامل مع المواقف الطارئة في موقع التصوير، بيع حقوق البث للمنصات الرقمية والقنوات الفضائية، فتح أسواق التوزيع في مصر والخليج وأوروبا وهوليوود، والمنافسة السنوية على جوائز المهرجانات.',
+          'Neelyo is a comprehensive strategic business simulation game in English and Arabic that puts you in charge of your own film and television production empire. Craft studio identity, greenlight movies or 7–30 episode series, negotiate multi-day contracts with 180+ actors, 1–2 directors, cinematographers, composers, and editors, balance set design and VFX budgets, resolve live production crises, license streaming and broadcast rights, expand across regional and global markets, and compete at annual awards ceremonies.',
         featureList: [
-          'تأسيس شركة إنتاج سينمائي ودرامي برأس مال 75 مليون ج.م وتصميم شعارها واختيار ميزة المؤسس الاستراتيجية',
-          'مساران إنتاجيان مستقلان: إنتاج الأفلام السينمائية (تقاس بإيرادات شباك التذاكر وعدد شاشات السينما) أو إنتاج المسلسلات الدرامية من 7 أو 10 أو 15 أو 30 حلقة (تقاس بالمليون مشاهدة وعقود المنصات والفضائيات)',
-          'قاعدة بيانات ضخمة تضم أكثر من 180 ممثلاً وممثلة من فئات S وA وB وC بالإضافة إلى المواهب الصاعدة التي تظهر ديناميكياً مع مرور الأيام',
-          'نظام إخراج مرن يدعم التعاقد مع مخرج واحد أو مخرجين اثنين كحد أقصى (1–2) للعمل الفني مع قفل التعاقدات عند اكتمال العدد',
-          'نظام تفاوض عميق يدرس فيه وكيل الأعمال العرض لمدة 2 إلى 3 أيام داخل اللعبة وفق حجم الدور والأجر ونسبة الأرباح وعشاء العمل الخاص',
-          'غرفة صناعة النجوم لتصميم نجمك الحصري وتوزيع طاقاته السداسية حتى التقييم الأسطوري 99 OVR',
-          'تطور يومي تلقائي لإيرادات شباك التذاكر وترتيب المنافسين مع مرور أيام ساعة اللعبة',
-          'توسع جغرافي في 4 أسواق: السوق المصري الأساسي، السوق الخليجي (+45% عوائد)، السوق الأوروبي (+35% عوائد)، والتوزيع العالمي في هوليوود (+80% عوائد)',
-          'حفل جوائز سنوي تلقائي في نهاية كل عام تقويمي',
+          'Found your cinema & TV studio with 75M starting capital, custom royal emblem, and a strategic founder perk',
+          'Two distinct production tracks: theatrical feature films (box office revenue & screen count) and TV series from 7 to 30 episodes (million-viewer ratings, streaming & broadcast deals)',
+          'Deep talent roster of 180+ S/A/B/C-tier stars plus AI-discovered rising talents emerging dynamically over time',
+          'Flexible directing system supporting 1 or 2 co-directors per project with realistic agent negotiations',
+          'Multi-day contract negotiation system (2–3 in-game days) weighing role billing, star tier, ego, genre fit, script quality, fee, and backend profit share',
+          'The Star Forge: custom casting studio to build your own exclusive actor or actress up to a legendary 99 OVR Diamond Card',
+          'Live daily box-office & episode viewership tracking against rival studios',
+          'Multi-market expansion across Egypt, Saudi Arabia & Gulf, European Festivals, and Worldwide Hollywood distribution',
+          'Automatic annual awards gala at the close of every calendar year',
         ],
         offers: {
           '@type': 'Offer',
           price: '0',
-          priceCurrency: 'EGP',
+          priceCurrency: 'USD',
           availability: 'https://schema.org/InStock',
         },
         publisher: {
@@ -221,88 +221,88 @@ export default async function RootLayout({
       {
         '@type': 'ItemList',
         '@id': `${siteUrl}/#stages`,
-        name: 'مراحل إدارة الإنتاج السينمائي والدرامي في اللعبة',
+        name: 'Six Stages of Cinema & TV Production in Neelyo',
         itemListElement: [
           {
             '@type': 'ListItem',
             position: 1,
-            name: 'تأسيس الاستوديو وهوية المؤسس',
+            name: 'Studio Founding & Executive Identity',
             description:
-              'اختيار اسم الشركة والمدير التنفيذي وتصميم الشعار وتحديد قدرة المؤسس الاستراتيجية.',
+              'Choose your studio name, CEO identity, emblem, market world, and strategic founder perk.',
           },
           {
             '@type': 'ListItem',
             position: 2,
-            name: 'إعداد المشروع وكتابة السيناريو',
+            name: 'Project Setup & Scriptwriting',
             description:
-              'تحديد نوع العمل (فيلم سينمائي أو مسلسل درامي بعدد حلقاته)، موسم الطرح، التصنيفات الدرامية، وكتابة عنوان وملخص القصة.',
+              'Select film or TV series format, episode count, release window, age rating, dual genres, title, and synopsis.',
           },
           {
             '@type': 'ListItem',
             position: 3,
-            name: 'التعاقد مع الطاقم الفني والنجوم وتوزيع الميزانية',
+            name: 'Crew Hiring, Star Casting & Budget Allocation',
             description:
-              'اختيار 1 إلى 2 مخرج، مدير التصوير، الموسيقار، مهندس المونتاج، والتفاوض مع الممثلين من قائمة 180+ نجم وموهبة صاعدة وتوزيع ميزانية الإنتاج.',
+              'Sign 1–2 directors, cinematographer, composer, editor, and negotiate with 180+ actors while allocating set, costume, and VFX budgets.',
           },
           {
             '@type': 'ListItem',
             position: 4,
-            name: 'تصوير المشاهد وإدارة مواقف البلاتوه',
+            name: 'Principal Photography & On-Set Crises',
             description:
-              'خوض أيام التصوير الفعلي وحسم المواقف والأزمات الميدانية التي تؤثر على جودة العمل وضجة الجمهور.',
+              'Navigate live shooting days and decisive on-set dilemmas that impact critical quality, hype, and budget.',
           },
           {
             '@type': 'ListItem',
             position: 5,
-            name: 'التسويق والمنصات ومتابعة شباك التذاكر والمشاهدات',
+            name: 'Marketing, Platforms & Box Office Tracking',
             description:
-              'حجز شاشات السينما، إبرام عقود المنصات الرقمية والقنوات الفضائية، فتح الأسواق الإقليمية، ومتابعة نمو الإيرادات والمشاهدات يومياً.',
+              'Book theater screens, close streaming and satellite broadcast deals, expand internationally, and track daily box office and viewership.',
           },
           {
             '@type': 'ListItem',
             position: 6,
-            name: 'مهرجانات الجوائز السنوية وتصنيف الشركات',
+            name: 'Annual Awards Galas & Studio Rankings',
             description:
-              'المنافسة في ختام كل عام على جوائز مهرجان القاهرة ومهرجان الجونة وحفل صناع الترفيه وتصدر القيمة السوقية.',
+              'Compete each year-end at prestigious cinema festivals and climb the global studio market-value leaderboard.',
           },
         ],
       },
       {
         '@type': 'HowTo',
         '@id': `${siteUrl}/#howto`,
-        name: 'كيف تلعب وتبني إمبراطورية إنتاج سينمائي ودرامي ناجحة',
+        name: 'How to Build a Box-Office Film & TV Empire in Neelyo',
         description:
-          'الدليل الكامل لقيادة شركة الإنتاج من التأسيس الأول وحتى تصدر القيمة السوقية وحصد جوائز المهرجانات السنوية.',
+          'Step-by-step guide to founding your studio, negotiating blockbuster casts, dominating box office and streaming charts, and sweeping annual awards.',
         step: [
           {
             '@type': 'HowToStep',
             position: 1,
-            name: 'تأسيس الشركة وهوية المؤسس',
-            text: 'اختر اسم شركة الإنتاج واسم المدير التنفيذي، وصمّم الشعار الرسمي، وحدد ميزة المؤسس الاستراتيجية (مخرج عبقري لرفع الجودة النقدية، حوت تسويق لرفع إيرادات الافتتاح، أو مفاوض شرس لخفض أجور التعاقدات).',
+            name: 'Found Your Studio & Choose a Founder Perk',
+            text: 'Name your studio and CEO, customize your crest, and select a founder perk (Visionary Director for higher critic scores, Marketing Shark for opening-weekend surges, or Tough Negotiator for lower talent fees).',
           },
           {
             '@type': 'HowToStep',
             position: 2,
-            name: 'إعداد المشروع وكتابة السيناريو',
-            text: 'حدد نوع العمل (فيلم سينمائي أو مسلسل درامي من 7 أو 10 أو 15 أو 30 حلقة)، واختر موسم العرض والتصنيف العمري، وامزج التصنيف الأساسي والفرعي، ثم اكتب اسم العمل وتفاصيل القصة والحبكة.',
+            name: 'Greenlight & Write Your Screenplay',
+            text: 'Pick a feature film or a 7/10/15/30-episode TV series, choose the release season and age rating, combine primary and secondary genres, and write your title and story synopsis.',
           },
           {
             '@type': 'HowToStep',
             position: 3,
-            name: 'التفاوض المرحلي مع المخرجين والطاقم والنجوم',
-            text: 'تعاقد مع مخرج واحد أو مخرجين اثنين كحد أقصى، ثم مدير التصوير والموسيقار ومشرف المونتاج، وأرسل عروض التعاقد للممثلين مع تحديد حجم الدور والأجر ونسبة الأرباح وانتظر ردهم الرسمي خلال 2 إلى 3 أيام في نافذة منبثقة.',
+            name: 'Negotiate with Directors, Crew & Stars',
+            text: 'Contract 1–2 directors plus key department heads, then send tailored offers to actors specifying role size, fee, and backend percentage; agents respond within 2–3 in-game days.',
           },
           {
             '@type': 'HowToStep',
             position: 4,
-            name: 'إدارة الميزانيات والمنصات والتصوير',
-            text: 'وزّع ميزانية الديكورات والأزياء والخدع البصرية، وابدأ التصوير الفعلي لحسم المواقف الميدانية في البلاتوه، ثم اختر المنصة الرقمية والقناة الفضائية وأسواق التوزيع الإقليمية والعالمية.',
+            name: 'Direct Production & Close Distribution Deals',
+            text: 'Balance production budgets across sets, costumes, and VFX, resolve live on-set crises, and lock in theatrical screens, streaming platforms, satellite channels, and international distribution territories.',
           },
           {
             '@type': 'HowToStep',
             position: 5,
-            name: 'طرح العمل والمنافسة على الجوائز السنوية',
-            text: 'تابع نمو إيرادات شباك التذاكر يومياً للأفلام أو نسب المشاهدة حلقة بحلقة للمسلسلات عبر النوافذ الإخبارية المنبثقة، ثم خض منافسات الحفل السنوي للجوائز تلقائياً في نهاية العام.',
+            name: 'Release & Sweep the Annual Awards',
+            text: 'Track daily box-office totals or episode-by-episode viewership through live press dispatches, then compete automatically in the year-end Awards Gala.',
           },
         ],
       },
@@ -312,58 +312,58 @@ export default async function RootLayout({
         mainEntity: [
           {
             '@type': 'Question',
-            name: 'ما هي لعبة Neelyo (نيليو — محاكاة السينما والدراما)؟',
+            name: 'What is Neelyo (Cinema & TV Studio Tycoon)?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'Neelyo هي لعبة محاكاة وإدارة أعمال استراتيجية باللغة العربية تتيح لك تأسيس وقيادة استوديو إنتاج سينمائي وتلفزيوني متكامل، بدءاً من كتابة السيناريو والتفاوض مع أكثر من 180 ممثلاً وممثلة وطاقم إخراج وتصوير وموسيقى، مروراً بإدارة ميزانيات التصوير والتوزيع والمنصات، وحتى المنافسة في شباك التذاكر وموسم دراما رمضان وحصد الجوائز السنوية.',
+              text: 'Neelyo is a strategic business and entertainment simulation game playable in English and Arabic directly in the browser or Telegram Mini App. You found and manage a cinema & TV production company, write scripts, negotiate with 180+ actors and directors, manage budgets and shoots, and compete for box office records and annual awards.',
             },
           },
           {
             '@type': 'Question',
-            name: 'كم عدد المخرجين الذين يمكن التعاقد معهم في العمل الفني الواحد؟',
+            name: 'How many directors can be hired for a single production?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'يمكن للاعب التعاقد مع مخرج واحد أو مخرجين اثنين كحد أقصى (1 إلى 2 مخرج) في العمل الفني الواحد. عند اعتماد مخرجين اثنين تُقفل أزرار التعاقد لباقي المخرجين تلقائياً، وإذا أرسل اللاعب عروضاً لـ 3 مخرجين أو أكثر ووافقوا جميعاً، تتيح له اللعبة اختيار مخرج واحد أو اثنين فقط لاعتمادهم رسمياً.',
+              text: 'You can sign 1 or up to 2 co-directors per project. Once 2 directors are locked in, additional director hiring locks automatically to keep creative vision balanced.',
             },
           },
           {
             '@type': 'Question',
-            name: 'كيف يقرر الممثل أو المخرج قبول العرض أو رفضه ومتى يصل الرد؟',
+            name: 'How do stars and directors decide whether to accept or reject an offer?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'يستغرق الرد على العرض من يومين إلى 3 أيام داخل اللعبة، حيث يتم تقييم العرض بناءً على حجم الدور المعروض (بطولة مطلقة، بطولة مشتركة، شرير محوري، دور مساعد، أو ضيف شرف) ومقارنته بفئة النجم (S أو A أو B أو C) ومستوى غروره وتقييمه العام، بالإضافة إلى ملاءمة التصنيف الدرامي، جودة السيناريو، سمعة الاستوديو، اسم المخرج، الأجر المالي، ونسبة الأرباح، ثم يظهر القرار النهائي مع السبب في نافذة منبثقة.',
+              text: 'Talent agents review offers over 2–3 in-game days, weighing role billing (Solo Lead, Co-Lead, Villain, Supporting, or Cameo) against the star’s tier (S/A/B/C), ego, overall rating, genre fit, script quality, studio reputation, director prestige, cash fee, and backend profit share.',
             },
           },
           {
             '@type': 'Question',
-            name: 'ما الفرق بين إنتاج فيلم سينمائي وإنتاج مسلسل درامي في اللعبة؟',
+            name: 'What is the difference between producing a Feature Film and a TV Series?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'الفيلم السينمائي يُطرح في مواسم عيد الفطر أو عيد الأضحى أو الصيف أو نصف العام ويُقاس نجاحه بإيرادات شباك التذاكر بالجنيه المصري وعدد شاشات السينما على مدار 10 أيام عرض، بينما المسلسل الدرامي يتكون من 7 أو 10 أو 15 أو 30 حلقة في موسم رمضان أو الأوف سيزون ويُقاس نجاحه بالمليون مشاهدة وعقود المنصات الرقمية والقنوات الفضائية حلقة بحلقة.',
+              text: 'Feature films release in cinema seasons and are measured by theatrical box-office gross and screen counts over a 10-day run, whereas TV series span 7, 10, 15, or 30 episodes and earn through streaming licenses, satellite broadcasts, and million-viewer ratings episode by episode.',
             },
           },
           {
             '@type': 'Question',
-            name: 'ماذا يحدث للوقت في اللعبة عند ظهور نافذة منبثقة أو عند الخروج من اللعبة؟',
+            name: 'What happens to the game clock when a popup opens or I leave the tab?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'يتوقف عداد الأيام في اللعبة تلقائياً وتتجمد عناصر الخلفية بالكامل عند ظهور أي نافذة منبثقة (مثل الأخبار العاجلة أو ردود العقود أو مفاوضات النجوم أو مراسم الجوائز) وكذلك عند مغادرة اللاعب لتبويب اللعبة أو تصغير المتصفح، ثم يستأنف الوقت سيره تلقائياً فور إغلاق النافذة أو عودة اللاعب للعبة.',
+              text: 'The simulation clock pauses automatically whenever any modal, contract response, breaking news dispatch, or awards gala appears—and whenever you switch tabs—resuming seamlessly as soon as you return.',
             },
           },
           {
             '@type': 'Question',
-            name: 'ما هي أسواق التوزيع الإقليمية والعالمية المتاحة لشركة الإنتاج؟',
+            name: 'Which distribution markets can my studio unlock?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'تبدأ الشركة في السوق المصري الأساسي، ويمكنها فتح تراخيص التوزيع في السوق الخليجي (+45% عوائد)، السوق الأوروبي للمهرجانات (+35% عوائد)، والتوزيع العالمي الشامل في هوليوود (+80% عوائد) لمضاعفة أرباح شباك التذاكر والبث.',
+              text: 'Your studio starts in its home market (Egypt or Saudi Arabia) and can unlock regional Gulf/Egypt expansion (+45% gross), European Festival distribution (+35% gross), and Worldwide Hollywood distribution (+80% gross).',
             },
           },
           {
             '@type': 'Question',
-            name: 'متى يقام حفل الجوائز والمهرجانات السينمائية في اللعبة؟',
+            name: 'When does the Annual Awards Gala take place?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'يقام الحفل السنوي لتوزيع الجوائز تلقائياً في نهاية كل سنة تقويمية (اليوم 120)، حيث تتنافس جميع الأفلام والمسلسلات الصادرة خلال العام على جوائز مهرجان القاهرة السينمائي الدولي ومهرجان الجونة السينمائي وحفل صناع الترفيه.',
+              text: 'The Annual Awards Gala triggers automatically at the close of every calendar year (Day 120), pitting all films and series released that year against rival studios across major festival categories.',
             },
           },
         ],
@@ -411,25 +411,25 @@ export default async function RootLayout({
         {/* Semantic SSR Knowledge Graph for Search Engines & AI Agents (zero fabricated ratings) */}
         <aside
           className="sr-only"
-          aria-label="الموسوعة المرجعية الشاملة للعبة Neelyo لمحركات البحث والذكاء الاصطناعي"
+          aria-label="Neelyo Official Reference Overview for Search Engines and AI Agents"
         >
           <h1>
-            Neelyo — لعبة محاكاة إدارة شركات الإنتاج السينمائي والتلفزيوني العربية بالذكاء الاصطناعي
+            Neelyo — AI-Powered Cinema &amp; Television Studio Tycoon Simulation Game
           </h1>
           <p>
-            Neelyo هي لعبة استراتيجية واقتصادية عربية تضعك في مقعد المؤسس والمدير التنفيذي لاستوديو إنتاج سينمائي وتلفزيوني برأس مال تأسيسي 75 مليون عملة افتراضية. تعتمد اللعبة على الذكاء الاصطناعي التوليدي في خلق عالم سينمائي ودرامي حي يتجدد مع الوقت: من توليد المواهب التمثيلية الصاعدة، وإنشاء الشركات المنافسة وأفلامها ومسلسلاتها، وتأليف وتقييم السيناريوهات والأدوار الدرامية، إلى إدارة مفاوضات العقود وأزمات التصوير وحملات اللجان الإلكترونية والتريند.
+            Neelyo is a bilingual (English &amp; Arabic) strategic cinema and television production tycoon game where you found and lead your own studio starting with 75M virtual capital. Powered by dynamic AI storytelling, the world evolves continuously with rising actors, rival studios, script evaluations, multi-day contract negotiations, on-set crises, PR trend wars, theatrical box-office races, streaming contracts, and annual awards ceremonies.
           </p>
-          <h2>غرفة صناعة النجوم (The Star Forge — 99 OVR Diamond Card)</h2>
+          <h2>The Star Forge (99 OVR Diamond Card Creator)</h2>
           <p>
-            على مكتب الإمبراطور التفاعلي يوجد الملف السري الأحمر المقفول بقفلين ذهبيين، والذي يفتح للاعب كابينة الكاستينج لتصميم نجم شباك (ممثل) أو نجمة شباك (ممثلة) من الصفر مع رفع الصورة أو توليد بورتريه الحرف التلقائي وتوزيع 6 طاقات احترافية على الرادار السداسي حتى التقييم الأسطوري 99 OVR.
+            Right on the Executive Desk sits the confidential crimson dossier sealed with two golden locks, unlocking the Star Forge casting booth where players sculpt an exclusive male or female box-office star from scratch—uploading a custom portrait or monogram and distributing six core attributes up to a legendary 99 OVR rating.
           </p>
-          <p>التواصل الرسمي: neelyotycoon@gmail.com</p>
-          <nav aria-label="روابط التعريف والوثائق القانونية">
+          <p>Official Contact: neelyotycoon@gmail.com</p>
+          <nav aria-label="About and Legal Documentation Links">
             <a href="/about-us">
-              معلومات عنا وسياسة الخصوصية وشروط الاستخدام — Neelyo
+              About Us, Privacy Policy &amp; Terms of Use — Neelyo
             </a>
-            <a href="/llms.txt">ملخص التوثيق السريع (llms.txt)</a>
-            <a href="/llms-full.txt">الموسوعة الكاملة للعبة Neelyo (llms-full.txt)</a>
+            <a href="/llms.txt">Quick Reference Documentation (llms.txt)</a>
+            <a href="/llms-full.txt">Complete Neelyo Encyclopedia (llms-full.txt)</a>
           </nav>
         </aside>
 

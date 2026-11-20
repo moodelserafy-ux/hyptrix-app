@@ -42,6 +42,12 @@ import {
   getCurrencyLabel,
   getMarketAiContext,
 } from './market-profiles';
+import {
+  getLocalizedSlotLabel,
+  localizeEntityName,
+  PR_CAMPAIGNS_EN,
+  STUDIO_ASSETS_EN,
+} from './i18n';
 
 export const DAYS_PER_GAME_YEAR = 120; // 10 game days per month × 12 months
 export const STAR_FORGE_REQUIRED_LOCKS = 2; // Reduced from 5 → 2 to eliminate any ad-farming friction
@@ -1189,6 +1195,7 @@ export function buildAnnualAwardsGalaForYear(params: {
   year: number;
   db: MasterDatabase;
   worldMarket?: WorldMarketId;
+  uiLanguage?: UiLanguageId;
 }): {
   ceremonies: AutomaticFestivalCeremonyItem[];
   awardsByProjectId: Record<string, string[]>;
@@ -1196,6 +1203,8 @@ export function buildAnnualAwardsGalaForYear(params: {
   rivalAwardsCountByStudio: Record<string, number>;
 } {
   const { playerProjectsInYear, rivalReleasesInYear, studioName, year, db } = params;
+  const uiLang: UiLanguageId = params.uiLanguage || 'en';
+  const isEn = uiLang === 'en';
 
   const activeRivals = rivalReleasesInYear.filter((r) => r.status !== 'delayed');
 
@@ -1204,70 +1213,150 @@ export function buildAnnualAwardsGalaForYear(params: {
   const rivalSeries = activeRivals.filter((r) => r.format === 'series');
   const marketId = params.worldMarket || (db.meta?.targetMarket as WorldMarketId) || 'egypt';
   const marketProfile = getMarketProfile(marketId);
+  const curLabel = getCurrencyLabel(marketId, uiLang);
   const compList = db.competitor_studios || [];
   const starList = db.actors || [];
   const dirList = (db.crew || []).filter((c) => c.role === 'director');
-  const fallbackDir1 = dirList[0]?.name || 'مخرج الموسم الأول';
-  const fallbackDir2 = dirList[1]?.name || fallbackDir1;
-  const fallbackDir3 = dirList[2]?.name || fallbackDir2;
-  const fallbackFilmTitle3 = marketProfile.rivalFilmTitles[2] || marketProfile.rivalFilmTitles[0] || 'ملحمة الموسم';
-  const fallbackSeriesTitle3 = marketProfile.rivalSeriesTitles[2] || marketProfile.rivalSeriesTitles[0] || 'دراما الموسم';
 
-  const topRivalFilm1: RivalRelease = rivalFilms[0] || {
-    id: `annual_rf1_${year}`,
-    title: marketProfile.rivalFilmTitles[0] || 'شفرة العقرب',
-    studioName: compList[0]?.name || marketProfile.aiContext.fallbackRivalStudios[0],
-    leadStarName: starList[0]?.name || marketProfile.aiContext.fallbackStars[0],
-    directorName: dirList[0]?.name || 'مخرج الموسم',
-    format: 'film',
-    genre: 'action',
-    criticScore: 8.1,
-    audienceScore: 8.5,
-    boxOfficeRevenue: 92_000_000,
-    status: 'released',
-  };
+  const locName = (raw?: string, fallbackEn = '', fallbackAr = '') =>
+    raw ? localizeEntityName(raw, uiLang) : isEn ? fallbackEn : fallbackAr;
 
-  const topRivalFilm2: RivalRelease = rivalFilms[1] || {
-    id: `annual_rf2_${year}`,
-    title: marketProfile.rivalFilmTitles[1] || 'فرسان الشاشة',
-    studioName: compList[1]?.name || marketProfile.aiContext.fallbackRivalStudios[1] || marketProfile.aiContext.fallbackRivalStudios[0],
-    leadStarName: starList[1]?.name || marketProfile.aiContext.fallbackStars[1] || marketProfile.aiContext.fallbackStars[0],
-    directorName: dirList[1]?.name || dirList[0]?.name || 'مخرج كبير',
-    format: 'film',
-    genre: 'historical',
-    criticScore: 7.8,
-    audienceScore: 8.0,
-    boxOfficeRevenue: 74_000_000,
-    status: 'released',
-  };
+  const fallbackDir1 = locName(dirList[0]?.name, 'Top Season Director', 'مخرج الموسم الأول');
+  const fallbackDir2 = locName(dirList[1]?.name, fallbackDir1, fallbackDir1);
+  const fallbackDir3 = locName(dirList[2]?.name, fallbackDir2, fallbackDir2);
 
-  const topRivalSeries1: RivalRelease = rivalSeries[0] || {
-    id: `annual_rs1_${year}`,
-    title: marketProfile.rivalSeriesTitles[0] || 'ملف الغموض',
-    studioName: compList[2]?.name || compList[0]?.name || marketProfile.aiContext.fallbackRivalStudios[0],
-    leadStarName: starList[2]?.name || marketProfile.aiContext.fallbackStars[2] || marketProfile.aiContext.fallbackStars[0],
-    directorName: dirList[2]?.name || dirList[0]?.name || 'مخرج دراما',
-    format: 'series',
-    genre: 'crime_mystery',
-    criticScore: 8.2,
-    audienceScore: 8.4,
-    boxOfficeRevenue: 64_000_000,
-    status: 'released',
-  };
+  const enFilmTitles =
+    marketId === 'saudi'
+      ? ['Riyadh Horizon', 'Dunes of Thunder', 'The Diriyah Cipher']
+      : ['Cairo Underground', 'The Nile Syndicate', 'Operation Citadel'];
+  const enSeriesTitles =
+    marketId === 'saudi'
+      ? ['House of Najd', 'The Diriyah Chronicles', 'Crown of the Dunes']
+      : ['The Zamalek Dynasty', 'Alley of Secrets', 'Empire of El-Hussein'];
 
-  const topRivalSeries2: RivalRelease = rivalSeries[1] || {
-    id: `annual_rs2_${year}`,
-    title: marketProfile.rivalSeriesTitles[1] || 'ليالي الدراما',
-    studioName: compList[3]?.name || compList[1]?.name || marketProfile.aiContext.fallbackRivalStudios[0],
-    leadStarName: starList[3]?.name || marketProfile.aiContext.fallbackStars[3] || marketProfile.aiContext.fallbackStars[0],
-    directorName: dirList[3]?.name || dirList[0]?.name || 'مخرج الموسم',
-    format: 'series',
-    genre: 'popular_drama',
-    criticScore: 7.6,
-    audienceScore: 7.9,
-    boxOfficeRevenue: 52_000_000,
-    status: 'released',
-  };
+  const fallbackFilmTitle3 = isEn
+    ? enFilmTitles[2]
+    : marketProfile.rivalFilmTitles[2] || marketProfile.rivalFilmTitles[0] || 'ملحمة الموسم';
+  const fallbackSeriesTitle3 = isEn
+    ? enSeriesTitles[2]
+    : marketProfile.rivalSeriesTitles[2] || marketProfile.rivalSeriesTitles[0] || 'دراما الموسم';
+
+  const normalizeRival = (r: RivalRelease): RivalRelease => ({
+    ...r,
+    studioName: localizeEntityName(r.studioName, uiLang),
+    leadStarName: localizeEntityName(r.leadStarName, uiLang),
+    directorName: r.directorName
+      ? localizeEntityName(r.directorName, uiLang)
+      : undefined,
+  });
+
+  const topRivalFilm1: RivalRelease = rivalFilms[0]
+    ? normalizeRival(rivalFilms[0])
+    : {
+        id: `annual_rf1_${year}`,
+        title: isEn ? enFilmTitles[0] : marketProfile.rivalFilmTitles[0] || 'شفرة العقرب',
+        studioName: locName(
+          compList[0]?.name || marketProfile.aiContext.fallbackRivalStudios[0],
+          'Rival Pictures',
+          'استوديو منافس'
+        ),
+        leadStarName: locName(
+          starList[0]?.name || marketProfile.aiContext.fallbackStars[0],
+          'A-List Star',
+          'نجم شباك'
+        ),
+        directorName: fallbackDir1,
+        format: 'film',
+        genre: 'action',
+        criticScore: 8.1,
+        audienceScore: 8.5,
+        boxOfficeRevenue: 92_000_000,
+        status: 'released',
+      };
+
+  const topRivalFilm2: RivalRelease = rivalFilms[1]
+    ? normalizeRival(rivalFilms[1])
+    : {
+        id: `annual_rf2_${year}`,
+        title: isEn ? enFilmTitles[1] : marketProfile.rivalFilmTitles[1] || 'فرسان الشاشة',
+        studioName: locName(
+          compList[1]?.name ||
+            marketProfile.aiContext.fallbackRivalStudios[1] ||
+            marketProfile.aiContext.fallbackRivalStudios[0],
+          'Crown Media',
+          'شركة منافسة'
+        ),
+        leadStarName: locName(
+          starList[1]?.name ||
+            marketProfile.aiContext.fallbackStars[1] ||
+            marketProfile.aiContext.fallbackStars[0],
+          'Leading Star',
+          'نجم بارز'
+        ),
+        directorName: fallbackDir2,
+        format: 'film',
+        genre: 'historical',
+        criticScore: 7.8,
+        audienceScore: 8.0,
+        boxOfficeRevenue: 74_000_000,
+        status: 'released',
+      };
+
+  const topRivalSeries1: RivalRelease = rivalSeries[0]
+    ? normalizeRival(rivalSeries[0])
+    : {
+        id: `annual_rs1_${year}`,
+        title: isEn ? enSeriesTitles[0] : marketProfile.rivalSeriesTitles[0] || 'ملف الغموض',
+        studioName: locName(
+          compList[2]?.name ||
+            compList[0]?.name ||
+            marketProfile.aiContext.fallbackRivalStudios[0],
+          'Prime Drama Studio',
+          'شركة دراما'
+        ),
+        leadStarName: locName(
+          starList[2]?.name ||
+            marketProfile.aiContext.fallbackStars[2] ||
+            marketProfile.aiContext.fallbackStars[0],
+          'Drama Lead',
+          'نجم دراما'
+        ),
+        directorName: fallbackDir3,
+        format: 'series',
+        genre: 'crime_mystery',
+        criticScore: 8.2,
+        audienceScore: 8.4,
+        boxOfficeRevenue: 64_000_000,
+        status: 'released',
+      };
+
+  const topRivalSeries2: RivalRelease = rivalSeries[1]
+    ? normalizeRival(rivalSeries[1])
+    : {
+        id: `annual_rs2_${year}`,
+        title: isEn ? enSeriesTitles[1] : marketProfile.rivalSeriesTitles[1] || 'ليالي الدراما',
+        studioName: locName(
+          compList[3]?.name ||
+            compList[1]?.name ||
+            marketProfile.aiContext.fallbackRivalStudios[0],
+          'Horizon Productions',
+          'إنتاج درامي'
+        ),
+        leadStarName: locName(
+          starList[3]?.name ||
+            marketProfile.aiContext.fallbackStars[3] ||
+            marketProfile.aiContext.fallbackStars[0],
+          'Series Star',
+          'بطل الموسم'
+        ),
+        directorName: locName(dirList[3]?.name, fallbackDir1, fallbackDir1),
+        format: 'series',
+        genre: 'popular_drama',
+        criticScore: 7.6,
+        audienceScore: 7.9,
+        boxOfficeRevenue: 52_000_000,
+        status: 'released',
+      };
 
   const playerFilms = [...playerProjectsInYear]
     .filter((p) => p.format === 'film')
@@ -1296,6 +1385,7 @@ export function buildAnnualAwardsGalaForYear(params: {
 
   annualFestivals.forEach((fest, fIdx) => {
     const strictnessOffset = fIdx === 0 ? 0.1 : -0.15;
+    const festDisplayName = localizeEntityName(fest.name, uiLang);
 
     // 1. Best Film of the Year
     const rivalFilmTargetScore = (fIdx === 0 ? topRivalFilm1.criticScore : topRivalFilm2.criticScore) + strictnessOffset;
@@ -1342,9 +1432,23 @@ export function buildAnnualAwardsGalaForYear(params: {
       Boolean(playerTopBoxOffice) &&
       playerTopBoxOffice.totalGrossRevenue >= highestRivalGross;
 
+    const bestPlayerDirectorLoc = bestPlayerOverall
+      ? localizeEntityName(bestPlayerOverall.directorName, uiLang)
+      : fallbackDir1;
+    const bestPlayerLeadLoc = bestPlayerOverall?.leadNames?.[0]
+      ? localizeEntityName(bestPlayerOverall.leadNames[0], uiLang)
+      : isEn
+      ? 'Lead Star'
+      : 'بطل العمل';
+
+    const scriptLabel = (title: string) =>
+      isEn ? `Screenplay: "${title}"` : `سيناريو «${title}»`;
+
     const awards: FestivalAwardWinnerItem[] = [
       {
-        category: 'جائزة أفضل فيلم سينمائي للعام',
+        category: isEn
+          ? 'Best Motion Picture of the Year'
+          : 'جائزة أفضل فيلم سينمائي للعام',
         nominees: bestPlayerFilm
           ? [bestPlayerFilm.title, topRivalFilm1.title, topRivalFilm2.title]
           : [topRivalFilm1.title, topRivalFilm2.title, fallbackFilmTitle3],
@@ -1356,7 +1460,9 @@ export function buildAnnualAwardsGalaForYear(params: {
         isPlayerWinner: Boolean(playerWinsBestFilm && bestPlayerFilm),
       },
       {
-        category: 'جائزة أفضل مسلسل درامي للعام',
+        category: isEn
+          ? 'Best Drama Series of the Year'
+          : 'جائزة أفضل مسلسل درامي للعام',
         nominees: bestPlayerSeries
           ? [bestPlayerSeries.title, topRivalSeries1.title, topRivalSeries2.title]
           : [topRivalSeries1.title, topRivalSeries2.title, fallbackSeriesTitle3],
@@ -1375,10 +1481,12 @@ export function buildAnnualAwardsGalaForYear(params: {
         isPlayerWinner: Boolean(playerWinsBestSeries && bestPlayerSeries),
       },
       {
-        category: 'جائزة أفضل إخراج في العام',
+        category: isEn
+          ? 'Best Director of the Year'
+          : 'جائزة أفضل إخراج في العام',
         nominees: bestPlayerOverall
           ? [
-              bestPlayerOverall.directorName,
+              bestPlayerDirectorLoc,
               topRivalFilm1.directorName || fallbackDir1,
               topRivalSeries1.directorName || fallbackDir2,
             ]
@@ -1389,7 +1497,7 @@ export function buildAnnualAwardsGalaForYear(params: {
             ],
         winner:
           playerWinsDirector && bestPlayerOverall
-            ? bestPlayerOverall.directorName
+            ? bestPlayerDirectorLoc
             : topRivalFilm1.directorName || fallbackDir1,
         winningProjectTitle:
           playerWinsDirector && bestPlayerOverall
@@ -1402,17 +1510,19 @@ export function buildAnnualAwardsGalaForYear(params: {
         isPlayerWinner: Boolean(playerWinsDirector && bestPlayerOverall),
       },
       {
-        category: 'جائزة أفضل تمثيل (دور أول)',
+        category: isEn
+          ? 'Best Lead Performance'
+          : 'جائزة أفضل تمثيل (دور أول)',
         nominees: bestPlayerOverall
           ? [
-              bestPlayerOverall.leadNames[0] || 'بطل العمل',
+              bestPlayerLeadLoc,
               topRivalFilm1.leadStarName,
               topRivalSeries1.leadStarName,
             ]
           : [topRivalFilm1.leadStarName, topRivalSeries1.leadStarName, topRivalFilm2.leadStarName],
         winner:
           playerWinsActor && bestPlayerOverall
-            ? bestPlayerOverall.leadNames[0] || 'بطل العمل'
+            ? bestPlayerLeadLoc
             : fIdx === 0
             ? topRivalFilm1.leadStarName
             : topRivalSeries1.leadStarName,
@@ -1431,14 +1541,16 @@ export function buildAnnualAwardsGalaForYear(params: {
         isPlayerWinner: Boolean(playerWinsActor && bestPlayerOverall),
       },
       {
-        category: 'جائزة أفضل سيناريو وحبكة درامية',
+        category: isEn
+          ? 'Best Screenplay & Dramatic Writing'
+          : 'جائزة أفضل سيناريو وحبكة درامية',
         nominees: bestPlayerOverall
-          ? [`سيناريو «${bestPlayerOverall.title}»`, `سيناريو «${topRivalSeries1.title}»`]
-          : [`سيناريو «${topRivalSeries1.title}»`, `سيناريو «${topRivalFilm2.title}»`],
+          ? [scriptLabel(bestPlayerOverall.title), scriptLabel(topRivalSeries1.title)]
+          : [scriptLabel(topRivalSeries1.title), scriptLabel(topRivalFilm2.title)],
         winner:
           playerWinsScript && bestPlayerOverall
-            ? `سيناريو «${bestPlayerOverall.title}»`
-            : `سيناريو «${topRivalSeries1.title}»`,
+            ? scriptLabel(bestPlayerOverall.title)
+            : scriptLabel(topRivalSeries1.title),
         winningProjectTitle:
           playerWinsScript && bestPlayerOverall
             ? bestPlayerOverall.title
@@ -1450,14 +1562,16 @@ export function buildAnnualAwardsGalaForYear(params: {
         isPlayerWinner: Boolean(playerWinsScript && bestPlayerOverall),
       },
       {
-        category: 'جائزة قمة شباك التذاكر الذهبية (أعلى إيراد سنوي)',
+        category: isEn
+          ? 'Golden Box Office Crown (Highest Annual Gross)'
+          : 'جائزة قمة شباك التذاكر الذهبية (أعلى إيراد سنوي)',
         nominees: playerTopBoxOffice
           ? [playerTopBoxOffice.title, topRivalFilm1.title, topRivalFilm2.title]
           : [topRivalFilm1.title, topRivalFilm2.title],
         winner:
           playerWinsBoxOffice && playerTopBoxOffice
-            ? `${playerTopBoxOffice.title} (${formatMoney(playerTopBoxOffice.totalGrossRevenue)} ${marketProfile.currencyLabel})`
-            : `${topRivalFilm1.title} (${formatMoney(topRivalFilm1.boxOfficeRevenue)} ${marketProfile.currencyLabel})`,
+            ? `${playerTopBoxOffice.title} (${formatMoney(playerTopBoxOffice.totalGrossRevenue)} ${curLabel})`
+            : `${topRivalFilm1.title} (${formatMoney(topRivalFilm1.boxOfficeRevenue)} ${curLabel})`,
         winningProjectTitle:
           playerWinsBoxOffice && playerTopBoxOffice
             ? playerTopBoxOffice.title
@@ -1479,7 +1593,7 @@ export function buildAnnualAwardsGalaForYear(params: {
         if (matchedProj) {
           awardsByProjectId[matchedProj.id] = [
             ...(awardsByProjectId[matchedProj.id] || []),
-            `${aw.category} (${fest.name})`,
+            `${aw.category} (${festDisplayName})`,
           ];
         }
       } else {
@@ -1495,25 +1609,42 @@ export function buildAnnualAwardsGalaForYear(params: {
     const playerWonCount = awards.filter((a) => a.isPlayerWinner).length;
     const playerTitlesSummary =
       playerProjectsInYear.length > 0
-        ? playerProjectsInYear.map((p) => `«${p.title}»`).join(' و')
+        ? playerProjectsInYear
+            .map((p) => (isEn ? `"${p.title}"` : `«${p.title}»`))
+            .join(isEn ? ' & ' : ' و')
+        : isEn
+        ? 'No eligible releases'
         : 'لا توجد أعمال مشاركة';
 
     ceremonies.push({
       id: `annual_gala_${year}_${fest.id}`,
       festivalId: fest.id,
-      festivalName: `${fest.name} — الحفل السنوي لعام ${year}`,
+      festivalName: isEn
+        ? `${festDisplayName} — ${year} Annual Gala`
+        : `${fest.name} — الحفل السنوي لعام ${year}`,
       prestige: fest.prestige,
       year,
-      playerProjectTitle: bestPlayerOverall?.title || 'موسم العام السينمائي',
-      juryStatement:
-        playerProjectsInYear.length === 0
-          ? `اختتمت فعاليات ${fest.name} لعام ${year}، وحسمت أعمال «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» جوائز العام الكبرى في غياب مشاركات من استوديو «${studioName}» هذا العام.`
+      playerProjectTitle:
+        bestPlayerOverall?.title ||
+        (isEn ? `${year} Cinema Season` : 'موسم العام السينمائي'),
+      juryStatement: isEn
+        ? playerProjectsInYear.length === 0
+          ? `${festDisplayName} (${year}) concluded with ${topRivalFilm1.studioName} and ${topRivalSeries1.studioName} sweeping the top prizes in the absence of releases from ${studioName} this year.`
           : playerWonCount >= 3
-          ? `ليلة تاريخية لاستوديو «${studioName}» في الحفل السنوي لـ ${fest.name} (${year})! أشادت لجنة التحكيم بأعمالكم ${playerTitlesSummary} ومنحتكم ${playerWonCount} جوائز كبرى بعد منافسة شرسة مع «${topRivalFilm1.studioName}».`
+          ? `A historic night for ${studioName} at ${festDisplayName} (${year})! The jury praised ${playerTitlesSummary} and awarded you ${playerWonCount} major honors after a fierce showdown with ${topRivalFilm1.studioName}.`
           : playerWonCount >= 1
-          ? `منافسة قوية في الحفل السنوي لـ ${fest.name} (${year})؛ حصدت أعمال «${studioName}» (${playerTitlesSummary}) ${playerWonCount} جائزة مستحقة، بينما انتزعت «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» باقي جوائز العام.`
-          : `شهد الحفل السنوي لـ ${fest.name} (${year}) منافسة نارية؛ ورغم ترشح ${playerTitlesSummary} في القائمة القصيرة، تفوقت أفلام ومسلسلات «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» بفارق التقييمات النقدية.`,
-      festivalBuzz: `حفل توزيع جوائز نهاية العام (${year}) وسط حضور كافة نجوم وصناع السينما والدراما على السجادة الحمراء.`,
+          ? `Fierce competition at ${festDisplayName} (${year}): ${studioName} (${playerTitlesSummary}) claimed ${playerWonCount} well-earned award(s), while ${topRivalFilm1.studioName} and ${topRivalSeries1.studioName} split the remaining honors.`
+          : `An intense race at ${festDisplayName} (${year}): despite shortlist nominations for ${playerTitlesSummary}, releases from ${topRivalFilm1.studioName} and ${topRivalSeries1.studioName} edged ahead on critics’ scores.`
+        : playerProjectsInYear.length === 0
+        ? `اختتمت فعاليات ${fest.name} لعام ${year}، وحسمت أعمال «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» جوائز العام الكبرى في غياب مشاركات من استوديو «${studioName}» هذا العام.`
+        : playerWonCount >= 3
+        ? `ليلة تاريخية لاستوديو «${studioName}» في الحفل السنوي لـ ${fest.name} (${year})! أشادت لجنة التحكيم بأعمالكم ${playerTitlesSummary} ومنحتكم ${playerWonCount} جوائز كبرى بعد منافسة شرسة مع «${topRivalFilm1.studioName}».`
+        : playerWonCount >= 1
+        ? `منافسة قوية في الحفل السنوي لـ ${fest.name} (${year})؛ حصدت أعمال «${studioName}» (${playerTitlesSummary}) ${playerWonCount} جائزة مستحقة، بينما انتزعت «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» باقي جوائز العام.`
+        : `شهد الحفل السنوي لـ ${fest.name} (${year}) منافسة نارية؛ ورغم ترشح ${playerTitlesSummary} في القائمة القصيرة، تفوقت أفلام ومسلسلات «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» بفارق التقييمات النقدية.`,
+      festivalBuzz: isEn
+        ? `Year-End Awards Gala (${year}) — red carpet packed with top stars, filmmakers, and industry press.`
+        : `حفل توزيع جوائز نهاية العام (${year}) وسط حضور كافة نجوم وصناع السينما والدراما على السجادة الحمراء.`,
       awards,
       playerWonCount,
     });
@@ -1533,6 +1664,7 @@ export function buildThreeSeasonFestivals(params: {
   studioName: string;
   currentYear: number;
   db: MasterDatabase;
+  uiLanguage?: UiLanguageId;
 }): {
   ceremonies: AutomaticFestivalCeremonyItem[];
   allWonAwardLabels: string[];
@@ -1544,6 +1676,7 @@ export function buildThreeSeasonFestivals(params: {
     studioName: params.studioName,
     year: params.currentYear,
     db: params.db,
+    uiLanguage: params.uiLanguage,
   });
   const allWon = Object.values(res.awardsByProjectId).flat();
   return {
@@ -1811,12 +1944,12 @@ export const useGameStore = create<NeelyoGameState>()(
       worldHistory: [
         {
           year: 2026,
-          eventText: 'تأسيس استوديو جديد بطموحات ضخمة للسيطرة على صناعة السينما والدراما.',
+          eventText: 'Founded a new production studio aiming to dominate the cinema and drama industry.',
           category: 'milestone',
         },
       ],
       aiMemoryLog: [
-        'انطلاق الموسم السينمائي وسط منافسة شرسة بين كبرى شركات الإنتاج على شباك التذاكر.',
+        'A new cinema season kicks off amid fierce competition among major production studios.',
       ],
       actorAwardCounts: {},
       actorDynamicState: {},
@@ -2152,13 +2285,18 @@ export const useGameStore = create<NeelyoGameState>()(
 
       liquidateAndStartNewStudioInSameWorld: () => {
         set((state) => {
+          const isEn = state.uiLanguage === 'en';
           const primaryReg = getPrimaryMarketRegion(state.worldMarket);
           const oldStudioName = state.studioName;
           const oldCeo = state.ceoName;
           const soldStudioCompetitor: CompetitorStudio = {
             id: `liquidated_${Date.now()}`,
-            name: `${oldStudioName} (تحت إدارة المستثمرين)`,
-            ceoName: 'تحالف مستثمري الاستحواذ',
+            name: isEn
+              ? `${oldStudioName} (Investor Takeover)`
+              : `${oldStudioName} (تحت إدارة المستثمرين)`,
+            ceoName: isEn
+              ? 'Acquisition Investors Consortium'
+              : 'تحالف مستثمري الاستحواذ',
             logo_url: '',
             specialty: 'popular_drama',
             preferred_genres: ['popular_drama', 'action', 'comedy'],
@@ -2168,7 +2306,9 @@ export const useGameStore = create<NeelyoGameState>()(
             foundedYear: state.currentYear,
           };
 
-          const liquidationEvent = `تصفية وبيع شركة «${oldStudioName}» للمستثمرين لسداد الديون، وبداية رحلة تأسيس شركة إنتاج جديدة في نفس العالم لعام ${state.currentYear}.`;
+          const liquidationEvent = isEn
+            ? `Liquidated and sold "${oldStudioName}" to investors to settle debts — launching a brand-new production studio in the same ${state.currentYear} cinema world.`
+            : `تصفية وبيع شركة «${oldStudioName}» للمستثمرين لسداد الديون، وبداية رحلة تأسيس شركة إنتاج جديدة في نفس العالم لعام ${state.currentYear}.`;
 
           return {
             studioCreated: false,
@@ -2351,18 +2491,32 @@ export const useGameStore = create<NeelyoGameState>()(
       purchaseStudioAsset: async (assetId) => {
         await ledgerSyncChain;
         const state = get();
+        const isEn = state.uiLanguage === 'en';
         const asset = STUDIO_FIXED_ASSETS.find((a) => a.id === assetId);
         if (!asset) return false;
+        const assetDisplayName = isEn
+          ? STUDIO_ASSETS_EN[asset.id]?.name || asset.name
+          : asset.name;
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
+
         if ((state.ownedStudioAssets || []).includes(assetId)) {
-          state.showToast('هذا الأصل مملوك بالفعل ضمن أصول الاستوديو الثابتة!', 'info');
+          state.showToast(
+            isEn
+              ? 'This fixed asset is already owned by your studio!'
+              : 'هذا الأصل مملوك بالفعل ضمن أصول الاستوديو الثابتة!',
+            'info'
+          );
           return false;
         }
         if (state.cash < asset.price) {
-          const curLabel = getCurrencyLabel(state.worldMarket);
           state.showToast(
-            'السيولة النقدية في الخزينة لا تكفي لشراء هذا الأصل الثابت حالياً!',
+            isEn
+              ? 'Insufficient treasury cash to acquire this fixed studio asset!'
+              : 'السيولة النقدية في الخزينة لا تكفي لشراء هذا الأصل الثابت حالياً!',
             'warning',
-            `تحتاج إلى ${formatMoney(asset.price)} ${curLabel} لإتمام الشراء.`
+            isEn
+              ? `You need ${formatMoney(asset.price)} ${curLabel} to complete the acquisition.`
+              : `تحتاج إلى ${formatMoney(asset.price)} ${curLabel} لإتمام الشراء.`
           );
           return false;
         }
@@ -2394,7 +2548,7 @@ export const useGameStore = create<NeelyoGameState>()(
           totalAwards: countStudioTotalAwards(state.releasedProjects),
           ownedAssets: nextAssets,
           itemId: asset.id,
-          itemLabel: asset.name,
+          itemLabel: assetDisplayName,
           previousSignature: state.ledgerSignature,
         });
 
@@ -2404,7 +2558,6 @@ export const useGameStore = create<NeelyoGameState>()(
         const finalAssets = verification.ok
           ? verification.ownedAssets
           : nextAssets;
-        const curLabel = getCurrencyLabel(state.worldMarket);
 
         set((cur) => ({
           cash: finalCash,
@@ -2421,21 +2574,29 @@ export const useGameStore = create<NeelyoGameState>()(
           worldHistory: [
             {
               year: cur.currentYear,
-              eventText: `استحواذ استراتيجي: شراء «${asset.name}» بقيمة ${formatMoney(asset.price)} ${curLabel} كأصل ثابت يخفض تكاليف الإنتاج ويحمي من أزمات التصوير.`,
+              eventText: isEn
+                ? `Strategic acquisition: purchased "${assetDisplayName}" for ${formatMoney(asset.price)} ${curLabel} to lower production costs and shield against on-set crises.`
+                : `استحواذ استراتيجي: شراء «${asset.name}» بقيمة ${formatMoney(asset.price)} ${curLabel} كأصل ثابت يخفض تكاليف الإنتاج ويحمي من أزمات التصوير.`,
               category: 'milestone',
             },
             ...cur.worldHistory,
           ],
           aiMemoryLog: [
-            `اشترت شركة "${cur.studioName}" الأصل الثابت "${asset.name}" بقيمة ${formatMoney(asset.price)} ${curLabel} مما رفع قيمتها السوقية وخفض تكاليف إنتاجها.`,
+            isEn
+              ? `Studio "${cur.studioName}" acquired the fixed asset "${assetDisplayName}" for ${formatMoney(asset.price)} ${curLabel}, boosting valuation and permanently cutting production costs.`
+              : `اشترت شركة "${cur.studioName}" الأصل الثابت "${asset.name}" بقيمة ${formatMoney(asset.price)} ${curLabel} مما رفع قيمتها السوقية وخفض تكاليف إنتاجها.`,
             ...(cur.aiMemoryLog || []),
           ].slice(0, 25),
         }));
 
         get().showToast(
-          `تم شراء وتوثيق «${asset.name}» ضمن أصول الاستوديو الثابتة!`,
+          isEn
+            ? `Acquired "${assetDisplayName}" as a permanent studio asset!`
+            : `تم شراء وتوثيق «${asset.name}» ضمن أصول الاستوديو الثابتة!`,
           'success',
-          `خصم دائم -${asset.costDiscountPercent}% على تكاليف الإنتاج + درع حماية في البلاتوه`
+          isEn
+            ? `Permanent -${asset.costDiscountPercent}% production cost discount + on-set crisis shield`
+            : `خصم دائم -${asset.costDiscountPercent}% على تكاليف الإنتاج + درع حماية في البلاتوه`
         );
         return true;
       },
@@ -2472,14 +2633,24 @@ export const useGameStore = create<NeelyoGameState>()(
         const state = get();
         const campaign = SOCIAL_PR_CAMPAIGNS.find((c) => c.id === campaignId);
         if (!campaign) return false;
-        const curLabel = getCurrencyLabel(state.worldMarket);
+        const isEn = state.uiLanguage === 'en';
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
         const aiCtx = getMarketAiContext(state.worldMarket);
         const marketDb = getResolvedDatabase(state.customDbPatch, state.worldMarket);
+        const localizedCampaign = isEn ? PR_CAMPAIGNS_EN[campaign.id] : null;
+        const campaignDisplayTitle = localizedCampaign?.title || campaign.title;
+        const campaignDisplayImpact =
+          localizedCampaign?.impactSummary || campaign.impactSummary;
+
         if (state.cash < campaign.cost) {
           state.showToast(
-            'السيولة النقدية في الخزينة لا تكفي لتمويل هذه الحملة الإعلامية!',
+            isEn
+              ? 'Insufficient studio treasury cash to fund this media campaign!'
+              : 'السيولة النقدية في الخزينة لا تكفي لتمويل هذه الحملة الإعلامية!',
             'warning',
-            `تحتاج إلى ${formatMoney(campaign.cost)} ${curLabel} لإطلاق الحملة.`
+            isEn
+              ? `You need ${formatMoney(campaign.cost)} ${curLabel} to launch this campaign.`
+              : `تحتاج إلى ${formatMoney(campaign.cost)} ${curLabel} لإطلاق الحملة.`
           );
           return false;
         }
@@ -2502,7 +2673,7 @@ export const useGameStore = create<NeelyoGameState>()(
           totalAwards: countStudioTotalAwards(state.releasedProjects),
           ownedAssets: state.ownedStudioAssets || [],
           itemId: campaign.id,
-          itemLabel: campaign.title,
+          itemLabel: campaignDisplayTitle,
           previousSignature: state.ledgerSignature,
         });
 
@@ -2513,25 +2684,38 @@ export const useGameStore = create<NeelyoGameState>()(
         const activeProjectTitle =
           state.lastReleasedProject?.title ||
           state.draft.title ||
-          'العمل الجديد';
-        const rivalStudio =
+          (isEn ? 'New Release' : 'العمل الجديد');
+        const rawRivalStudio =
           targetRivalStudio ||
           state.lastReleasedProject?.rivalReleases?.[0]?.studioName ||
           state.yearlyRivalReleases?.[0]?.studioName ||
           marketDb.competitor_studios[0]?.name ||
           aiCtx.fallbackRivalStudios[0];
+        const rivalStudio = localizeEntityName(rawRivalStudio, state.uiLanguage);
         const rivalFilmTitle =
           state.lastReleasedProject?.rivalReleases?.find(
-            (r) => r.studioName === rivalStudio
+            (r) => r.studioName === rawRivalStudio || r.studioName === rivalStudio
           )?.title ||
-          state.yearlyRivalReleases?.find((r) => r.studioName === rivalStudio)
-            ?.title ||
-          'العمل المنافس';
+          state.yearlyRivalReleases?.find(
+            (r) => r.studioName === rawRivalStudio || r.studioName === rivalStudio
+          )?.title ||
+          (isEn ? 'Rival Feature' : 'العمل المنافس');
 
         const cleanTag = activeProjectTitle.replace(/\s+/g, '_');
         const rivalTag = rivalFilmTitle.replace(/\s+/g, '_');
         const [handle1, handle2, handle3] = aiCtx.socialHandles;
-        const unitCoinWord = state.worldMarket === 'saudi' ? 'ريال' : 'جنيه';
+        const unitCoinWord = isEn
+          ? state.worldMarket === 'saudi'
+            ? 'riyal'
+            : 'pound'
+          : state.worldMarket === 'saudi'
+          ? 'ريال'
+          : 'جنيه';
+        const countryLabelLoc = isEn
+          ? state.worldMarket === 'saudi'
+            ? 'Saudi Arabia'
+            : 'Egypt'
+          : aiCtx.countryLabel;
 
         // Call Groq AI (openai/gpt-oss-20b / openai/gpt-oss-120b) for contextual media response
         let aiGeneratedPosts: LiveSocialFeedPost[] = [];
@@ -2583,152 +2767,297 @@ export const useGameStore = create<NeelyoGameState>()(
         if (newPosts.length === 0) {
           if (campaign.id === 'support_film_trolls') {
             newPosts.push(
-              {
-                id: `supp_${Date.now()}_1`,
-                platform: 'X',
-                authorName: 'حملة جمهور السينما',
-                handle: handle1,
-                content: `بكل صراحة «${activeProjectTitle}» أقوى عمل هذا الموسم بلا منازع! أداء جبار وإخراج عالمي من شركة «${state.studioName}» 👏🔥`,
-                hashtag: `#${cleanTag}_رقم_واحد`,
-                likes: '94.2K',
-                shares: '27.8K',
-                sentiment: 'viral_boost',
-                timestampLabel: 'الآن · هجوم إيجابي كاسح',
-              },
-              {
-                id: `supp_${Date.now()}_2`,
-                platform: 'TikTok',
-                authorName: 'تريندات الشباك',
-                handle: handle3,
-                content: `الطوابير أمام قاعات السينما على «${activeProjectTitle}» قياسية! العمل يستاهل كل ${unitCoinWord} 🍿🎬`,
-                hashtag: `#${cleanTag}`,
-                likes: '175K',
-                shares: '34.1K',
-                sentiment: 'viral_boost',
-                timestampLabel: 'الآن · تيك توك',
-              }
+              isEn
+                ? {
+                    id: `supp_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: 'Cinema Crowd Watch',
+                    handle: handle1,
+                    content: `Hands down, "${activeProjectTitle}" is the strongest release of the season! Standout performances and world-class direction from ${state.studioName}.`,
+                    hashtag: `#${cleanTag}_NumberOne`,
+                    likes: '94.2K',
+                    shares: '27.8K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'Just now · Viral Surge',
+                  }
+                : {
+                    id: `supp_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: 'حملة جمهور السينما',
+                    handle: handle1,
+                    content: `بكل صراحة «${activeProjectTitle}» أقوى عمل هذا الموسم بلا منازع! أداء جبار وإخراج عالمي من شركة «${state.studioName}» 👏🔥`,
+                    hashtag: `#${cleanTag}_رقم_واحد`,
+                    likes: '94.2K',
+                    shares: '27.8K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'الآن · هجوم إيجابي كاسح',
+                  },
+              isEn
+                ? {
+                    id: `supp_${Date.now()}_2`,
+                    platform: 'TikTok',
+                    authorName: 'Box Office Pulse',
+                    handle: handle3,
+                    content: `Record-breaking ticket lines outside cinemas for "${activeProjectTitle}"! Worth every ${unitCoinWord}.`,
+                    hashtag: `#${cleanTag}`,
+                    likes: '175K',
+                    shares: '34.1K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'Just now · TikTok',
+                  }
+                : {
+                    id: `supp_${Date.now()}_2`,
+                    platform: 'TikTok',
+                    authorName: 'تريندات الشباك',
+                    handle: handle3,
+                    content: `الطوابير أمام قاعات السينما على «${activeProjectTitle}» قياسية! العمل يستاهل كل ${unitCoinWord} 🍿🎬`,
+                    hashtag: `#${cleanTag}`,
+                    likes: '175K',
+                    shares: '34.1K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'الآن · تيك توك',
+                  }
             );
           } else if (campaign.id === 'rival_rumor_trolls') {
             newPosts.push(
-              {
-                id: `rumor_${Date.now()}_1`,
-                platform: 'X',
-                authorName: 'تسريبات الفن السابع',
-                handle: handle2,
-                content: `أنباء مؤكدة عن خلافات حادة وانسحابات في كواليس «${rivalFilmTitle}» التابع لشركة «${rivalStudio}» والجمهور يشتكي من ضعف المونتاج! ⚡📉`,
-                hashtag: `#أزمة_${rivalTag}`,
-                likes: '68.4K',
-                shares: '31.9K',
-                sentiment: 'rival_attack',
-                timestampLabel: 'الآن · إشاعة متصدرة',
-              },
-              {
-                id: `rumor_${Date.now()}_2`,
-                platform: 'TikTok',
-                authorName: 'رادار النجوم',
-                handle: handle3,
-                content: `الجمهور يغادر قاعات «${rivalFilmTitle}» ويتجه لحجز تذاكر «${activeProjectTitle}»! الفارق في المستوى واضح جداً 🎯`,
-                hashtag: `#مقاطعة_${rivalTag}`,
-                likes: '142K',
-                shares: '29.5K',
-                sentiment: 'rival_attack',
-                timestampLabel: 'الآن · فيديو مسرب',
-              }
+              isEn
+                ? {
+                    id: `rumor_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: 'Backlot Insider Leaks',
+                    handle: handle2,
+                    content: `Confirmed reports of fierce on-set clashes and walkouts behind "${rivalFilmTitle}" from ${rivalStudio} — audiences are slamming the choppy editing!`,
+                    hashtag: `#${rivalTag}_Crisis`,
+                    likes: '68.4K',
+                    shares: '31.9K',
+                    sentiment: 'rival_attack',
+                    timestampLabel: 'Just now · Trending Rumor',
+                  }
+                : {
+                    id: `rumor_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: 'تسريبات الفن السابع',
+                    handle: handle2,
+                    content: `أنباء مؤكدة عن خلافات حادة وانسحابات في كواليس «${rivalFilmTitle}» التابع لشركة «${rivalStudio}» والجمهور يشتكي من ضعف المونتاج! ⚡📉`,
+                    hashtag: `#أزمة_${rivalTag}`,
+                    likes: '68.4K',
+                    shares: '31.9K',
+                    sentiment: 'rival_attack',
+                    timestampLabel: 'الآن · إشاعة متصدرة',
+                  },
+              isEn
+                ? {
+                    id: `rumor_${Date.now()}_2`,
+                    platform: 'TikTok',
+                    authorName: 'Star Radar Live',
+                    handle: handle3,
+                    content: `Moviegoers are walking out of "${rivalFilmTitle}" and booking tickets for "${activeProjectTitle}" instead — the gap in craft is night and day!`,
+                    hashtag: `#Skip_${rivalTag}`,
+                    likes: '142K',
+                    shares: '29.5K',
+                    sentiment: 'rival_attack',
+                    timestampLabel: 'Just now · Viral Clip',
+                  }
+                : {
+                    id: `rumor_${Date.now()}_2`,
+                    platform: 'TikTok',
+                    authorName: 'رادار النجوم',
+                    handle: handle3,
+                    content: `الجمهور يغادر قاعات «${rivalFilmTitle}» ويتجه لحجز تذاكر «${activeProjectTitle}»! الفارق في المستوى واضح جداً 🎯`,
+                    hashtag: `#مقاطعة_${rivalTag}`,
+                    likes: '142K',
+                    shares: '29.5K',
+                    sentiment: 'rival_attack',
+                    timestampLabel: 'الآن · فيديو مسرب',
+                  }
             );
           } else if (campaign.id === 'tiktok_viral_wave') {
             newPosts.push(
-              {
-                id: `tt_${Date.now()}_1`,
-                platform: 'TikTok',
-                authorName: 'مراجعات الشباك',
-                handle: handle1,
-                content: `مشهد المواجهة في «${activeProjectTitle}» من إنتاج ${state.studioName} يتصدر تيك توك بملايين المشاهدات! الإخراج والتمثيل في مستوى آخر 🔥🎬`,
-                hashtag: `#${cleanTag}`,
-                likes: '284K',
-                shares: '49.2K',
-                sentiment: 'viral_boost',
-                timestampLabel: 'الآن · تريند #1 تيك توك',
-              },
-              {
-                id: `tt_${Date.now()}_2`,
-                platform: 'TikTok',
-                authorName: 'تريندات الفن السابع',
-                handle: handle3,
-                content: `القاعة كاملة صفّقت عند نهاية عرض «${activeProjectTitle}».. تجربة لا تُفوّت في نهاية الأسبوع! 🍿✨`,
-                hashtag: `#${cleanTag}_يكتسح`,
-                likes: '162K',
-                shares: '28.5K',
-                sentiment: 'viral_boost',
-                timestampLabel: 'الآن · مقطع رائج',
-              }
+              isEn
+                ? {
+                    id: `tt_${Date.now()}_1`,
+                    platform: 'TikTok',
+                    authorName: 'Screen Critics Daily',
+                    handle: handle1,
+                    content: `The confrontation scene in "${activeProjectTitle}" by ${state.studioName} is taking over TikTok with millions of views! Direction and acting on another level.`,
+                    hashtag: `#${cleanTag}`,
+                    likes: '284K',
+                    shares: '49.2K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'Just now · #1 on TikTok',
+                  }
+                : {
+                    id: `tt_${Date.now()}_1`,
+                    platform: 'TikTok',
+                    authorName: 'مراجعات الشباك',
+                    handle: handle1,
+                    content: `مشهد المواجهة في «${activeProjectTitle}» من إنتاج ${state.studioName} يتصدر تيك توك بملايين المشاهدات! الإخراج والتمثيل في مستوى آخر 🔥🎬`,
+                    hashtag: `#${cleanTag}`,
+                    likes: '284K',
+                    shares: '49.2K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'الآن · تريند #1 تيك توك',
+                  },
+              isEn
+                ? {
+                    id: `tt_${Date.now()}_2`,
+                    platform: 'TikTok',
+                    authorName: 'Seventh Art Trends',
+                    handle: handle3,
+                    content: `The entire theater burst into applause at the credits of "${activeProjectTitle}" — an unmissable weekend premiere!`,
+                    hashtag: `#${cleanTag}_Sweeps`,
+                    likes: '162K',
+                    shares: '28.5K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'Just now · Trending Clip',
+                  }
+                : {
+                    id: `tt_${Date.now()}_2`,
+                    platform: 'TikTok',
+                    authorName: 'تريندات الفن السابع',
+                    handle: handle3,
+                    content: `القاعة كاملة صفّقت عند نهاية عرض «${activeProjectTitle}».. تجربة لا تُفوّت في نهاية الأسبوع! 🍿✨`,
+                    hashtag: `#${cleanTag}_يكتسح`,
+                    likes: '162K',
+                    shares: '28.5K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'الآن · مقطع رائج',
+                  }
             );
           } else if (campaign.id === 'x_hashtag_storm') {
             newPosts.push(
-              {
-                id: `x_${Date.now()}_1`,
-                platform: 'X',
-                authorName: `مرصد شباك التذاكر — ${aiCtx.countryLabel}`,
-                handle: handle1,
-                content: `تصدر هاشتاج #${cleanTag} قائمة ${aiCtx.trendHashtagLabel} بعد إقبال جماهيري قياسي على عروض شركة «${state.studioName}» بقيادة ${state.ceoName}.`,
-                hashtag: `#${cleanTag}`,
-                likes: '54.8K',
-                shares: '19.4K',
-                sentiment: 'viral_boost',
-                timestampLabel: `الآن · متصدر في ${aiCtx.countryLabel}`,
-              },
-              {
-                id: `x_${Date.now()}_2`,
-                platform: 'X',
-                authorName: 'عشاق الفن السابع',
-                handle: handle2,
-                content: `«${state.studioName}» تثبت هذا الموسم أنها الرقم الأصعب في معادلة الإنتاج الضخم مع «${activeProjectTitle}» 👏🔥`,
-                hashtag: `#${state.studioName.replace(/\s+/g, '_')}`,
-                likes: '31.2K',
-                shares: '9.1K',
-                sentiment: 'viral_boost',
-                timestampLabel: 'منذ دقيقتين',
-              }
+              isEn
+                ? {
+                    id: `x_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: `Box Office Monitor — ${countryLabelLoc}`,
+                    handle: handle1,
+                    content: `#${cleanTag} hits #1 trending in ${countryLabelLoc} after massive opening crowds turn out for ${state.studioName}, led by ${state.ceoName}.`,
+                    hashtag: `#${cleanTag}`,
+                    likes: '54.8K',
+                    shares: '19.4K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: `Just now · Trending #1 in ${countryLabelLoc}`,
+                  }
+                : {
+                    id: `x_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: `مرصد شباك التذاكر — ${aiCtx.countryLabel}`,
+                    handle: handle1,
+                    content: `تصدر هاشتاج #${cleanTag} قائمة ${aiCtx.trendHashtagLabel} بعد إقبال جماهيري قياسي على عروض شركة «${state.studioName}» بقيادة ${state.ceoName}.`,
+                    hashtag: `#${cleanTag}`,
+                    likes: '54.8K',
+                    shares: '19.4K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: `الآن · متصدر في ${aiCtx.countryLabel}`,
+                  },
+              isEn
+                ? {
+                    id: `x_${Date.now()}_2`,
+                    platform: 'X',
+                    authorName: 'Cinema Buffs Hub',
+                    handle: handle2,
+                    content: `${state.studioName} proves once again they are the heavyweight champion of prestige blockbusters with "${activeProjectTitle}"!`,
+                    hashtag: `#${state.studioName.replace(/\s+/g, '_')}`,
+                    likes: '31.2K',
+                    shares: '9.1K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: '2m ago',
+                  }
+                : {
+                    id: `x_${Date.now()}_2`,
+                    platform: 'X',
+                    authorName: 'عشاق الفن السابع',
+                    handle: handle2,
+                    content: `«${state.studioName}» تثبت هذا الموسم أنها الرقم الأصعب في معادلة الإنتاج الضخم مع «${activeProjectTitle}» 👏🔥`,
+                    hashtag: `#${state.studioName.replace(/\s+/g, '_')}`,
+                    likes: '31.2K',
+                    shares: '9.1K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'منذ دقيقتين',
+                  }
             );
           } else if (campaign.id === 'rival_smear_campaign') {
             newPosts.push(
-              {
-                id: `smear_${Date.now()}_1`,
-                platform: 'X',
-                authorName: 'ناقد بدون مجاملة',
-                handle: handle2,
-                content: `خيبة أمل كبيرة في مستوى «${rivalFilmTitle}» التابع لشركة «${rivalStudio}».. استسهال واضح في الكتابة ومط وتطويل أفقد الجمهور حماسه للعمل! 👎`,
-                hashtag: `#سقوط_${rivalTag}`,
-                likes: '41.6K',
-                shares: '16.3K',
-                sentiment: 'rival_attack',
-                timestampLabel: 'الآن · جدل واسع',
-              },
-              {
-                id: `smear_${Date.now()}_2`,
-                platform: 'TikTok',
-                authorName: 'كواليس السوشيال',
-                handle: handle3,
-                content: `تراجع ملحوظ في إقبال الجمهور على «${rivalFilmTitle}» أمام زخم أعمال «${state.studioName}» هذا الأسبوع 📉`,
-                hashtag: `#مقارنة_الموسم`,
-                likes: '118K',
-                shares: '22.4K',
-                sentiment: 'rival_attack',
-                timestampLabel: 'الآن · تيك توك',
-              }
+              isEn
+                ? {
+                    id: `smear_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: 'Unfiltered Film Critic',
+                    handle: handle2,
+                    content: `Huge letdown from "${rivalFilmTitle}" by ${rivalStudio} — lazy writing and bloated pacing killed all audience excitement!`,
+                    hashtag: `#${rivalTag}_Flop`,
+                    likes: '41.6K',
+                    shares: '16.3K',
+                    sentiment: 'rival_attack',
+                    timestampLabel: 'Just now · Heated Debate',
+                  }
+                : {
+                    id: `smear_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: 'ناقد بدون مجاملة',
+                    handle: handle2,
+                    content: `خيبة أمل كبيرة في مستوى «${rivalFilmTitle}» التابع لشركة «${rivalStudio}».. استسهال واضح في الكتابة ومط وتطويل أفقد الجمهور حماسه للعمل! 👎`,
+                    hashtag: `#سقوط_${rivalTag}`,
+                    likes: '41.6K',
+                    shares: '16.3K',
+                    sentiment: 'rival_attack',
+                    timestampLabel: 'الآن · جدل واسع',
+                  },
+              isEn
+                ? {
+                    id: `smear_${Date.now()}_2`,
+                    platform: 'TikTok',
+                    authorName: 'Social Buzz Insider',
+                    handle: handle3,
+                    content: `Sharp attendance drop for "${rivalFilmTitle}" as crowds flock to ${state.studioName}'s slate this week.`,
+                    hashtag: '#SeasonShowdown',
+                    likes: '118K',
+                    shares: '22.4K',
+                    sentiment: 'rival_attack',
+                    timestampLabel: 'Just now · TikTok',
+                  }
+                : {
+                    id: `smear_${Date.now()}_2`,
+                    platform: 'TikTok',
+                    authorName: 'كواليس السوشيال',
+                    handle: handle3,
+                    content: `تراجع ملحوظ في إقبال الجمهور على «${rivalFilmTitle}» أمام زخم أعمال «${state.studioName}» هذا الأسبوع 📉`,
+                    hashtag: `#مقارنة_الموسم`,
+                    likes: '118K',
+                    shares: '22.4K',
+                    sentiment: 'rival_attack',
+                    timestampLabel: 'الآن · تيك توك',
+                  }
             );
           } else {
-            newPosts.push({
-              id: `vip_${Date.now()}_1`,
-              platform: 'X',
-              authorName: `رابطة نقاد السينما — ${aiCtx.countryLabel}`,
-              handle: handle2,
-              content: `إشادات نقدية واسعة بعد العرض الخاص لـ «${activeProjectTitle}» من إنتاج «${state.studioName}»؛ تكامل بصري ودرامي يضعه في صدارة ترشيحات جوائز العام 🏆🎬`,
-              hashtag: `#${cleanTag}`,
-              likes: '38.9K',
-              shares: '11.2K',
-              sentiment: 'viral_boost',
-              timestampLabel: 'الآن · عرض النقاد الخاص',
-            });
+            newPosts.push(
+              isEn
+                ? {
+                    id: `vip_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: `Film Critics Guild — ${countryLabelLoc}`,
+                    handle: handle2,
+                    content: `Rave reviews following the VIP critics screening of "${activeProjectTitle}" from ${state.studioName} — visual and dramatic mastery puts it squarely in awards contention.`,
+                    hashtag: `#${cleanTag}`,
+                    likes: '38.9K',
+                    shares: '11.2K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'Just now · VIP Critics Screening',
+                  }
+                : {
+                    id: `vip_${Date.now()}_1`,
+                    platform: 'X',
+                    authorName: `رابطة نقاد السينما — ${aiCtx.countryLabel}`,
+                    handle: handle2,
+                    content: `إشادات نقدية واسعة بعد العرض الخاص لـ «${activeProjectTitle}» من إنتاج «${state.studioName}»؛ تكامل بصري ودرامي يضعه في صدارة ترشيحات جوائز العام 🏆🎬`,
+                    hashtag: `#${cleanTag}`,
+                    likes: '38.9K',
+                    shares: '11.2K',
+                    sentiment: 'viral_boost',
+                    timestampLabel: 'الآن · عرض النقاد الخاص',
+                  }
+            );
           }
         }
 
@@ -2752,22 +3081,28 @@ export const useGameStore = create<NeelyoGameState>()(
                 totalGrossRevenue: nextLast.totalGrossRevenue + revBoost,
                 targetGrossRevenue: (nextLast.targetGrossRevenue || nextLast.totalGrossRevenue) + revBoost,
                 netProfit: nextLast.netProfit + revBoost,
-                viralTrendLabel: `#${cleanTag} يكتسح السوشيال ميديا بدعم اللجان 🔥`,
+                viralTrendLabel: isEn
+                  ? `#${cleanTag} sweeps social media with viral hype`
+                  : `#${cleanTag} يكتسح السوشيال ميديا بدعم اللجان 🔥`,
               };
             }
           } else if (campaign.id === 'rival_rumor_trolls') {
-            const prevRival = nextCompDelta[rivalStudio] || {
+            const prevRival = nextCompDelta[rawRivalStudio] || {
               netWorthDelta: 0,
               releasesDelta: 0,
               awardsDelta: 0,
             };
-            nextCompDelta[rivalStudio] = {
+            nextCompDelta[rawRivalStudio] = {
               ...prevRival,
               netWorthDelta: prevRival.netWorthDelta - 35_000_000,
             };
             if (nextLast) {
               const updatedRivals = nextLast.rivalReleases.map((r) => {
-                if (r.studioName === rivalStudio || r.title === rivalFilmTitle) {
+                if (
+                  r.studioName === rawRivalStudio ||
+                  r.studioName === rivalStudio ||
+                  r.title === rivalFilmTitle
+                ) {
                   const reducedRev = Math.max(
                     16_000_000,
                     Math.round(r.boxOfficeRevenue * 0.82)
@@ -2808,7 +3143,9 @@ export const useGameStore = create<NeelyoGameState>()(
                 totalGrossRevenue: nextLast.totalGrossRevenue + revBoost,
                 targetGrossRevenue: (nextLast.targetGrossRevenue || nextLast.totalGrossRevenue) + revBoost,
                 netProfit: nextLast.netProfit + revBoost,
-                viralTrendLabel: `#${cleanTag} يتصدر تيك توك بملايين المشاهدات 🔥`,
+                viralTrendLabel: isEn
+                  ? `#${cleanTag} dominates TikTok with millions of views`
+                  : `#${cleanTag} يتصدر تيك توك بملايين المشاهدات 🔥`,
               };
             }
           } else if (campaign.id === 'x_hashtag_storm') {
@@ -2823,22 +3160,28 @@ export const useGameStore = create<NeelyoGameState>()(
                 totalGrossRevenue: nextLast.totalGrossRevenue + revBoost,
                 targetGrossRevenue: (nextLast.targetGrossRevenue || nextLast.totalGrossRevenue) + revBoost,
                 netProfit: nextLast.netProfit + revBoost,
-                viralTrendLabel: `#${cleanTag} تريند رقم #1 على منصة X 🚀`,
+                viralTrendLabel: isEn
+                  ? `#${cleanTag} trending #1 on X`
+                  : `#${cleanTag} تريند رقم #1 على منصة X 🚀`,
               };
             }
           } else if (campaign.id === 'rival_smear_campaign') {
-            const prevRival = nextCompDelta[rivalStudio] || {
+            const prevRival = nextCompDelta[rawRivalStudio] || {
               netWorthDelta: 0,
               releasesDelta: 0,
               awardsDelta: 0,
             };
-            nextCompDelta[rivalStudio] = {
+            nextCompDelta[rawRivalStudio] = {
               ...prevRival,
               netWorthDelta: prevRival.netWorthDelta - 48_000_000,
             };
             if (nextLast) {
               const updatedRivals = nextLast.rivalReleases.map((r) => {
-                if (r.studioName === rivalStudio || r.title === rivalFilmTitle) {
+                if (
+                  r.studioName === rawRivalStudio ||
+                  r.studioName === rivalStudio ||
+                  r.title === rivalFilmTitle
+                ) {
                   const reducedRev = Math.max(
                     18_000_000,
                     Math.round(r.boxOfficeRevenue * 0.78)
@@ -2911,7 +3254,9 @@ export const useGameStore = create<NeelyoGameState>()(
               20
             ),
             aiMemoryLog: [
-              `أطلقت شركة "${cur.studioName}" حملة (${campaign.title}) بتكلفة ${formatMoney(campaign.cost)} ${curLabel} على منصات التواصل الاجتماعي.`,
+              isEn
+                ? `${cur.studioName} launched PR campaign "${campaignDisplayTitle}" (${formatMoney(campaign.cost)} ${curLabel}) across social platforms.`
+                : `أطلقت شركة "${cur.studioName}" حملة (${campaign.title}) بتكلفة ${formatMoney(campaign.cost)} ${curLabel} على منصات التواصل الاجتماعي.`,
               ...(cur.aiMemoryLog || []),
             ].slice(0, 25),
           };
@@ -2919,9 +3264,11 @@ export const useGameStore = create<NeelyoGameState>()(
 
         get().showToast(
           aiOfficialStatement ||
-            `تم إطلاق «${campaign.title}» وتصدر المشهد على منصات التواصل!`,
+            (isEn
+              ? `Launched "${campaignDisplayTitle}" — dominating social feeds now!`
+              : `تم إطلاق «${campaign.title}» وتصدر المشهد على منصات التواصل!`),
           'success',
-          campaign.impactSummary
+          campaignDisplayImpact
         );
         return true;
       },
@@ -2999,11 +3346,21 @@ export const useGameStore = create<NeelyoGameState>()(
       initializeStudio: ({ studioName, ceoName, logo, founderPerk, region }) => {
         set((state) => {
           const profile = getMarketProfile(state.worldMarket);
+          const isEn = state.uiLanguage === 'en';
           const primaryReg = region || profile.primaryRegion;
-          const curLabel = profile.currencyLabel;
+          const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
           const isContinuingSameWorld = state.gameDay > 1;
-          const cleanStudio = studioName.trim() || profile.defaultStudioName;
-          const cleanCeo = ceoName.trim() || 'المدير التنفيذي';
+          const cleanStudio =
+            studioName.trim() ||
+            (isEn
+              ? state.worldMarket === 'saudi'
+                ? 'Al-Qimmah Pictures'
+                : 'Scorpion Studios'
+              : profile.defaultStudioName);
+          const cleanCeo =
+            ceoName.trim() || (isEn ? 'Chief Executive' : 'المدير التنفيذي');
+          const marketCountryEn =
+            state.worldMarket === 'saudi' ? 'Saudi Arabia' : 'Egypt';
           return {
             hasSelectedMarket: true,
             studioCreated: true,
@@ -3039,7 +3396,9 @@ export const useGameStore = create<NeelyoGameState>()(
               ? [
                   {
                     year: state.currentYear,
-                    eventText: `عودة مدوية للسوق: تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} بسيولة 75M ${curLabel} في نفس العالم السينمائي لعام ${state.currentYear}.`,
+                    eventText: isEn
+                      ? `Dramatic comeback: founded "${cleanStudio}" led by ${cleanCeo} with 75M ${curLabel} in the ${state.currentYear} cinema market.`
+                      : `عودة مدوية للسوق: تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} بسيولة 75M ${curLabel} في نفس العالم السينمائي لعام ${state.currentYear}.`,
                     category: 'milestone',
                   },
                   ...state.worldHistory,
@@ -3047,17 +3406,23 @@ export const useGameStore = create<NeelyoGameState>()(
               : [
                   {
                     year: 2026,
-                    eventText: `تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} في سوق ${profile.countryNameAr} بسيولة خزينة 75M ${curLabel} وقيمة سوقية 110M ${curLabel}.`,
+                    eventText: isEn
+                      ? `Founded "${cleanStudio}" led by ${cleanCeo} in ${marketCountryEn} with 75M ${curLabel} cash and 110M ${curLabel} valuation.`
+                      : `تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} في سوق ${profile.countryNameAr} بسيولة خزينة 75M ${curLabel} وقيمة سوقية 110M ${curLabel}.`,
                     category: 'milestone',
                   },
                 ],
             aiMemoryLog: isContinuingSameWorld
               ? [
-                  `أسس المنتج ${cleanCeo} شركة جديدة باسم "${cleanStudio}" بسيولة 75M ${curLabel} في عام ${state.currentYear} بعد بيع شركته السابقة للمستثمرين.`,
+                  isEn
+                    ? `Producer ${cleanCeo} founded "${cleanStudio}" with 75M ${curLabel} in ${state.currentYear} after selling their previous studio.`
+                    : `أسس المنتج ${cleanCeo} شركة جديدة باسم "${cleanStudio}" بسيولة 75M ${curLabel} في عام ${state.currentYear} بعد بيع شركته السابقة للمستثمرين.`,
                   ...(state.aiMemoryLog || []),
                 ].slice(0, 25)
               : [
-                  `أسس المنتج ${cleanCeo} شركة "${cleanStudio}" في عالم ${profile.marketHeadline} بسيولة خزينة 75M ${curLabel} وقيمة سوقية ابتدائية 110M ${curLabel}.`,
+                  isEn
+                    ? `Producer ${cleanCeo} launched "${cleanStudio}" in the ${marketCountryEn} cinema market with 75M ${curLabel} treasury and 110M ${curLabel} valuation.`
+                    : `أسس المنتج ${cleanCeo} شركة "${cleanStudio}" في عالم ${profile.marketHeadline} بسيولة خزينة 75M ${curLabel} وقيمة سوقية ابتدائية 110M ${curLabel}.`,
                 ],
           };
         });
@@ -3066,18 +3431,27 @@ export const useGameStore = create<NeelyoGameState>()(
           amountDelta: 0,
           previousCash: 75_000_000,
           expectedNewCash: 75_000_000,
-          itemLabel: 'تأسيس استوديو جديد',
+          itemLabel: get().uiLanguage === 'en' ? 'New Studio Founded' : 'تأسيس استوديو جديد',
         });
       },
 
       quickStartDemoStudio: () =>
         set((state) => {
           const profile = getMarketProfile(state.worldMarket);
+          const isEn = state.uiLanguage === 'en';
+          const defaultStudioEn =
+            state.worldMarket === 'saudi'
+              ? 'Diriyah Pictures'
+              : state.worldMarket === 'egypt'
+              ? 'Scorpion Pictures'
+              : 'Neelyo Studios';
+          const defaultCeoEn =
+            state.worldMarket === 'saudi' ? 'Fahad Al-Mansour' : 'Tarek Al-Mansour';
           return {
             hasSelectedMarket: true,
             studioCreated: true,
-            studioName: profile.defaultStudioName,
-            ceoName: profile.defaultCeoName,
+            studioName: isEn ? defaultStudioEn : profile.defaultStudioName,
+            ceoName: isEn ? defaultCeoEn : profile.defaultCeoName,
             currentRegion: profile.primaryRegion,
             unlockedRegions: [profile.primaryRegion],
             activeScreen: 'STUDIO_HUB',
@@ -3091,9 +3465,19 @@ export const useGameStore = create<NeelyoGameState>()(
         if (state.unlockedRegions.includes(region)) return true;
         const marketConfigs = getMarketConfigsForWorld(state.worldMarket);
         const primaryReg = getPrimaryMarketRegion(state.worldMarket);
-        const curLabel = getCurrencyLabel(state.worldMarket);
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
+        const isEn = state.uiLanguage === 'en';
         const cfg = marketConfigs.find((c) => c.id === region) || MARKET_CONFIGS.find((c) => c.id === region);
         if (!cfg) return false;
+        const regionLabel = isEn
+          ? region === 'egypt'
+            ? 'Egyptian Market'
+            : region === 'gulf'
+            ? 'Gulf Market'
+            : region === 'europe'
+            ? 'European Festivals Market'
+            : 'Global Hollywood Distribution'
+          : cfg.name;
 
         // If studio market value already meets the threshold, unlock for free!
         if (state.marketValue >= cfg.unlockMarketValue) {
@@ -3136,7 +3520,9 @@ export const useGameStore = create<NeelyoGameState>()(
           worldHistory: [
             {
               year: state.currentYear,
-              eventText: `افتتاح مكتب توزيع إقليمي ودولي للشركة في «${cfg.name}» باستثمار ${formatMoney(cfg.earlyLicenseCost)} ${curLabel}.`,
+              eventText: isEn
+                ? `Opened a regional distribution office in ${regionLabel} for ${formatMoney(cfg.earlyLicenseCost)} ${curLabel}.`
+                : `افتتاح مكتب توزيع إقليمي ودولي للشركة في «${cfg.name}» باستثمار ${formatMoney(cfg.earlyLicenseCost)} ${curLabel}.`,
               category: 'milestone',
             },
             ...state.worldHistory,
@@ -3148,7 +3534,9 @@ export const useGameStore = create<NeelyoGameState>()(
           previousCash: state.cash,
           expectedNewCash: nextCash,
           itemId: region,
-          itemLabel: `ترخيص مكتب توزيع: ${cfg.name}`,
+          itemLabel: isEn
+            ? `Distribution Office License: ${regionLabel}`
+            : `ترخيص مكتب توزيع: ${cfg.name}`,
         });
         return true;
       },
@@ -3193,7 +3581,8 @@ export const useGameStore = create<NeelyoGameState>()(
               yearToJudge,
               'film',
               state.worldMarket,
-              marketDirectors
+              marketDirectors,
+              state.uiLanguage
             );
             const extraSeriesRivals = generateRivalReleases(
               [...db.competitor_studios, ...state.emergingCompetitors],
@@ -3203,7 +3592,8 @@ export const useGameStore = create<NeelyoGameState>()(
               yearToJudge + 5,
               'series',
               state.worldMarket,
-              marketDirectors
+              marketDirectors,
+              state.uiLanguage
             );
             rivalsPool = [...rivalsPool, ...extraFilmRivals, ...extraSeriesRivals];
           }
@@ -3215,6 +3605,7 @@ export const useGameStore = create<NeelyoGameState>()(
             year: yearToJudge,
             db,
             worldMarket: state.worldMarket,
+            uiLanguage: state.uiLanguage,
           });
 
           const updatedProjects = state.releasedProjects.map((proj) => {
@@ -3259,6 +3650,7 @@ export const useGameStore = create<NeelyoGameState>()(
           const currentYearIndex = Math.floor((state.gameDay - 1) / DAYS_PER_GAME_YEAR);
           const nextYearStartDay = (currentYearIndex + 1) * DAYS_PER_GAME_YEAR + 1;
           const shouldAdvanceYear = state.lastAwardsGalaYear < yearToJudge;
+          const isEn = state.uiLanguage === 'en';
 
           return {
             gameDay: shouldAdvanceYear ? Math.max(state.gameDay, nextYearStartDay) : state.gameDay,
@@ -3275,7 +3667,9 @@ export const useGameStore = create<NeelyoGameState>()(
             worldHistory: [
               {
                 year: yearToJudge,
-                eventText: `إقامة الحفل السنوي لتوزيع جوائز السينما والدراما لعام ${yearToJudge} وحصد الاستوديو ${totalPlayerWon} جائزة.`,
+                eventText: isEn
+                  ? `${yearToJudge} Annual Cinema & Drama Awards Gala held — studio claimed ${totalPlayerWon} award(s).`
+                  : `إقامة الحفل السنوي لتوزيع جوائز السينما والدراما لعام ${yearToJudge} وحصد الاستوديو ${totalPlayerWon} جائزة.`,
                 category: 'award',
               },
               ...state.worldHistory,
@@ -3313,7 +3707,8 @@ export const useGameStore = create<NeelyoGameState>()(
           let nextActiveToast = state.activeToast;
 
           const db = getResolvedDatabase(state.customDbPatch, state.worldMarket);
-          const curLabel = getCurrencyLabel(state.worldMarket);
+          const isEn = state.uiLanguage === 'en';
+          const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
           const liveActors = getLiveActorsWithEvolution({
             baseActors: db.actors,
             aiGeneratedActors: nextAiActors,
@@ -3328,30 +3723,46 @@ export const useGameStore = create<NeelyoGameState>()(
           for (const key of Object.keys(updatedOffers)) {
             const offer = updatedOffers[key];
             if (offer.status === 'pending' && newGameDay >= offer.responseDueDay) {
+              const slotLabel = getLocalizedSlotLabel(offer.roleSlot, state.uiLanguage);
+              const talentDisplay = localizeEntityName(offer.talentName, state.uiLanguage);
+              const roleDisplay = offer.customRoleName || slotLabel;
+              const projTitleDisplay =
+                updatedDraft.title || (isEn ? 'Untitled Project' : 'العمل الجديد');
+
               if (!offer.willAccept) {
                 updatedOffers[key] = { ...offer, status: 'rejected' };
                 const newRejCount = (nextRejectionCounts[offer.talentId] || 0) + 1;
                 nextRejectionCounts[offer.talentId] = newRejCount;
                 nextMarketValMod -= 2_500_000;
                 updatedDraft.hypeScore = Math.max(15, updatedDraft.hypeScore - 3);
-                const headline = `اعتذر «${offer.talentName}» عن عرض دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}»`;
+                const headline = isEn
+                  ? `${talentDisplay} declined your offer for "${roleDisplay}"`
+                  : `اعتذر «${offer.talentName}» عن عرض دور «${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}»`;
                 newNewsItems.push({
                   id: `news_rej_${offer.talentId}_${newGameDay}`,
                   day: newGameDay,
                   year: newYear,
                   category: 'contract_reply',
-                  badgeLabel:
-                    newRejCount >= 2
-                      ? 'إغلاق باب التفاوض · يتطلب وساطة النقابة ⚠️'
-                      : 'رد رسمي من وكيل الأعمال · اعتذار عن التعاقد',
+                  badgeLabel: isEn
+                    ? newRejCount >= 2
+                      ? 'Talks Closed · Guild Mediation Required'
+                      : 'Official Agent Reply · Offer Declined'
+                    : newRejCount >= 2
+                    ? 'إغلاق باب التفاوض · يتطلب وساطة النقابة ⚠️'
+                    : 'رد رسمي من وكيل الأعمال · اعتذار عن التعاقد',
                   headline,
                   detail: offer.aiReason,
-                  highlightName: offer.talentName,
-                  extraStatBadge: `العرض: ${formatMoney(offer.offeredSalary)} ${curLabel}`,
-                  gameImpactLabel:
-                    newRejCount >= 2
-                      ? 'رفض العرض مرتين وأغلق باب التفاوض — يمكنك تفعيل «وساطة نقابة المهن التمثيلية (إعلان)» لفرصة أخيرة'
-                      : 'يمكنك التفاوض بشروط جديدة أو اختيار بديل آخر من القائمة',
+                  highlightName: talentDisplay,
+                  extraStatBadge: isEn
+                    ? `Offer: ${formatMoney(offer.offeredSalary)} ${curLabel}`
+                    : `العرض: ${formatMoney(offer.offeredSalary)} ${curLabel}`,
+                  gameImpactLabel: isEn
+                    ? newRejCount >= 2
+                      ? 'Declined twice and closed talks — use "Actors Guild Mediation (Ad)" for one final negotiation'
+                      : 'Revise your terms or cast an alternative talent from the roster'
+                    : newRejCount >= 2
+                    ? 'رفض العرض مرتين وأغلق باب التفاوض — يمكنك تفعيل «وساطة نقابة المهن التمثيلية (إعلان)» لفرصة أخيرة'
+                    : 'يمكنك التفاوض بشروط جديدة أو اختيار بديل آخر من القائمة',
                 });
                 nextHistory.unshift({
                   year: newYear,
@@ -3359,7 +3770,9 @@ export const useGameStore = create<NeelyoGameState>()(
                   category: 'milestone',
                 });
                 nextMemory.unshift(
-                  `رفض النجم ${offer.talentName} عرض شركة "${state.studioName}" لدور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في عمل "${updatedDraft.title || 'مشروع جديد'}".`
+                  isEn
+                    ? `${talentDisplay} declined ${state.studioName}'s offer for "${roleDisplay}" on "${projTitleDisplay}".`
+                    : `رفض النجم ${offer.talentName} عرض شركة "${state.studioName}" لدور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في عمل "${updatedDraft.title || 'مشروع جديد'}".`
                 );
               } else {
                 // Check if the crew slot is already at max capacity (e.g., 2 directors already signed, or 1 DOP/Composer/VFX already signed)
@@ -3389,28 +3802,42 @@ export const useGameStore = create<NeelyoGameState>()(
 
                 nextMarketValMod += 4_500_000;
                 updatedDraft.hypeScore = Math.min(100, updatedDraft.hypeScore + 5);
-                const headline = `وافق «${offer.talentName}» رسمياً على عقد «${updatedDraft.title || 'العمل الجديد'}» (${SLOT_ARABIC_NAMES[offer.roleSlot]})! ✓`;
+                const headline = isEn
+                  ? `${talentDisplay} officially signed for "${projTitleDisplay}" (${slotLabel})!`
+                  : `وافق «${offer.talentName}» رسمياً على عقد «${updatedDraft.title || 'العمل الجديد'}» (${SLOT_ARABIC_NAMES[offer.roleSlot]})! ✓`;
                 newNewsItems.push({
                   id: `news_acc_${offer.talentId}_${newGameDay}`,
                   day: newGameDay,
                   year: newYear,
                   category: 'contract_reply',
-                  badgeLabel: 'رد رسمي من وكيل الأعمال · قبول التعاقد ✓',
+                  badgeLabel: isEn
+                    ? 'Official Agent Reply · Contract Signed ✓'
+                    : 'رد رسمي من وكيل الأعمال · قبول التعاقد ✓',
                   headline,
                   detail: offer.aiReason,
-                  highlightName: offer.talentName,
-                  extraStatBadge: `الأجر: ${formatMoney(offer.offeredSalary)} ${curLabel}`,
-                  gameImpactLabel: exceedsCrewCapacity
+                  highlightName: talentDisplay,
+                  extraStatBadge: isEn
+                    ? `Salary: ${formatMoney(offer.offeredSalary)} ${curLabel}`
+                    : `الأجر: ${formatMoney(offer.offeredSalary)} ${curLabel}`,
+                  gameImpactLabel: isEn
+                    ? exceedsCrewCapacity
+                      ? `Multiple acceptances for ${slotLabel} — pick who joins your final roster`
+                      : `Officially attached to your production (${slotLabel})`
+                    : exceedsCrewCapacity
                     ? `وافق أكثر من العدد الأقصى لفئة (${SLOT_ARABIC_NAMES[offer.roleSlot]}) — اختر من تعتمده في الفريق النهائي`
                     : `تم اعتماده رسمياً في فريق العمل (${SLOT_ARABIC_NAMES[offer.roleSlot]})`,
                 });
                 nextHistory.unshift({
                   year: newYear,
-                  eventText: `${headline} مقابل ${formatMoney(offer.offeredSalary)} ${curLabel}.`,
+                  eventText: isEn
+                    ? `${headline} for ${formatMoney(offer.offeredSalary)} ${curLabel}.`
+                    : `${headline} مقابل ${formatMoney(offer.offeredSalary)} ${curLabel}.`,
                   category: 'milestone',
                 });
                 nextMemory.unshift(
-                  `وقّع النجم ${offer.talentName} مع شركة "${state.studioName}" بقيادة ${state.ceoName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" بأجر ${formatMoney(offer.offeredSalary)} ${curLabel}.`
+                  isEn
+                    ? `${talentDisplay} signed with ${state.studioName} (CEO ${state.ceoName}) as "${roleDisplay}" for ${formatMoney(offer.offeredSalary)} ${curLabel}.`
+                    : `وقّع النجم ${offer.talentName} مع شركة "${state.studioName}" بقيادة ${state.ceoName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" بأجر ${formatMoney(offer.offeredSalary)} ${curLabel}.`
                 );
               }
             }
@@ -3450,10 +3877,18 @@ export const useGameStore = create<NeelyoGameState>()(
               const autoNews: DailyAiNewsItem = {
                 id: `auto_bo_${workingProj.id}_d${nextDayNum}_${newGameDay}`,
                 day: newGameDay,
-                headline: isSeriesProj
+                headline: isEn
+                  ? isSeriesProj
+                    ? `Episode ${nextDayNum} of "${workingProj.title}" airs — Viewership Race Update`
+                    : `Day ${nextDayNum} Box Office Report for "${workingProj.title}"`
+                  : isSeriesProj
                   ? `عرض الحلقة ${nextDayNum} من «${workingProj.title}» وتحديث سباق المشاهدات`
                   : `تقرير اليوم ${nextDayNum} لشباك تذاكر «${workingProj.title}»`,
-                detail: isSeriesProj
+                detail: isEn
+                  ? isSeriesProj
+                    ? `New episodes continue drawing TV and streaming audiences with live daily season chart updates.`
+                    : `Strong theatrical turnout on Day ${nextDayNum} with live ranking shifts against rival releases.`
+                  : isSeriesProj
                   ? `تواصل الحلقات جذب الجمهور والمنصات الرقمية مع تحرك يومي حي في ترتيب الموسم.`
                   : `شهدت قاعات العرض إقبالاً جديداً في اليوم ${nextDayNum} مع تحديث مباشر لترتيب المنافسين.`,
                 impactType: workingProj.criticScore >= 6.8 ? 'positive' : 'rival',
@@ -3495,7 +3930,8 @@ export const useGameStore = create<NeelyoGameState>()(
               newGameDay,
               isSeriesWindow ? 'series' : 'film',
               state.worldMarket,
-              marketDirectors
+              marketDirectors,
+              state.uiLanguage
             ).map((r) => ({ ...r, year: newYear }));
 
             for (const riv of organicRivals) {
@@ -3539,6 +3975,7 @@ export const useGameStore = create<NeelyoGameState>()(
             );
             if (veteranActors.length > 0) {
               const chosenVet = veteranActors[newGameDay % veteranActors.length];
+              const vetName = localizeEntityName(chosenVet.name, state.uiLanguage);
               const isDeceased = chosenVet.age >= 74 && newGameDay % 2 === 0;
               const prevDyn = nextActorDynamic[chosenVet.id] || {
                 overallDelta: 0,
@@ -3552,10 +3989,18 @@ export const useGameStore = create<NeelyoGameState>()(
                 status: isDeceased ? 'deceased' : 'retired',
               };
 
-              const headline = isDeceased
+              const headline = isEn
+                ? isDeceased
+                  ? `Breaking: Veteran screen legend ${vetName} passes away at ${chosenVet.age}`
+                  : `Veteran star ${vetName} (${chosenVet.age}) announces retirement from acting`
+                : isDeceased
                 ? `نبأ عاجل: رحيل الفنان القدير «${chosenVet.name}» عن عمر يناهز ${chosenVet.age} عاماً`
                 : `الفنان القدير «${chosenVet.name}» (${chosenVet.age} سنة) يعلن اعتزاله التمثيل نهائياً`;
-              const detail = isDeceased
+              const detail = isEn
+                ? isDeceased
+                  ? `The entertainment industry mourns the passing of acclaimed icon ${vetName}, leaving behind an unforgettable cinematic legacy.`
+                  : `${vetName} announced a permanent retirement from film and television to widespread tribute from peers and fans.`
+                : isDeceased
                 ? `خيّم الحزن على الوسط الفني بعد إعلان وفاة الفنان القدير «${chosenVet.name}» تاركاً إرثاً خالداً في ذاكرة السينما والدراما.`
                 : `أعلن الفنان «${chosenVet.name}» اكتفاءه بمسيرته الفنية الحافلة واعتزاله العمل السينمائي والدرامي وسط تكريم واسع من صناع السينما.`;
 
@@ -3564,12 +4009,22 @@ export const useGameStore = create<NeelyoGameState>()(
                 day: newGameDay,
                 year: newYear,
                 category: isDeceased ? 'actor_deceased' : 'actor_retired',
-                badgeLabel: isDeceased ? 'خبر عاجل · الوسط الفني 🕊️' : 'خبر صحفي · اعتزال فني',
+                badgeLabel: isEn
+                  ? isDeceased
+                    ? 'Breaking · Industry Tribute'
+                    : 'Press Flash · Career Retirement'
+                  : isDeceased
+                  ? 'خبر عاجل · الوسط الفني 🕊️'
+                  : 'خبر صحفي · اعتزال فني',
                 headline,
                 detail,
-                highlightName: chosenVet.name,
-                extraStatBadge: `العمر: ${chosenVet.age} سنة`,
-                gameImpactLabel: `تأثير الخبر: خروج «${chosenVet.name}» من قائمة الممثلين المتاحين للتعاقد`,
+                highlightName: vetName,
+                extraStatBadge: isEn
+                  ? `Age: ${chosenVet.age}`
+                  : `العمر: ${chosenVet.age} سنة`,
+                gameImpactLabel: isEn
+                  ? `Market Impact: ${vetName} is no longer available for casting`
+                  : `تأثير الخبر: خروج «${chosenVet.name}» من قائمة الممثلين المتاحين للتعاقد`,
               });
               nextHistory.unshift({
                 year: newYear,
@@ -3603,7 +4058,8 @@ export const useGameStore = create<NeelyoGameState>()(
                   completedYear,
                   'film',
                   state.worldMarket,
-                  marketDirectors
+                  marketDirectors,
+                  state.uiLanguage
                 ),
                 ...generateRivalReleases(
                   [...db.competitor_studios, ...nextEmergingStudios],
@@ -3613,7 +4069,8 @@ export const useGameStore = create<NeelyoGameState>()(
                   completedYear + 3,
                   'series',
                   state.worldMarket,
-                  marketDirectors
+                  marketDirectors,
+                  state.uiLanguage
                 ),
               ];
             }
@@ -3625,6 +4082,7 @@ export const useGameStore = create<NeelyoGameState>()(
               year: completedYear,
               db,
               worldMarket: state.worldMarket,
+              uiLanguage: state.uiLanguage,
             });
 
             nextReleasedProjects = nextReleasedProjects.map((proj) => {
@@ -3666,12 +4124,16 @@ export const useGameStore = create<NeelyoGameState>()(
 
             nextHistory.unshift({
               year: completedYear,
-              eventText: `انطلاق الحفل السنوي لجوائز السينما والدراما (${completedYear}) وحصد الاستوديو ${totalPlayerWon} جوائز رسمية.`,
+              eventText: isEn
+                ? `${completedYear} Annual Awards Gala kicked off — studio won ${totalPlayerWon} official award(s).`
+                : `انطلاق الحفل السنوي لجوائز السينما والدراما (${completedYear}) وحصد الاستوديو ${totalPlayerWon} جوائز رسمية.`,
               category: 'award',
             });
             nextHistory.unshift({
               year: newYear,
-              eventText: `بداية عام سينمائي جديد (${newYear}) وتقدم أعمار جميع النجوم في السوق بعام إضافي.`,
+              eventText: isEn
+                ? `New cinema year (${newYear}) begins — every talent across the market ages by one year.`
+                : `بداية عام سينمائي جديد (${newYear}) وتقدم أعمار جميع النجوم في السوق بعام إضافي.`,
               category: 'milestone',
             });
           }
@@ -3697,12 +4159,22 @@ export const useGameStore = create<NeelyoGameState>()(
                 day: newGameDay,
                 year: newYear,
                 category: 'production_news',
-                badgeLabel: 'إنذار إفلاس رسمي · مهلة سداد 3 أشهر ⚠️',
-                headline: `خزينة «${state.studioName}» تسجل عجزاً مالياً والبنوك تمنح مهلة 3 أشهر قبل التصفية!`,
-                detail: `وصل رصيد السيولة في الخزينة إلى (${formatMoney(nextCash)} ${curLabel}). أمامك مهلة 3 أشهر (30 يوماً في التقويم) لتسديد المديونية أو الحصول على «تمويل إنقاذ من مستثمر (مقابل إعلان)»، وإلا ستُجبر على بيع الشركة وتصفيتها!`,
+                badgeLabel: isEn
+                  ? 'Official Bankruptcy Notice · 3-Month Grace Period'
+                  : 'إنذار إفلاس رسمي · مهلة سداد 3 أشهر ⚠️',
+                headline: isEn
+                  ? `${state.studioName} treasury hits deficit — banks issue a 3-month liquidation warning!`
+                  : `خزينة «${state.studioName}» تسجل عجزاً مالياً والبنوك تمنح مهلة 3 أشهر قبل التصفية!`,
+                detail: isEn
+                  ? `Your cash balance dropped to (${formatMoney(nextCash)} ${curLabel}). You have 30 game days (3 months) to cover the debt or activate an Emergency Investor Bailout before forced liquidation.`
+                  : `وصل رصيد السيولة في الخزينة إلى (${formatMoney(nextCash)} ${curLabel}). أمامك مهلة 3 أشهر (30 يوماً في التقويم) لتسديد المديونية أو الحصول على «تمويل إنقاذ من مستثمر (مقابل إعلان)»، وإلا ستُجبر على بيع الشركة وتصفيتها!`,
                 highlightName: state.studioName,
-                extraStatBadge: `العجز: ${formatMoney(Math.abs(nextCash))} ${curLabel}`,
-                gameImpactLabel: 'احصل على تمويل إنقاذ فوري من مستثمر أو حقق إيرادات قبل انتهاء المهلة',
+                extraStatBadge: isEn
+                  ? `Deficit: ${formatMoney(Math.abs(nextCash))} ${curLabel}`
+                  : `العجز: ${formatMoney(Math.abs(nextCash))} ${curLabel}`,
+                gameImpactLabel: isEn
+                  ? 'Activate an emergency investor bailout or earn revenue before the deadline'
+                  : 'احصل على تمويل إنقاذ فوري من مستثمر أو حقق إيرادات قبل انتهاء المهلة',
               });
             } else if (newGameDay >= nextBankruptcyDeadline) {
               nextIsBankruptLiquidated = true;
@@ -3765,8 +4237,13 @@ export const useGameStore = create<NeelyoGameState>()(
             releasedProjects: state.releasedProjects,
             marketValueModifier: state.marketValueModifier || 0,
           });
-          const curLabel = getCurrencyLabel(state.worldMarket);
-          const memoryEntry = `أرسلت شركة "${state.studioName}" عرض تعاقد إلى ${offer.talentName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في «${state.draft.title || 'عمل جديد'}» بأجر ${formatMoney(offer.offeredSalary)} ${curLabel} ونسبة أرباح ${offer.backendPoints}% (الرد في اليوم ${offer.responseDueDay}).`;
+          const isEn = state.uiLanguage === 'en';
+          const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
+          const slotLabel = getLocalizedSlotLabel(offer.roleSlot, state.uiLanguage);
+          const talentDisplay = localizeEntityName(offer.talentName, state.uiLanguage);
+          const memoryEntry = isEn
+            ? `${state.studioName} sent a contract offer to ${talentDisplay} for "${offer.customRoleName || slotLabel}" on "${state.draft.title || 'New Project'}" (${formatMoney(offer.offeredSalary)} ${curLabel}, ${offer.backendPoints}% backend; reply due Day ${offer.responseDueDay}).`
+            : `أرسلت شركة "${state.studioName}" عرض تعاقد إلى ${offer.talentName} لأداء دور "${offer.customRoleName || SLOT_ARABIC_NAMES[offer.roleSlot]}" في «${state.draft.title || 'عمل جديد'}» بأجر ${formatMoney(offer.offeredSalary)} ${curLabel} ونسبة أرباح ${offer.backendPoints}% (الرد في اليوم ${offer.responseDueDay}).`;
           return {
             cash: nextCash,
             marketValue: nextMarketVal,
@@ -3787,7 +4264,10 @@ export const useGameStore = create<NeelyoGameState>()(
             previousCash: prevCash,
             expectedNewCash: Math.max(0, prevCash - dinnerFee),
             itemId: offer.talentId,
-            itemLabel: `عشاء عمل وتفاوض مع ${offer.talentName}`,
+            itemLabel:
+              get().uiLanguage === 'en'
+                ? `VIP Business Dinner with ${localizeEntityName(offer.talentName, 'en')}`
+                : `عشاء عمل وتفاوض مع ${offer.talentName}`,
           });
         }
       },
@@ -3813,7 +4293,9 @@ export const useGameStore = create<NeelyoGameState>()(
                   activeToast: {
                     id: `toast_dir_limit_${Date.now()}`,
                     message:
-                      'الحد الأقصى لفريق الإخراج هو مخرجان اثنان فقط (من 1 إلى 2)! ألغِ اعتماد أحد المخرجين أولاً لاختيار مخرج آخر.',
+                      state.uiLanguage === 'en'
+                        ? 'Maximum directing team is 2 directors (1 to 2)! Deselect one director first to pick another.'
+                        : 'الحد الأقصى لفريق الإخراج هو مخرجان اثنان فقط (من 1 إلى 2)! ألغِ اعتماد أحد المخرجين أولاً لاختيار مخرج آخر.',
                     type: 'warning',
                   },
                 };
@@ -4154,6 +4636,9 @@ export const useGameStore = create<NeelyoGameState>()(
 
             const currentOvr = baseActor.stats.overall + prev.overallDelta;
 
+            const isEn = state.uiLanguage === 'en';
+            const actorDisplay = localizeEntityName(baseActor.name, state.uiLanguage);
+
             if (isMajorHit) {
               const isBreakoutCandidate = currentOvr < 82;
               const boostOvr = isBreakoutCandidate ? 5 : 2;
@@ -4170,7 +4655,9 @@ export const useGameStore = create<NeelyoGameState>()(
                 pullDelta: prev.pullDelta + boostOvr + 1,
                 salaryMultiplier: Number((prev.salaryMultiplier * salaryBoost).toFixed(2)),
                 tierOverride: newTier,
-                lastEvolutionNote: `تطور البطاقة (+${boostOvr}) بعد نجاح «${record.title}»`,
+                lastEvolutionNote: isEn
+                  ? `Card upgrade (+${boostOvr}) after the hit "${record.title}"`
+                  : `تطور البطاقة (+${boostOvr}) بعد نجاح «${record.title}»`,
               };
 
               if (isBreakoutCandidate) {
@@ -4179,12 +4666,22 @@ export const useGameStore = create<NeelyoGameState>()(
                   day: state.gameDay,
                   year: state.currentYear,
                   category: 'actor_evolution',
-                  badgeLabel: 'انفجار موهبة وتطور بطاقة ممثل 🔥',
-                  headline: `تحول «${baseActor.name}» إلى نجم شباك بعد تألقه في «${record.title}»!`,
-                  detail: `بفضل السيناريو المتقن والنجاح النقدي والجماهيري لـ «${record.title}»، قفزت طاقة بطاقة الممثل «${baseActor.name}» بمقدار (+${boostOvr} نقاط) ليصل إلى تقييم ${newOvr} (فئة ${newTier})، وارتفع أجره السوقي وسط تهافت الشركات المنافسة عليه!`,
-                  highlightName: baseActor.name,
-                  extraStatBadge: `التقييم الجديد: ${newOvr} (+${boostOvr}) · فئة ${newTier}`,
-                  gameImpactLabel: `تأثير الحدث: ترقية بطاقة «${baseActor.name}» إلى الفئة ${newTier}`,
+                  badgeLabel: isEn
+                    ? 'Breakout Star · Card Upgrade'
+                    : 'انفجار موهبة وتطور بطاقة ممثل 🔥',
+                  headline: isEn
+                    ? `${actorDisplay} rockets to box-office stardom after "${record.title}"!`
+                    : `تحول «${baseActor.name}» إلى نجم شباك بعد تألقه في «${record.title}»!`,
+                  detail: isEn
+                    ? `Following the critical and commercial triumph of "${record.title}", ${actorDisplay} surged by +${boostOvr} OVR to ${newOvr} (Tier ${newTier}), sparking a bidding war across rival studios!`
+                    : `بفضل السيناريو المتقن والنجاح النقدي والجماهيري لـ «${record.title}»، قفزت طاقة بطاقة الممثل «${baseActor.name}» بمقدار (+${boostOvr} نقاط) ليصل إلى تقييم ${newOvr} (فئة ${newTier})، وارتفع أجره السوقي وسط تهافت الشركات المنافسة عليه!`,
+                  highlightName: actorDisplay,
+                  extraStatBadge: isEn
+                    ? `New Rating: ${newOvr} (+${boostOvr}) · Tier ${newTier}`
+                    : `التقييم الجديد: ${newOvr} (+${boostOvr}) · فئة ${newTier}`,
+                  gameImpactLabel: isEn
+                    ? `Card Impact: ${actorDisplay} promoted to Tier ${newTier}`
+                    : `تأثير الحدث: ترقية بطاقة «${baseActor.name}» إلى الفئة ${newTier}`,
                 });
               }
             } else if (isFlop) {
@@ -4201,7 +4698,9 @@ export const useGameStore = create<NeelyoGameState>()(
                 pullDelta: prev.pullDelta - 3,
                 salaryMultiplier: Number(Math.max(0.65, prev.salaryMultiplier * 0.88).toFixed(2)),
                 tierOverride: newTier,
-                lastEvolutionNote: `هبوط البطاقة (${dropOvr}) بعد تعثر «${record.title}»`,
+                lastEvolutionNote: isEn
+                  ? `Card drop (${dropOvr}) after "${record.title}" underperformed`
+                  : `هبوط البطاقة (${dropOvr}) بعد تعثر «${record.title}»`,
               };
             }
           }
@@ -4245,8 +4744,12 @@ export const useGameStore = create<NeelyoGameState>()(
             };
           }
 
+          const isEnRelease = state.uiLanguage === 'en';
+          const releaseCurLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
           const nextMemory = [
-            `طرحت شركة "${state.studioName}" بقيادة ${state.ceoName} ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بتكلفة ${formatMoney(record.totalBudget)} ${curLabel} وحقق إجمالي إيرادات ${formatMoney(record.totalGrossRevenue)} ${curLabel} (صافي الربح: ${formatMoney(record.netProfit)} ${curLabel}) والمركز #${record.boxOfficeRank} في الموسم وتقييم نقاد ${record.criticScore}/10.`,
+            isEnRelease
+              ? `${state.studioName} (CEO ${state.ceoName}) released ${record.format === 'film' ? 'film' : 'series'} "${record.title}" (Budget: ${formatMoney(record.totalBudget)} ${releaseCurLabel}, Gross: ${formatMoney(record.totalGrossRevenue)} ${releaseCurLabel}, Net: ${formatMoney(record.netProfit)} ${releaseCurLabel}, Rank #${record.boxOfficeRank}, Critics ${record.criticScore}/10).`
+              : `طرحت شركة "${state.studioName}" بقيادة ${state.ceoName} ${record.format === 'film' ? 'فيلم' : 'مسلسل'} "${record.title}" بتكلفة ${formatMoney(record.totalBudget)} ${releaseCurLabel} وحقق إجمالي إيرادات ${formatMoney(record.totalGrossRevenue)} ${releaseCurLabel} (صافي الربح: ${formatMoney(record.netProfit)} ${releaseCurLabel}) والمركز #${record.boxOfficeRank} في الموسم وتقييم نقاد ${record.criticScore}/10.`,
             ...(state.aiMemoryLog || []),
           ].slice(0, 25);
 
@@ -4290,7 +4793,9 @@ export const useGameStore = create<NeelyoGameState>()(
             worldHistory: [
               {
                 year: state.currentYear,
-                eventText: `طرح ${finalRecord.format === 'film' ? 'فيلم' : 'مسلسل'} "${finalRecord.title}" بإيرادات ${formatMoney(finalRecord.totalGrossRevenue)} ${curLabel} (المركز #${finalRecord.boxOfficeRank}) وتقييم نقاد ${finalRecord.criticScore}/10.`,
+                eventText: isEnRelease
+                  ? `Released ${finalRecord.format === 'film' ? 'film' : 'series'} "${finalRecord.title}" — ${formatMoney(finalRecord.totalGrossRevenue)} ${releaseCurLabel} gross (Rank #${finalRecord.boxOfficeRank}, Critics ${finalRecord.criticScore}/10).`
+                  : `طرح ${finalRecord.format === 'film' ? 'فيلم' : 'مسلسل'} "${finalRecord.title}" بإيرادات ${formatMoney(finalRecord.totalGrossRevenue)} ${releaseCurLabel} (المركز #${finalRecord.boxOfficeRank}) وتقييم نقاد ${finalRecord.criticScore}/10.`,
                 category: 'release',
               },
               ...state.worldHistory,
@@ -4442,12 +4947,17 @@ export const useGameStore = create<NeelyoGameState>()(
         const targetProj = state.releasedProjects.find((p) => p.id === projectId);
         if (!targetProj || targetProj.trollsCampaigned) return;
 
-        const curLabel = getCurrencyLabel(state.worldMarket);
+        const isEn = state.uiLanguage === 'en';
+        const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
         if (state.cash < TROLLS_CAMPAIGN_COST) {
           state.showToast(
-            'السيولة لا تكفي لإطلاق حملة التريند الإلكتروني!',
+            isEn
+              ? 'Not enough cash to launch the viral trend campaign!'
+              : 'السيولة لا تكفي لإطلاق حملة التريند الإلكتروني!',
             'warning',
-            `تحتاج إلى ${formatMoney(TROLLS_CAMPAIGN_COST)} ${curLabel} من الخزينة لتنفيذ الحملة.`
+            isEn
+              ? `You need ${formatMoney(TROLLS_CAMPAIGN_COST)} ${curLabel} in treasury to fund this campaign.`
+              : `تحتاج إلى ${formatMoney(TROLLS_CAMPAIGN_COST)} ${curLabel} من الخزينة لتنفيذ الحملة.`
           );
           return;
         }
@@ -4467,7 +4977,9 @@ export const useGameStore = create<NeelyoGameState>()(
             targetGrossRevenue: boostedTargetRev,
             netProfit: p.netProfit + bonusRev - TROLLS_CAMPAIGN_COST,
             trollsCampaigned: true,
-            viralTrendLabel: 'تريند رقم #1 بعد حملة ترويجية واسعة!',
+            viralTrendLabel: isEn
+              ? '#1 Trending after a massive viral push!'
+              : 'تريند رقم #1 بعد حملة ترويجية واسعة!',
           };
         });
         const updatedLast =
@@ -4495,11 +5007,15 @@ export const useGameStore = create<NeelyoGameState>()(
           previousCash: state.cash,
           expectedNewCash: nextCash,
           itemId: projectId,
-          itemLabel: `عوائد حملة التريند لـ ${targetProj.title}`,
+          itemLabel: isEn
+            ? `Viral Push Returns: ${targetProj.title}`
+            : `عوائد حملة التريند لـ ${targetProj.title}`,
         });
 
         get().showToast(
-          `تم إطلاق حملة التريند لـ «${targetProj.title}» (-2M تكلفة · +${formatMoney(bonusRev)} ${curLabel} عوائد)`,
+          isEn
+            ? `Viral social push launched for "${targetProj.title}" (-2M cost · +${formatMoney(bonusRev)} ${curLabel} gross)`
+            : `تم إطلاق حملة التريند لـ «${targetProj.title}» (-2M تكلفة · +${formatMoney(bonusRev)} ${curLabel} عوائد)`,
           'success'
         );
       },
@@ -4514,6 +5030,7 @@ export const useGameStore = create<NeelyoGameState>()(
 
       recordFestivalAwards: (festivalName, awards, winningActorIds) =>
         set((state) => {
+          const isEn = state.uiLanguage === 'en';
           const updatedCounts = { ...state.actorAwardCounts };
           for (const actorId of winningActorIds) {
             updatedCounts[actorId] = (updatedCounts[actorId] || 0) + 1;
@@ -4545,7 +5062,9 @@ export const useGameStore = create<NeelyoGameState>()(
             worldHistory: [
               {
                 year: state.currentYear,
-                eventText: `في ${festivalName}: حصد الاستوديو ${awards.length} جوائز (${awards.join('، ')}).`,
+                eventText: isEn
+                  ? `At ${localizeEntityName(festivalName, 'en')}: Studio won ${awards.length} award(s) (${awards.join(', ')}).`
+                  : `في ${festivalName}: حصد الاستوديو ${awards.length} جوائز (${awards.join('، ')}).`,
                 category: 'award',
               },
               ...state.worldHistory,
@@ -4583,26 +5102,36 @@ export const useGameStore = create<NeelyoGameState>()(
           if (state.aiGeneratedActors.some((a) => a.name === actor.name)) {
             return state;
           }
+          const isEn = state.uiLanguage === 'en';
           const cleanActor: ActorItem = {
             ...actor,
             isAiGenerated: false,
             lastEvolutionNote: undefined,
           };
+          const actorNameDisplay = localizeEntityName(cleanActor.name, state.uiLanguage);
           const newsItem: WorldBreakingNewsModalItem = {
             id: `ai_star_${cleanActor.id}_${Date.now()}`,
             day: state.gameDay,
             year: state.currentYear,
             category: 'rising_talent',
-            badgeLabel: 'اكتشاف سينمائي جديد ⭐',
+            badgeLabel: isEn ? 'New Rising Talent' : 'اكتشاف سينمائي جديد ⭐',
             headline:
               newsHeadline ||
-              `تألق الوجه السينمائي الجديد «${cleanActor.name}» وانضمامه لبورصة النجوم!`,
+              (isEn
+                ? `Rising face ${actorNameDisplay} breaks onto the star roster!`
+                : `تألق الوجه السينمائي الجديد «${cleanActor.name}» وانضمامه لبورصة النجوم!`),
             detail:
               newsDetail ||
-              `لفت الفنان الشاب «${cleanActor.name}» (${cleanActor.age} سنة) أنظار صناع السينما والدراما بفضل حضوره القوي، وأصبح متاحاً الآن للتعاقد في سوق الممثلين.`,
-            highlightName: cleanActor.name,
-            extraStatBadge: `تقييم ${cleanActor.stats.overall} · العمر ${cleanActor.age} سنة`,
-            gameImpactLabel: `تأثير الخبر: انضمام «${cleanActor.name}» رسمياً لسوق الممثلين`,
+              (isEn
+                ? `Young performer ${actorNameDisplay} (Age ${cleanActor.age}) caught producers' attention with commanding screen presence and is now open for casting offers.`
+                : `لفت الفنان الشاب «${cleanActor.name}» (${cleanActor.age} سنة) أنظار صناع السينما والدراما بفضل حضوره القوي، وأصبح متاحاً الآن للتعاقد في سوق الممثلين.`),
+            highlightName: actorNameDisplay,
+            extraStatBadge: isEn
+              ? `OVR ${cleanActor.stats.overall} · Age ${cleanActor.age}`
+              : `تقييم ${cleanActor.stats.overall} · العمر ${cleanActor.age} سنة`,
+            gameImpactLabel: isEn
+              ? `Market Update: ${actorNameDisplay} is now available on the casting market`
+              : `تأثير الخبر: انضمام «${cleanActor.name}» رسمياً لسوق الممثلين`,
           };
           return {
             aiGeneratedActors: [cleanActor, ...state.aiGeneratedActors],
@@ -4616,7 +5145,9 @@ export const useGameStore = create<NeelyoGameState>()(
               ...state.worldHistory,
             ],
             aiMemoryLog: [
-              `ظهر الفنان الشاب الجديد "${cleanActor.name}" (${cleanActor.age} سنة) في الساحة الفنية بتقييم ${cleanActor.stats.overall}.`,
+              isEn
+                ? `Rising actor "${actorNameDisplay}" (Age ${cleanActor.age}) debuted on the talent market at ${cleanActor.stats.overall} OVR.`
+                : `ظهر الفنان الشاب الجديد "${cleanActor.name}" (${cleanActor.age} سنة) في الساحة الفنية بتقييم ${cleanActor.stats.overall}.`,
               ...(state.aiMemoryLog || []),
             ].slice(0, 25),
           };
@@ -4627,30 +5158,46 @@ export const useGameStore = create<NeelyoGameState>()(
           if (state.emergingCompetitors.some((s) => s.name === studio.name)) {
             return state;
           }
+          const isEn = state.uiLanguage === 'en';
           const enrichedStudio: CompetitorStudio = {
             ...studio,
-            ceoName: studio.ceoName || (studio as unknown as { ceo?: string }).ceo || 'منتج سينمائي',
+            ceoName:
+              studio.ceoName ||
+              (studio as unknown as { ceo?: string }).ceo ||
+              (isEn ? 'Film Producer' : 'منتج سينمائي'),
             isEmergingStudio: true,
             foundedYear: state.currentYear,
           };
+          const studioDisp = localizeEntityName(enrichedStudio.name, state.uiLanguage);
+          const ceoDisp = localizeEntityName(enrichedStudio.ceoName || '', state.uiLanguage);
           const headline =
             newsHeadline ||
-            `منافس جديد في السوق: تدشين شركة «${enrichedStudio.name}» بقيادة ${enrichedStudio.ceoName}!`;
+            (isEn
+              ? `New Market Rival: ${studioDisp} launches under ${ceoDisp}!`
+              : `منافس جديد في السوق: تدشين شركة «${enrichedStudio.name}» بقيادة ${enrichedStudio.ceoName}!`);
           const detail =
             newsDetail ||
-            `دخلت شركة «${enrichedStudio.name}» رسمياً إلى جدول ترتيب شركات الإنتاج بقوة سوقية ${enrichedStudio.market_power}% لمنافسة «${state.studioName}».`;
+            (isEn
+              ? `${studioDisp} officially entered the industry standings at ${enrichedStudio.market_power}% market power to challenge ${state.studioName}.`
+              : `دخلت شركة «${enrichedStudio.name}» رسمياً إلى جدول ترتيب شركات الإنتاج بقوة سوقية ${enrichedStudio.market_power}% لمنافسة «${state.studioName}».`);
 
           const newsItem: WorldBreakingNewsModalItem = {
             id: `ai_studio_${enrichedStudio.id}_${Date.now()}`,
             day: state.gameDay,
             year: state.currentYear,
             category: 'new_studio',
-            badgeLabel: 'شركة إنتاج جديدة في السوق 🎬',
+            badgeLabel: isEn
+              ? 'New Production Studio Launches'
+              : 'شركة إنتاج جديدة في السوق 🎬',
             headline,
             detail,
-            highlightName: enrichedStudio.name,
-            extraStatBadge: `قوة سوقية ${enrichedStudio.market_power}%`,
-            gameImpactLabel: `تأثير الخبر: دخول «${enrichedStudio.name}» رسمياً في جدول ترتيب الشركات`,
+            highlightName: studioDisp,
+            extraStatBadge: isEn
+              ? `Market Power ${enrichedStudio.market_power}%`
+              : `قوة سوقية ${enrichedStudio.market_power}%`,
+            gameImpactLabel: isEn
+              ? `Market Update: ${studioDisp} joins the studio leaderboard`
+              : `تأثير الخبر: دخول «${enrichedStudio.name}» رسمياً في جدول ترتيب الشركات`,
           };
 
           return {
@@ -4665,7 +5212,9 @@ export const useGameStore = create<NeelyoGameState>()(
               ...state.worldHistory,
             ],
             aiMemoryLog: [
-              `تأسست شركة إنتاج منافسة جديدة باسم "${enrichedStudio.name}" بقيادة ${enrichedStudio.ceoName}.`,
+              isEn
+                ? `A rival studio "${studioDisp}" launched under CEO ${ceoDisp}.`
+                : `تأسست شركة إنتاج منافسة جديدة باسم "${enrichedStudio.name}" بقيادة ${enrichedStudio.ceoName}.`,
               ...(state.aiMemoryLog || []),
             ].slice(0, 25),
           };
@@ -4679,6 +5228,7 @@ export const useGameStore = create<NeelyoGameState>()(
           ) {
             return state;
           }
+          const isEn = state.uiLanguage === 'en';
           const mvDelta = event.marketValueDelta || 0;
           const cashDelta = 0;
           const repDelta = event.reputationDelta || 0;
@@ -4707,27 +5257,39 @@ export const useGameStore = create<NeelyoGameState>()(
             };
           }
 
-          const curLabel = getCurrencyLabel(state.worldMarket);
+          const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
           const impactParts: string[] = [];
           if (mvDelta !== 0) {
             impactParts.push(
-              `${mvDelta > 0 ? '+' : ''}${formatMoney(mvDelta)} ${curLabel} القيمة السوقية`
+              isEn
+                ? `${mvDelta > 0 ? '+' : ''}${formatMoney(mvDelta)} ${curLabel} Valuation`
+                : `${mvDelta > 0 ? '+' : ''}${formatMoney(mvDelta)} ${curLabel} القيمة السوقية`
             );
           }
           if (cashDelta !== 0) {
             impactParts.push(
-              `${cashDelta > 0 ? '+' : ''}${formatMoney(cashDelta)} ${curLabel} السيولة`
+              isEn
+                ? `${cashDelta > 0 ? '+' : ''}${formatMoney(cashDelta)} ${curLabel} Cash`
+                : `${cashDelta > 0 ? '+' : ''}${formatMoney(cashDelta)} ${curLabel} السيولة`
             );
           }
           if (repDelta !== 0) {
-            impactParts.push(`${repDelta > 0 ? '+' : ''}${repDelta}% السمعة`);
+            impactParts.push(
+              isEn
+                ? `${repDelta > 0 ? '+' : ''}${repDelta}% Reputation`
+                : `${repDelta > 0 ? '+' : ''}${repDelta}% السمعة`
+            );
           }
           if (hypeDelta !== 0) {
-            impactParts.push(`${hypeDelta > 0 ? '+' : ''}${hypeDelta}% حماس الجمهور`);
+            impactParts.push(
+              isEn
+                ? `${hypeDelta > 0 ? '+' : ''}${hypeDelta}% Audience Hype`
+                : `${hypeDelta > 0 ? '+' : ''}${hypeDelta}% حماس الجمهور`
+            );
           }
           if (event.rivalStudioName && event.rivalNetWorthDelta) {
             impactParts.push(
-              `${event.rivalStudioName}: ${event.rivalNetWorthDelta > 0 ? '+' : ''}${formatMoney(event.rivalNetWorthDelta)} ${curLabel}`
+              `${localizeEntityName(event.rivalStudioName, state.uiLanguage)}: ${event.rivalNetWorthDelta > 0 ? '+' : ''}${formatMoney(event.rivalNetWorthDelta)} ${curLabel}`
             );
           }
 
@@ -4736,13 +5298,19 @@ export const useGameStore = create<NeelyoGameState>()(
             day: state.gameDay,
             year: state.currentYear,
             category: event.category || 'production_news',
-            badgeLabel: event.badgeLabel || 'تغطية صحفية حصرية 📰',
+            badgeLabel:
+              event.badgeLabel ||
+              (isEn ? 'Exclusive Press Report' : 'تغطية صحفية حصرية 📰'),
             headline: event.headline,
             detail: event.detail,
-            highlightName: event.rivalStudioName || state.studioName,
+            highlightName: event.rivalStudioName
+              ? localizeEntityName(event.rivalStudioName, state.uiLanguage)
+              : state.studioName,
             gameImpactLabel:
               impactParts.length > 0
-                ? `تأثير الخبر: ${impactParts.join(' · ')}`
+                ? isEn
+                  ? `Impact: ${impactParts.join(' · ')}`
+                  : `تأثير الخبر: ${impactParts.join(' · ')}`
                 : undefined,
           };
 
@@ -4764,7 +5332,8 @@ export const useGameStore = create<NeelyoGameState>()(
       addAiRivalReleases: (rivals, newsHeadline, newsDetail) =>
         set((state) => {
           if (!Array.isArray(rivals) || rivals.length === 0) return state;
-          const curLabel = getCurrencyLabel(state.worldMarket);
+          const isEn = state.uiLanguage === 'en';
+          const curLabel = getCurrencyLabel(state.worldMarket, state.uiLanguage);
           const nextCompDelta = { ...state.competitorNetWorthDelta };
           const nextYearlyRivals = [...(state.yearlyRivalReleases || [])];
 
@@ -4788,24 +5357,36 @@ export const useGameStore = create<NeelyoGameState>()(
           }
 
           const topRival = rivals[0];
+          const rivalStudioDisp = localizeEntityName(topRival.studioName, state.uiLanguage);
+          const rivalStarDisp = localizeEntityName(topRival.leadStarName, state.uiLanguage);
           const headline =
             newsHeadline ||
-            `اشتعال المنافسة: «${topRival.studioName}» تطلق «${topRival.title}» ببطولة ${topRival.leadStarName}!`;
+            (isEn
+              ? `Box Office Heats Up: ${rivalStudioDisp} launches "${topRival.title}" starring ${rivalStarDisp}!`
+              : `اشتعال المنافسة: «${topRival.studioName}» تطلق «${topRival.title}» ببطولة ${topRival.leadStarName}!`);
           const detail =
             newsDetail ||
-            `طرحت «${topRival.studioName}» عملها الضخم «${topRival.title}» بتقييم نقدي (${topRival.criticScore}/10) وإيرادات متوقعة ${formatMoney(topRival.boxOfficeRevenue)} ${curLabel}.`;
+            (isEn
+              ? `${rivalStudioDisp} premiered "${topRival.title}" to a ${topRival.criticScore}/10 critic score and projected ${formatMoney(topRival.boxOfficeRevenue)} ${curLabel} gross.`
+              : `طرحت «${topRival.studioName}» عملها الضخم «${topRival.title}» بتقييم نقدي (${topRival.criticScore}/10) وإيرادات متوقعة ${formatMoney(topRival.boxOfficeRevenue)} ${curLabel}.`);
 
           const newsItem: WorldBreakingNewsModalItem = {
             id: `news_ai_riv_${Date.now()}`,
             day: state.gameDay,
             year: state.currentYear,
             category: 'rival_project',
-            badgeLabel: 'منافسة شباك التذاكر والمنصات 🔥',
+            badgeLabel: isEn
+              ? 'Box Office & Streaming Rivalry'
+              : 'منافسة شباك التذاكر والمنصات 🔥',
             headline,
             detail,
-            highlightName: topRival.studioName,
-            extraStatBadge: `تقييم ${topRival.criticScore}/10 · ${formatMoney(topRival.boxOfficeRevenue)} ${curLabel}`,
-            gameImpactLabel: `عمل منافس في السباق: «${topRival.title}» ببطولة ${topRival.leadStarName}`,
+            highlightName: rivalStudioDisp,
+            extraStatBadge: isEn
+              ? `Score ${topRival.criticScore}/10 · ${formatMoney(topRival.boxOfficeRevenue)} ${curLabel}`
+              : `تقييم ${topRival.criticScore}/10 · ${formatMoney(topRival.boxOfficeRevenue)} ${curLabel}`,
+            gameImpactLabel: isEn
+              ? `Rival Release in Race: "${topRival.title}" starring ${rivalStarDisp}`
+              : `عمل منافس في السباق: «${topRival.title}» ببطولة ${topRival.leadStarName}`,
           };
 
           return {
@@ -4850,8 +5431,17 @@ export const useGameStore = create<NeelyoGameState>()(
 
       resetEntireGameAndStartFresh: () => {
         const currentMarket = get().worldMarket || 'egypt';
+        const isEn = get().uiLanguage === 'en';
         const profile = getMarketProfile(currentMarket);
         const primaryReg = profile.primaryRegion;
+        const defaultStudioEn =
+          currentMarket === 'saudi'
+            ? 'Diriyah Pictures'
+            : currentMarket === 'egypt'
+            ? 'Scorpion Pictures'
+            : 'Neelyo Studios';
+        const defaultCeoEn =
+          currentMarket === 'saudi' ? 'Fahad Al-Mansour' : 'Tarek Al-Mansour';
         if (typeof window !== 'undefined') {
           try {
             window.localStorage.removeItem(PRIMARY_STORAGE_KEY);
@@ -4865,8 +5455,8 @@ export const useGameStore = create<NeelyoGameState>()(
         set({
           studioCreated: false,
           hasSelectedMarket: false,
-          studioName: profile.defaultStudioName,
-          ceoName: profile.defaultCeoName,
+          studioName: isEn ? defaultStudioEn : profile.defaultStudioName,
+          ceoName: isEn ? defaultCeoEn : profile.defaultCeoName,
           logo: {
             emblem: 'winged_lion',
             frame: 'royal_shield',
@@ -4900,12 +5490,16 @@ export const useGameStore = create<NeelyoGameState>()(
           worldHistory: [
             {
               year: 2026,
-              eventText: 'تأسيس استوديو جديد بطموحات ضخمة للسيطرة على صناعة السينما والدراما.',
+              eventText: isEn
+                ? 'Founded a brand-new production studio with bold ambitions to dominate the film & television industry.'
+                : 'تأسيس استوديو جديد بطموحات ضخمة للسيطرة على صناعة السينما والدراما.',
               category: 'milestone',
             },
           ],
           aiMemoryLog: [
-            'انطلاق الموسم السينمائي وسط منافسة شرسة بين كبرى شركات الإنتاج على شباك التذاكر.',
+            isEn
+              ? 'The cinema season opens amid fierce box-office rivalry among the industry’s top production studios.'
+              : 'انطلاق الموسم السينمائي وسط منافسة شرسة بين كبرى شركات الإنتاج على شباك التذاكر.',
           ],
           actorAwardCounts: {},
           actorDynamicState: {},
@@ -4930,7 +5524,7 @@ export const useGameStore = create<NeelyoGameState>()(
           amountDelta: 0,
           previousCash: 75_000_000,
           expectedNewCash: 75_000_000,
-          itemLabel: 'إعادة التأسيس الكاملة للاستوديو',
+          itemLabel: isEn ? 'Full Studio Reset' : 'إعادة التأسيس الكاملة للاستوديو',
         });
       },
 

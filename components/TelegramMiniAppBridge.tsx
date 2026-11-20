@@ -219,6 +219,7 @@ export function TelegramMiniAppBridge({
         referrerStudioId: rawRef,
         inviteeStudioId: myStudioId,
         rewardType: 'cash',
+        lang: useGameStore.getState().uiLanguage,
       }),
     })
       .then((r) => r.json())

@@ -275,7 +275,7 @@ export function LeaderboardAndSettingsView() {
       const res = await fetch(
         `/api/social-growth?studioInstanceId=${encodeURIComponent(
           myStudioInstanceId
-        )}`
+        )}&lang=${encodeURIComponent(uiLanguage)}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -293,7 +293,7 @@ export function LeaderboardAndSettingsView() {
     } finally {
       setLoadingSocial(false);
     }
-  }, [myStudioInstanceId]);
+  }, [myStudioInstanceId, uiLanguage]);
 
   useEffect(() => {
     if (subTab !== 'challenges') return;
@@ -302,7 +302,7 @@ export function LeaderboardAndSettingsView() {
     fetch(
       `/api/social-growth?studioInstanceId=${encodeURIComponent(
         myStudioInstanceId
-      )}`
+      )}&lang=${encodeURIComponent(uiLanguage)}`
     )
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -323,7 +323,7 @@ export function LeaderboardAndSettingsView() {
     return () => {
       active = false;
     };
-  }, [subTab, myStudioInstanceId]);
+  }, [subTab, myStudioInstanceId, uiLanguage]);
 
   const qualifyingChallengeProjects = useMemo(() => {
     if (!weeklyChallenge) return [];
@@ -387,6 +387,7 @@ export function LeaderboardAndSettingsView() {
           budgetUsed: project.totalBudget,
           netProfit: project.netProfit,
           criticScore: project.criticScore,
+          lang: uiLanguage,
         }),
       });
       const data = await res.json();

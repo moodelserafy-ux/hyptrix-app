@@ -7,7 +7,15 @@ import { createClient } from '@supabase/supabase-js';
  * Powers two zero-AI-cost viral & retention engines:
  * 1. Weekly Global Challenge (`weekly_challenges` table + deterministic weekly rotation)
  * 2. Viral Referral System (`referrals` table + anti-self-referral & anti-duplicate)
+ *
+ * Supports full bilingual English (default) & Arabic responses via `lang` param/field.
  */
+
+type ApiLang = 'en' | 'ar';
+
+function resolveLang(raw?: string | null): ApiLang {
+  return raw === 'ar' ? 'ar' : 'en';
+}
 
 interface WeeklyChallengeDef {
   weekKey: string;
@@ -15,6 +23,7 @@ interface WeeklyChallengeDef {
   description: string;
   requiredGenre: string;
   requiredGenreAr: string;
+  requiredGenreLabel: string;
   maxBudget: number;
   rewardLabel: string;
   endsInDays: number;
@@ -47,7 +56,8 @@ function getSupabaseAdmin() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function getCurrentWeeklyChallenge(): WeeklyChallengeDef {
+function getCurrentWeeklyChallenge(lang: ApiLang): WeeklyChallengeDef {
+  const isEn = lang === 'en';
   const now = new Date();
   const startOfYear = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
   const dayOfYear = Math.floor(
@@ -60,36 +70,60 @@ function getCurrentWeeklyChallenge(): WeeklyChallengeDef {
 
   const rotation = [
     {
-      title: 'تحدي الرعب الاقتصادي',
-      description: 'حقق أعلى صافي ربح بفيلم رعب بميزانية إجمالية تحت 40M!',
+      title: isEn ? 'Low-Budget Horror Challenge' : 'تحدي الرعب الاقتصادي',
+      description: isEn
+        ? 'Score the highest net profit with a horror release under a 40M total budget!'
+        : 'حقق أعلى صافي ربح بفيلم رعب بميزانية إجمالية تحت 40M!',
       requiredGenre: 'psychological_horror',
-      requiredGenreAr: 'رعب نفسي / خارق',
+      requiredGenreAr: isEn
+        ? 'Psychological / Supernatural Horror'
+        : 'رعب نفسي / خارق',
+      requiredGenreLabel: isEn
+        ? 'Psychological / Supernatural Horror'
+        : 'رعب نفسي / خارق',
       maxBudget: 40_000_000,
-      rewardLabel: 'لقب «سيد الرعب» + وسام الأسبوع',
+      rewardLabel: isEn
+        ? '"Master of Horror" Title + Weekly Crest'
+        : 'لقب «سيد الرعب» + وسام الأسبوع',
     },
     {
-      title: 'ملك الكوميديا الذكية',
-      description: 'أطلق فيلماً كوميدياً بميزانية تحت 45M وحقق أعلى أرباح في الشباك!',
+      title: isEn ? 'King of Smart Comedy' : 'ملك الكوميديا الذكية',
+      description: isEn
+        ? 'Release a comedy under a 45M total budget and top the global profit chart!'
+        : 'أطلق فيلماً كوميدياً بميزانية تحت 45M وحقق أعلى أرباح في الشباك!',
       requiredGenre: 'comedy',
-      requiredGenreAr: 'كوميديا',
+      requiredGenreAr: isEn ? 'Comedy' : 'كوميديا',
+      requiredGenreLabel: isEn ? 'Comedy' : 'كوميديا',
       maxBudget: 45_000_000,
-      rewardLabel: 'لقب «ملك شباك الكوميديا» + وسام الأسبوع',
+      rewardLabel: isEn
+        ? '"Box Office Comedy King" Title + Weekly Crest'
+        : 'لقب «ملك شباك الكوميديا» + وسام الأسبوع',
     },
     {
-      title: 'تحفة الجريمة والغموض',
-      description: 'أنتج عمل جريمة وغموض بميزانية تحت 55M بأعلى صافي ربح وتقييم!',
+      title: isEn ? 'Crime & Mystery Masterpiece' : 'تحفة الجريمة والغموض',
+      description: isEn
+        ? 'Produce a crime & mystery release under 55M with top net profit and reviews!'
+        : 'أنتج عمل جريمة وغموض بميزانية تحت 55M بأعلى صافي ربح وتقييم!',
       requiredGenre: 'crime_mystery',
-      requiredGenreAr: 'جريمة وغموض',
+      requiredGenreAr: isEn ? 'Crime & Mystery' : 'جريمة وغموض',
+      requiredGenreLabel: isEn ? 'Crime & Mystery' : 'جريمة وغموض',
       maxBudget: 55_000_000,
-      rewardLabel: 'لقب «عقل الإثارة المدبر» + وسام الأسبوع',
+      rewardLabel: isEn
+        ? '"Thriller Mastermind" Title + Weekly Crest'
+        : 'لقب «عقل الإثارة المدبر» + وسام الأسبوع',
     },
     {
-      title: 'صانع الملاحم الجماهيرية',
-      description: 'أنتج فيلم أكشن بميزانية تحت 65M وسجّل أعلى صافي ربح عالمي!',
+      title: isEn ? 'Blockbuster Action Architect' : 'صانع الملاحم الجماهيرية',
+      description: isEn
+        ? 'Deliver an action feature under 65M and post the highest global net profit!'
+        : 'أنتج فيلم أكشن بميزانية تحت 65M وسجّل أعلى صافي ربح عالمي!',
       requiredGenre: 'action',
-      requiredGenreAr: 'أكشن',
+      requiredGenreAr: isEn ? 'Action' : 'أكشن',
+      requiredGenreLabel: isEn ? 'Action' : 'أكشن',
       maxBudget: 65_000_000,
-      rewardLabel: 'لقب «إمبراطور الأكشن» + وسام الأسبوع',
+      rewardLabel: isEn
+        ? '"Action Emperor" Title + Weekly Crest'
+        : 'لقب «إمبراطور الأكشن» + وسام الأسبوع',
     },
   ];
 
@@ -104,7 +138,8 @@ function getCurrentWeeklyChallenge(): WeeklyChallengeDef {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const studioInstanceId = (searchParams.get('studioInstanceId') || '').trim();
-  const challenge = getCurrentWeeklyChallenge();
+  const lang = resolveLang(searchParams.get('lang'));
+  const challenge = getCurrentWeeklyChallenge(lang);
   const supabase = getSupabaseAdmin();
 
   let topEntries: ChallengeLeaderboardRow[] =
@@ -158,6 +193,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const action = String(body?.action || '');
+    const lang = resolveLang(body?.lang || body?.uiLanguage);
+    const isEn = lang === 'en';
     const supabase = getSupabaseAdmin();
 
     if (action === 'claim_referral') {
@@ -167,7 +204,12 @@ export async function POST(req: NextRequest) {
 
       if (!referrerId || !inviteeId || referrerId === inviteeId) {
         return NextResponse.json(
-          { ok: false, error: 'لا يمكنك تفعيل كود الدعوة الخاص بك.' },
+          {
+            ok: false,
+            error: isEn
+              ? 'You cannot redeem your own studio referral code.'
+              : 'لا يمكنك تفعيل كود الدعوة الخاص بك.',
+          },
           { status: 400 }
         );
       }
@@ -175,7 +217,12 @@ export async function POST(req: NextRequest) {
       const alreadyLocal = memoryReferrals.some((r) => r.inviteeId === inviteeId);
       if (alreadyLocal) {
         return NextResponse.json(
-          { ok: false, error: 'تم تفعيل مكافأة الدعوة لهذا الاستوديو مسبقاً.' },
+          {
+            ok: false,
+            error: isEn
+              ? 'A referral reward has already been claimed for this studio.'
+              : 'تم تفعيل مكافأة الدعوة لهذا الاستوديو مسبقاً.',
+          },
           { status: 409 }
         );
       }
@@ -190,7 +237,12 @@ export async function POST(req: NextRequest) {
 
           if (existing) {
             return NextResponse.json(
-              { ok: false, error: 'تم تفعيل مكافأة الدعوة لهذا الاستوديو مسبقاً.' },
+              {
+                ok: false,
+                error: isEn
+                  ? 'A referral reward has already been claimed for this studio.'
+                  : 'تم تفعيل مكافأة الدعوة لهذا الاستوديو مسبقاً.',
+              },
               { status: 409 }
             );
           }
@@ -218,16 +270,24 @@ export async function POST(req: NextRequest) {
         rewardAmount: rewardType === 'cash' ? 15_000_000 : 1,
         message:
           rewardType === 'star_lock'
-            ? 'تم تفعيل الدعوة! حصلت على قفل مجاني لغرفة صناعة النجوم.'
+            ? isEn
+              ? 'Referral claimed! You unlocked 1 free Star Forge golden lock.'
+              : 'تم تفعيل الدعوة! حصلت على قفل مجاني لغرفة صناعة النجوم.'
+            : isEn
+            ? 'Referral claimed! +15M added to your studio treasury.'
             : 'تم تفعيل الدعوة! أُضيف +15M إلى خزينة الاستوديو.',
       });
     }
 
     if (action === 'submit_challenge') {
-      const challenge = getCurrentWeeklyChallenge();
+      const challenge = getCurrentWeeklyChallenge(lang);
       const studioInstanceId = String(body?.studioInstanceId || '').trim();
-      const studioName = String(body?.studioName || 'استوديو Neelyo').slice(0, 70);
-      const ceoName = String(body?.ceoName || 'المدير التنفيذي').slice(0, 70);
+      const studioName = String(
+        body?.studioName || (isEn ? 'Neelyo Studio' : 'استوديو Neelyo')
+      ).slice(0, 70);
+      const ceoName = String(
+        body?.ceoName || (isEn ? 'Chief Executive' : 'المدير التنفيذي')
+      ).slice(0, 70);
       const projectTitle = String(body?.projectTitle || '').slice(0, 80);
       const worldMarket = body?.worldMarket === 'saudi' ? 'saudi' : 'egypt';
       const primaryGenre = String(body?.primaryGenre || '');
@@ -239,7 +299,12 @@ export async function POST(req: NextRequest) {
 
       if (!studioInstanceId || !projectTitle) {
         return NextResponse.json(
-          { ok: false, error: 'بيانات المشروع غير مكتملة.' },
+          {
+            ok: false,
+            error: isEn
+              ? 'Incomplete project submission data.'
+              : 'بيانات المشروع غير مكتملة.',
+          },
           { status: 400 }
         );
       }
@@ -255,7 +320,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             ok: false,
-            error: `يتطلب التحدي الحالي عملاً من تصنيف «${challenge.requiredGenreAr}».`,
+            error: isEn
+              ? `This week's challenge requires a "${challenge.requiredGenreLabel}" release.`
+              : `يتطلب التحدي الحالي عملاً من تصنيف «${challenge.requiredGenreAr}».`,
           },
           { status: 400 }
         );
@@ -265,7 +332,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             ok: false,
-            error: `تجاوزت الميزانية سقف التحدي المسموح (${(challenge.maxBudget / 1_000_000).toFixed(0)}M).`,
+            error: isEn
+              ? `Project budget exceeds this week's cap (${(challenge.maxBudget / 1_000_000).toFixed(0)}M).`
+              : `تجاوزت الميزانية سقف التحدي المسموح (${(challenge.maxBudget / 1_000_000).toFixed(0)}M).`,
           },
           { status: 400 }
         );
