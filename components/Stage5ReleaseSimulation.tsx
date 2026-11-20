@@ -13,6 +13,7 @@ import {
   generateRivalReleases,
   formatMoney,
 } from '@/lib/game-engine';
+import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import {
   getMarketProfile,
   getMarketConfigsForWorld,
@@ -214,14 +215,70 @@ export function Stage5ReleaseSimulation() {
     }, 0);
   }, [draft.selectedDistributionMarkets, marketConfigs, primaryRegion]);
 
-  const upfrontMarketingAndDistCost =
-    draft.marketingBudget + estimatedDistributionFees;
-  const isOverMarketingLiquidity = upfrontMarketingAndDistCost > cash;
+  const assetBenefitsMemo = useMemo(
+    () => getStudioAssetBenefits(ownedStudioAssets),
+    [ownedStudioAssets]
+  );
+
+  const estimatedTalentCost = useMemo(() => {
+    const approvedDirs =
+      Array.isArray(draft.directorIds) && draft.directorIds.length > 0
+        ? draft.directorIds.slice(0, 2)
+        : draft.directorId
+        ? [draft.directorId]
+        : [];
+    const signedIds = Array.from(
+      new Set(
+        [
+          ...approvedDirs,
+          draft.dopId,
+          draft.composerId,
+          draft.vfxId,
+          ...draft.leadActorIds,
+          draft.antagonistId,
+          ...draft.supportingActorIds,
+          ...draft.cameoActorIds,
+        ].filter(Boolean) as string[]
+      )
+    );
+    return signedIds.reduce(
+      (sum, id) => sum + (draft.talentOffers[id]?.offeredSalary || 0),
+      0
+    );
+  }, [
+    draft.directorIds,
+    draft.directorId,
+    draft.dopId,
+    draft.composerId,
+    draft.vfxId,
+    draft.leadActorIds,
+    draft.antagonistId,
+    draft.supportingActorIds,
+    draft.cameoActorIds,
+    draft.talentOffers,
+  ]);
+
+  const estimatedDeptCost = useMemo(() => {
+    const rawDeptCost =
+      draft.budgetAllocation.setsAndLocations +
+      draft.budgetAllocation.costumesAndMakeup +
+      draft.budgetAllocation.vfxAndStunts +
+      draft.budgetAllocation.extrasAndCrowds;
+    return Math.round(rawDeptCost * assetBenefitsMemo.costMultiplier);
+  }, [draft.budgetAllocation, assetBenefitsMemo.costMultiplier]);
+
+  const totalLaunchCost =
+    estimatedTalentCost +
+    estimatedDeptCost +
+    draft.marketingBudget +
+    estimatedDistributionFees;
+  const liquidityDeficit = Math.max(0, totalLaunchCost - cash);
+  const isOverTotalLiquidity = totalLaunchCost > cash;
 
   const handleLaunchRelease = async () => {
-    if (upfrontMarketingAndDistCost > cash) {
+    if (isOverTotalLiquidity) {
       showToast(
-        `السيولة الحالية (${formatMoney(cash)} ${currencyLabel}) لا تكفي لتغطية الدعاية والتوزيع (${formatMoney(upfrontMarketingAndDistCost)} ${currencyLabel}) — خفّض ميزانية الدعاية أو الأسواق الدولية أولاً!`,
+        `السيولة الحالية (${formatMoney(cash)} ${currencyLabel}) لا تكفي لتغطية التكلفة الإجمالية للعمل (${formatMoney(totalLaunchCost)} ${currencyLabel}) — تحتاج ${formatMoney(liquidityDeficit)} ${currencyLabel} إضافية أو تخفيض الدعاية/التوزيع!`,
         'warning'
       );
       return;
@@ -345,6 +402,7 @@ export function Stage5ReleaseSimulation() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             mode: 'evaluate_release',
+            studioInstanceId: getOrCreateStudioInstanceId(),
             groqKeyOverride: groqApiKeyClient,
             preferredModel: preferredGroqModel,
             payload: {
@@ -802,19 +860,27 @@ export function Stage5ReleaseSimulation() {
                   }
                   className="w-full accent-[#D91624] cursor-pointer"
                 />
-                <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] font-bold">
-                  <span className="text-[#1A2530]/65">
-                    السيولة المتاحة بالخزينة: {formatMoney(cash)} {currencyLabel}
-                  </span>
-                  {isOverMarketingLiquidity ? (
-                    <span className="text-[#D91624] font-black">
-                      ⚠️ الدعاية + رسوم التوزيع ({formatMoney(upfrontMarketingAndDistCost)}) تتجاوز سيولتك!
+                <div className="mt-2 rounded-lg border border-[#1A2530]/15 bg-white p-2.5 space-y-1.5 text-[10px] font-bold">
+                  <div className="grid grid-cols-2 gap-1.5 text-[#1A2530]/75">
+                    <div>عقود النجوم والطاقم: <span className="font-mono font-black text-[#1A2530]">{formatMoney(estimatedTalentCost)}</span></div>
+                    <div>الأقسام الإنتاجية: <span className="font-mono font-black text-[#1A2530]">{formatMoney(estimatedDeptCost)}</span></div>
+                    <div>ميزانية الدعاية: <span className="font-mono font-black text-[#D91624]">{formatMoney(draft.marketingBudget)}</span></div>
+                    <div>رسوم التوزيع الدولي: <span className="font-mono font-black text-[#1A2530]">{formatMoney(estimatedDistributionFees)}</span></div>
+                  </div>
+                  <div className="border-t border-[#1A2530]/10 pt-1.5 flex flex-wrap items-center justify-between gap-1">
+                    <span className="text-[#1A2530]/75">
+                      السيولة المتاحة بالخزينة: <span className="font-mono font-black text-[#1A2530]">{formatMoney(cash)} {currencyLabel}</span>
                     </span>
-                  ) : (
-                    <span className="text-[#15803D] font-black">
-                      إجمالي الدعاية والتوزيع: {formatMoney(upfrontMarketingAndDistCost)} {currencyLabel} ✓
-                    </span>
-                  )}
+                    {isOverTotalLiquidity ? (
+                      <span className="text-[#D91624] font-black">
+                        ⚠️ التكلفة الكاملة ({formatMoney(totalLaunchCost)} {currencyLabel}) تتجاوز سيولتك بعجز {formatMoney(liquidityDeficit)} {currencyLabel}!
+                      </span>
+                    ) : (
+                      <span className="text-[#15803D] font-black">
+                        إجمالي التكلفة عند الإطلاق: {formatMoney(totalLaunchCost)} {currencyLabel} ✓
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1654,8 +1720,12 @@ export function Stage5ReleaseSimulation() {
                 setActiveScreen('FESTIVALS_AWARDS');
               }
             }}
-            disabled={isSimulating}
-            className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#D4AF37] bg-[#D91624] px-5 py-2 text-xs font-black text-white shadow-md transition hover:brightness-110 disabled:opacity-50"
+            disabled={isSimulating || (wizardStep === 1 && isOverTotalLiquidity)}
+            className={`inline-flex items-center gap-1.5 rounded-xl border-2 px-5 py-2 text-xs font-black text-white shadow-md transition disabled:opacity-50 ${
+              wizardStep === 1 && isOverTotalLiquidity
+                ? 'border-amber-400 bg-slate-700 cursor-not-allowed'
+                : 'border-[#D4AF37] bg-[#D91624] hover:brightness-110'
+            }`}
           >
             {isSimulating ? (
               <>
@@ -1663,14 +1733,18 @@ export function Stage5ReleaseSimulation() {
                 <span>جاري تقييم العمل وحساب النتائج...</span>
               </>
             ) : wizardStep === 1 ? (
-              <>
-                <Sparkles className="h-4 w-4 text-[#D4AF37]" />
-                <span>
-                  {isSeries
-                    ? 'بدء بث المسلسل ورصد المشاهدات'
-                    : 'طرح الفيلم في السينمات الآن'}
-                </span>
-              </>
+              isOverTotalLiquidity ? (
+                <span>عجز سيولة {formatMoney(liquidityDeficit)} {currencyLabel} — خفّض الميزانية</span>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 text-[#D4AF37]" />
+                  <span>
+                    {isSeries
+                      ? 'بدء بث المسلسل ورصد المشاهدات'
+                      : 'طرح الفيلم في السينمات الآن'}
+                  </span>
+                </>
+              )
             ) : (
               <span>الانتقال للمهرجانات والجوائز</span>
             )}

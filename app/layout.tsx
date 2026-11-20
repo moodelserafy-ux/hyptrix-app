@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import {
   Cairo,
   Lalezar,
   Aref_Ruqaa,
   Courier_Prime,
 } from 'next/font/google';
+import { resolveRequestSiteUrl } from '@/lib/site-url';
 import './globals.css';
 
 const cairo = Cairo({
@@ -35,10 +37,6 @@ const spaceMono = Courier_Prime({
   display: 'swap',
 });
 
-const APP_URL =
-  process.env.APP_URL ||
-  'https://ais-pre-rocpe6ymx4aaq2syvt4glo-1004117229529.europe-west2.run.app';
-
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
@@ -48,8 +46,11 @@ export const viewport: Viewport = {
   themeColor: '#1A2530',
 };
 
-export const metadata: Metadata = {
-  metadataBase: new URL(APP_URL),
+export async function generateMetadata(): Promise<Metadata> {
+  const siteUrl = resolveRequestSiteUrl(await headers());
+
+  return {
+    metadataBase: new URL(siteUrl),
   title: {
     default: 'Neelyo | لعبة محاكاة إدارة استوديو الإنتاج السينمائي والتلفزيوني',
     template: '%s | Neelyo',
@@ -91,7 +92,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ar_EG',
-    url: APP_URL,
+    url: siteUrl,
     siteName: 'Neelyo',
     title: 'Neelyo | لعبة محاكاة شركات الإنتاج وشباك التذاكر والدراما',
     description:
@@ -117,8 +118,8 @@ export const metadata: Metadata = {
     },
   },
   other: {
-    'llms-txt': `${APP_URL}/llms.txt`,
-    'llms-full-txt': `${APP_URL}/llms-full.txt`,
+    'llms-txt': `${siteUrl}/llms.txt`,
+    'llms-full-txt': `${siteUrl}/llms-full.txt`,
     'ai-crawl-policy': 'allow-all',
     'geo-entity-name': 'Neelyo (Cinema & TV Tycoon)',
     'geo-entity-type': 'VideoGame, WebApplication, SimulationGame',
@@ -127,26 +128,28 @@ export const metadata: Metadata = {
     'geo-core-features':
       'تأسيس استوديو إنتاج، كتابة سيناريو أفلام ومسلسلات، تفاوض مع 180+ ممثل وممثلة، التعاقد مع 1 إلى 2 مخرج، انتظار ردود العقود 2-3 أيام، إدارة أزمات التصوير، توزيع في مصر والخليج وأوروبا وهوليوود، سباق شباك التذاكر ومشاهدات رمضان، وحفل جوائز سنوي تلقائي.',
   },
-};
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const siteUrl = resolveRequestSiteUrl(await headers());
   const jsonLd = {
     '@context': 'https://schema.org',
     '@graph': [
       {
         '@type': ['VideoGame', 'WebApplication', 'SoftwareApplication'],
-        '@id': `${APP_URL}/#game`,
+        '@id': `${siteUrl}/#game`,
         name: 'Neelyo',
         alternateName: [
           'Neelyo — Cinema & TV Tycoon',
           'نيليو — لعبة محاكاة الإنتاج السينمائي والدرامي',
           'Arabic Cinema & TV Studio Tycoon',
         ],
-        url: APP_URL,
+        url: siteUrl,
         inLanguage: ['ar', 'ar-EG'],
         applicationCategory: 'GameApplication',
         applicationSubCategory: 'Business & Cinema Studio Tycoon Simulation',
@@ -186,12 +189,12 @@ export default function RootLayout({
           '@type': 'Organization',
           name: 'Neelyo Studio',
           email: 'neelyotycoon@gmail.com',
-          url: APP_URL,
+          url: siteUrl,
         },
       },
       {
         '@type': 'ItemList',
-        '@id': `${APP_URL}/#stages`,
+        '@id': `${siteUrl}/#stages`,
         name: 'مراحل إدارة الإنتاج السينمائي والدرامي في اللعبة',
         itemListElement: [
           {
@@ -240,7 +243,7 @@ export default function RootLayout({
       },
       {
         '@type': 'HowTo',
-        '@id': `${APP_URL}/#howto`,
+        '@id': `${siteUrl}/#howto`,
         name: 'كيف تلعب وتبني إمبراطورية إنتاج سينمائي ودرامي ناجحة',
         description:
           'الدليل الكامل لقيادة شركة الإنتاج من التأسيس الأول وحتى تصدر القيمة السوقية وحصد جوائز المهرجانات السنوية.',
@@ -279,7 +282,7 @@ export default function RootLayout({
       },
       {
         '@type': 'FAQPage',
-        '@id': `${APP_URL}/#faq`,
+        '@id': `${siteUrl}/#faq`,
         mainEntity: [
           {
             '@type': 'Question',
@@ -373,7 +376,7 @@ export default function RootLayout({
             Neelyo — لعبة محاكاة إدارة شركات الإنتاج السينمائي والتلفزيوني العربية بالذكاء الاصطناعي
           </h1>
           <p>
-            Neelyo هي لعبة استراتيجية واقتصادية عربية تضعك في مقعد المؤسس والمدير التنفيذي لاستوديو إنتاج سينمائي وتلفزيوني برأس مال تأسيسي 75 مليون جنيه مصري افتراضي. تعتمد اللعبة على الذكاء الاصطناعي التوليدي في خلق عالم سينمائي ودرامي حي يتجدد مع الوقت: من توليد المواهب التمثيلية الصاعدة، وإنشاء الشركات المنافسة وأفلامها ومسلسلاتها، وتأليف وتقييم السيناريوهات والأدوار الدرامية، إلى إدارة مفاوضات العقود وأزمات التصوير وحملات اللجان الإلكترونية والتريند.
+            Neelyo هي لعبة استراتيجية واقتصادية عربية تضعك في مقعد المؤسس والمدير التنفيذي لاستوديو إنتاج سينمائي وتلفزيوني برأس مال تأسيسي 75 مليون عملة افتراضية. تعتمد اللعبة على الذكاء الاصطناعي التوليدي في خلق عالم سينمائي ودرامي حي يتجدد مع الوقت: من توليد المواهب التمثيلية الصاعدة، وإنشاء الشركات المنافسة وأفلامها ومسلسلاتها، وتأليف وتقييم السيناريوهات والأدوار الدرامية، إلى إدارة مفاوضات العقود وأزمات التصوير وحملات اللجان الإلكترونية والتريند.
           </p>
           <h2>غرفة صناعة النجوم (The Star Forge — 99 OVR Diamond Card)</h2>
           <p>

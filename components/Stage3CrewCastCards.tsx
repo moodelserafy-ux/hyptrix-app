@@ -27,6 +27,7 @@ import {
   formatMoney,
 } from '@/lib/game-engine';
 import { getCurrencyLabel } from '@/lib/market-profiles';
+import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import { TalentPortrait } from '@/components/CinematicGraphicsScene';
 import {
   Fut3DTiltCard,
@@ -468,6 +469,7 @@ export function Stage3CrewCastCards() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             mode: 'evaluate_talent_offer',
+            studioInstanceId: getOrCreateStudioInstanceId(),
             groqKeyOverride: groqApiKeyClient,
             preferredModel: preferredGroqModel,
             payload: {

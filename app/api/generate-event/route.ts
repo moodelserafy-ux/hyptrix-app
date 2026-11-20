@@ -46,8 +46,8 @@ const TASK_MAX_TOKENS: Record<string, number> = {
   generate_script_idea: 280,
   analyze_script_synopsis: 260,
   generate_pr_media_response: 380,
-  mid_production_crises: 520,
-  evaluate_release: 760,
+  mid_production_crises: 800,
+  evaluate_release: 1300,
   discover_ai_rising_star: 260,
   discover_ai_emerging_studio: 280,
   generate_ai_rival_releases: 360,
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
       return await handleGeneratePrMediaResponse(
         p,
         effectiveKeyOverride,
-        preferredModel || 'generate_pr_media_response'
+        taskTag
       );
     }
 
@@ -902,7 +902,7 @@ JSON keys:
     userPrompt,
     groqKeyOverride,
     preferredModel || 'mid_production_crises',
-    520
+    800
   );
   if (groqRes && Array.isArray(groqRes.data.crises) && groqRes.data.crises.length >= 2) {
     const rawNews = groqRes.data.pressNews as Record<string, unknown> | undefined;

@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
  *
  * Verifies Telegram WebApp `initData` cryptographically using HMAC-SHA256
  * with `TELEGRAM_BOT_TOKEN` (official Telegram Mini Apps validation spec),
- * then loads or saves the player's studio snapshot in `hyptrix_cloud_saves`
+ * then loads or saves the player's studio snapshot in `neelyo_cloud_saves`
  * keyed by `telegram_user_id` — zero login screens required!
  */
 
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'load') {
       const { data, error } = await supabase
-        .from('hyptrix_cloud_saves')
+        .from('neelyo_cloud_saves')
         .select('state_json, studio_name, game_day, updated_at')
         .or(`telegram_user_id.eq.${tgUser.id},sync_code.eq.${syncCode}`)
         .maybeSingle();
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
     };
 
     const { error } = await supabase
-      .from('hyptrix_cloud_saves')
+      .from('neelyo_cloud_saves')
       .upsert(row, { onConflict: 'sync_code' });
 
     if (error) {

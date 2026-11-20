@@ -1,10 +1,12 @@
 import type { MetadataRoute } from 'next';
+import { headers } from 'next/headers';
+import { resolveRequestSiteUrl } from '@/lib/site-url';
 
-const APP_URL =
-  process.env.APP_URL ||
-  'https://ais-pre-rocpe6ymx4aaq2syvt4glo-1004117229529.europe-west2.run.app';
+export const dynamic = 'force-dynamic';
 
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const siteUrl = resolveRequestSiteUrl(await headers());
+
   return {
     rules: [
       {
@@ -32,10 +34,10 @@ export default function robots(): MetadataRoute.Robots {
           'cohere-ai',
           'CCBot',
         ],
-        allow: ['/', '/llms.txt', '/llms-full.txt'],
+        allow: ['/', '/about-us', '/llms.txt', '/llms-full.txt'],
       },
     ],
-    sitemap: `${APP_URL}/sitemap.xml`,
-    host: APP_URL,
+    sitemap: `${siteUrl}/sitemap.xml`,
+    host: siteUrl,
   };
 }

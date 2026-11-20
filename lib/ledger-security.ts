@@ -2,7 +2,6 @@ import crypto from 'crypto';
 
 const PRIMARY_HMAC_SECRET =
   process.env.LEDGER_HMAC_SECRET || 'neelyo-royal-ledger-secret-key-2026-v1';
-const LEGACY_HMAC_SECRET = 'hyptrix-cinema-tycoon-secret-key-2026';
 
 /**
  * Financial drift tolerance for server-tracked transactions.
@@ -66,21 +65,6 @@ export function computeLedgerSignature(
     .slice(0, 32);
 }
 
-function computeLegacyLedgerSignature(
-  studioInstanceId: string,
-  cash: number,
-  ownedAssets: string[]
-): string {
-  const payload = `${studioInstanceId}|${Math.round(cash)}|${[...ownedAssets]
-    .sort()
-    .join(',')}`;
-  return crypto
-    .createHmac('sha256', LEGACY_HMAC_SECRET)
-    .update(payload)
-    .digest('hex')
-    .slice(0, 32);
-}
-
 export function verifyLedgerSignature(
   studioInstanceId: string,
   cash: number,
@@ -96,15 +80,7 @@ export function verifyLedgerSignature(
     cash,
     ownedAssets
   );
-  if (trimmed === expectedPrimary) return true;
-
-  // Allow seamless one-time migration from legacy signatures
-  const expectedLegacy = computeLegacyLedgerSignature(
-    studioInstanceId,
-    cash,
-    ownedAssets
-  );
-  return trimmed === expectedLegacy;
+  return trimmed === expectedPrimary;
 }
 
 /**

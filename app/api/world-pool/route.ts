@@ -468,12 +468,17 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET?.trim();
-  if (cronSecret) {
-    const authHeader = req.headers.get('authorization') || '';
-    const customHeader = req.headers.get('x-cron-secret') || '';
-    if (authHeader !== `Bearer ${cronSecret}` && customHeader !== cronSecret) {
-      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!cronSecret || cronSecret === 'your-random-cron-secret') {
+    return NextResponse.json(
+      { ok: false, error: 'CRON_SECRET is not configured on server' },
+      { status: 503 }
+    );
+  }
+
+  const authHeader = req.headers.get('authorization') || '';
+  const customHeader = req.headers.get('x-cron-secret') || '';
+  if (authHeader !== `Bearer ${cronSecret}` && customHeader !== cronSecret) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
   const [egyptBatch, saudiBatch] = await Promise.all([

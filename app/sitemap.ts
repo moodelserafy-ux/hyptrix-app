@@ -1,38 +1,40 @@
 import type { MetadataRoute } from 'next';
+import { headers } from 'next/headers';
+import { resolveRequestSiteUrl } from '@/lib/site-url';
 
-const APP_URL =
-  process.env.APP_URL ||
-  'https://ais-pre-rocpe6ymx4aaq2syvt4glo-1004117229529.europe-west2.run.app';
+export const dynamic = 'force-dynamic';
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const siteUrl = resolveRequestSiteUrl(await headers());
   const now = new Date();
+
   return [
     {
-      url: APP_URL,
+      url: siteUrl,
       lastModified: now,
       changeFrequency: 'daily',
       priority: 1.0,
       alternates: {
         languages: {
-          ar: APP_URL,
-          'ar-EG': APP_URL,
+          ar: siteUrl,
+          'ar-EG': siteUrl,
         },
       },
     },
     {
-      url: `${APP_URL}/about-us`,
+      url: `${siteUrl}/about-us`,
       lastModified: now,
       changeFrequency: 'daily',
       priority: 0.98,
     },
     {
-      url: `${APP_URL}/llms.txt`,
+      url: `${siteUrl}/llms.txt`,
       lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.95,
     },
     {
-      url: `${APP_URL}/llms-full.txt`,
+      url: `${siteUrl}/llms-full.txt`,
       lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.95,

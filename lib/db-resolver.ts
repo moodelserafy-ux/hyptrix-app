@@ -691,7 +691,7 @@ const EXPANDED_DEFAULT_DB: MasterDatabase = {
 
 const SAUDI_DEFAULT_DB: MasterDatabase = saudiDbJson as unknown as MasterDatabase;
 
-export const CUSTOM_DB_STORAGE_KEY = 'hyptrix_custom_db_patch_v1';
+export const CUSTOM_DB_STORAGE_KEY = 'neelyo_custom_db_patch_v1';
 
 function mergeById<T extends { id: string }>(
   baseList: T[],

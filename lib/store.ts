@@ -55,8 +55,8 @@ function countStudioTotalAwards(projects: { awardsWon?: string[] }[]): number {
 }
 
 function enqueueServerLedgerSync(
-  getState: () => HyptrixGameState,
-  setState: (partial: Partial<HyptrixGameState>) => void,
+  getState: () => NeelyoGameState,
+  setState: (partial: Partial<NeelyoGameState>) => void,
   tx: {
     transactionType: LedgerVerificationRequest['transactionType'];
     amountDelta: number;
@@ -316,10 +316,9 @@ export interface LiveSocialFeedPost {
   timestampLabel: string;
 }
 
-const LEGACY_STORAGE_KEY = 'hyptrix_tycoon_state_v2';
 const PRIMARY_STORAGE_KEY = 'neelyo_tycoon_state_v1';
 
-// Hybrid IndexedDB + localStorage storage adapter with seamless one-time legacy save migration
+// Hybrid IndexedDB + localStorage storage adapter
 const hybridStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
     if (typeof window === 'undefined') return null;
@@ -328,22 +327,6 @@ const hybridStorage: StateStorage = {
       if (localVal) return localVal;
       const idbVal = await idbGet<string>(name);
       if (idbVal) return idbVal;
-
-      // One-time seamless migration from legacy key so existing players keep their studio
-      if (name === PRIMARY_STORAGE_KEY) {
-        const legacyLocal = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-        if (legacyLocal) {
-          window.localStorage.setItem(name, legacyLocal);
-          idbSet(name, legacyLocal).catch(() => {});
-          return legacyLocal;
-        }
-        const legacyIdb = await idbGet<string>(LEGACY_STORAGE_KEY);
-        if (legacyIdb) {
-          window.localStorage.setItem(name, legacyIdb);
-          idbSet(name, legacyIdb).catch(() => {});
-          return legacyIdb;
-        }
-      }
       return null;
     } catch {
       return null;
@@ -1548,7 +1531,7 @@ export function buildThreeSeasonFestivals(params: {
   };
 }
 
-export interface HyptrixGameState {
+export interface NeelyoGameState {
   uiLanguage: UiLanguageId;
   worldMarket: WorldMarketId;
   hasSelectedMarket: boolean;
@@ -1768,7 +1751,7 @@ function getDefaultDistributionForMarket(
   };
 }
 
-export const useGameStore = create<HyptrixGameState>()(
+export const useGameStore = create<NeelyoGameState>()(
   persist(
     (set, get) => ({
       uiLanguage: 'ar',
@@ -2490,6 +2473,7 @@ export const useGameStore = create<HyptrixGameState>()(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               mode: 'generate_pr_media_response',
+              studioInstanceId: getOrCreateStudioInstanceId(),
               groqKeyOverride: state.groqApiKeyClient,
               preferredModel: state.preferredGroqModel,
               payload: {
@@ -4311,7 +4295,7 @@ export const useGameStore = create<HyptrixGameState>()(
           if (!cloudCreated) return state;
           return {
             ...state,
-            ...(snapshot as Partial<HyptrixGameState>),
+            ...(snapshot as Partial<NeelyoGameState>),
           };
         });
       },
@@ -4780,10 +4764,8 @@ export const useGameStore = create<HyptrixGameState>()(
         if (typeof window !== 'undefined') {
           try {
             window.localStorage.removeItem(PRIMARY_STORAGE_KEY);
-            window.localStorage.removeItem(LEGACY_STORAGE_KEY);
             window.localStorage.removeItem(CUSTOM_DB_STORAGE_KEY);
             idbDel(PRIMARY_STORAGE_KEY).catch(() => {});
-            idbDel(LEGACY_STORAGE_KEY).catch(() => {});
             idbDel(CUSTOM_DB_STORAGE_KEY).catch(() => {});
           } catch {
             // ignore

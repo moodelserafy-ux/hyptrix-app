@@ -9,6 +9,7 @@ import {
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
 import { getCurrencyLabel } from '@/lib/market-profiles';
+import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import { WelcomeMarketScreen } from '@/components/WelcomeMarketScreen';
 import { Stage1StudioCreation } from '@/components/Stage1StudioCreation';
 import { StudioHubView } from '@/components/StudioHubView';
@@ -261,7 +262,7 @@ export default function HomePage() {
 
     const seed =
       typeof window !== 'undefined'
-        ? localStorage.getItem('hyptrix_studio_instance_id') || studioName || 'studio'
+        ? getOrCreateStudioInstanceId() || studioName || 'studio'
         : studioName || 'studio';
 
     const buildPoolUrl = (type: string, extra = '') =>

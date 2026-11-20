@@ -150,6 +150,7 @@ export function TelegramMiniAppBridge({
     const s = useGameStore.getState();
     const compactSnapshot = {
       studioCreated: s.studioCreated,
+      hasSelectedMarket: s.hasSelectedMarket,
       worldMarket: s.worldMarket,
       uiLanguage: s.uiLanguage,
       studioName: s.studioName,
@@ -163,7 +164,8 @@ export function TelegramMiniAppBridge({
       currentYear: s.currentYear,
       unlockedRegions: s.unlockedRegions,
       ownedStudioAssets: s.ownedStudioAssets,
-      releasedProjects: s.releasedProjects.slice(0, 15),
+      ledgerSignature: s.ledgerSignature,
+      releasedProjects: s.releasedProjects.slice(0, 40),
       lastReleasedProject: s.lastReleasedProject,
       aiGeneratedActors: s.aiGeneratedActors.slice(0, 25),
       starForgeLocksOpened: s.starForgeLocksOpened,

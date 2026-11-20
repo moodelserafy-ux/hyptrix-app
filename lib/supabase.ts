@@ -21,21 +21,14 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
 export function getOrCreateStudioInstanceId(): string {
   if (typeof window === 'undefined') return 'server_studio_instance';
   const STORAGE_KEY = 'neelyo_studio_instance_uuid_v1';
-  const LEGACY_KEY = 'hyptrix_studio_instance_uuid_v1';
   try {
     let existing = window.localStorage.getItem(STORAGE_KEY);
     if (!existing || existing.length < 12) {
-      const legacy = window.localStorage.getItem(LEGACY_KEY);
-      if (legacy && legacy.length >= 12) {
-        existing = legacy;
-        window.localStorage.setItem(STORAGE_KEY, existing);
-      } else {
-        existing =
-          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : `st_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-        window.localStorage.setItem(STORAGE_KEY, existing);
-      }
+      existing =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `st_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      window.localStorage.setItem(STORAGE_KEY, existing);
     }
     return existing;
   } catch {
@@ -118,8 +111,8 @@ export interface LedgerVerificationResponse {
 /**
  * Calls the Server-Side Financial Guard (`/api/verify-ledger`) which validates
  * the transaction mathematics, checks HMAC signature integrity, and persists
- * the authoritative balance & owned assets to Supabase (`hyptrix_studio_wallets`
- * and `hyptrix_ledger_transactions`) via the server's RPC / Service Role.
+ * the authoritative balance & owned assets to Supabase (`neelyo_studio_wallets`
+ * and `neelyo_ledger_transactions`) via the server's RPC / Service Role.
  */
 export async function verifyAndRecordServerTransaction(
   payload: LedgerVerificationRequest
@@ -269,7 +262,7 @@ export async function syncStudioSaveToCloud(payload: {
 
   try {
     // 1. Upsert leaderboard entry keyed by studio_instance_id to avoid studio_name collisions
-    await supabase.from('hyptrix_leaderboard').upsert(
+    await supabase.from('neelyo_leaderboard').upsert(
       {
         studio_instance_id: studioInstanceId,
         studio_name: payload.studioName,
@@ -288,11 +281,15 @@ export async function syncStudioSaveToCloud(payload: {
 
     // 2. Upsert cloud save if email provided
     if (payload.email) {
-      await supabase.from('hyptrix_cloud_saves').upsert(
+      const normalizedEmail = payload.email.trim().toLowerCase();
+      await supabase.from('neelyo_cloud_saves').upsert(
         {
-          user_email: payload.email,
+          sync_code: `EMAIL-${normalizedEmail}`,
+          user_email: normalizedEmail,
           studio_instance_id: studioInstanceId,
           studio_name: payload.studioName,
+          ceo_name: payload.ceoName,
+          market_value: safeMarketValue,
           vip_coins: payload.vipCoins,
           vip_pass_expires_at: payload.vipPassExpiresAt,
           verified_cash: safeCash,
@@ -326,7 +323,7 @@ export async function fetchGlobalLeaderboard(): Promise<GlobalStudioScore[]> {
   if (!supabase) return [];
   try {
     const { data, error } = await supabase
-      .from('hyptrix_leaderboard')
+      .from('neelyo_leaderboard')
       .select(
         'studio_name, ceo_name, market_value, cash, reputation, released_count, total_awards, owned_assets_count, ledger_verified, updated_at'
       )

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Web Audio API Synthesized Sound Effects Engine for Hyptrix Daylight Studio
+ * Web Audio API Synthesized Sound Effects Engine for Neelyo Daylight Studio
  * Zero external MP3 dependencies — works reliably across all browsers.
  */
 

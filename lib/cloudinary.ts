@@ -10,7 +10,7 @@
 const CLOUDINARY_CLOUD_NAME =
   process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || '';
 const CLOUDINARY_UPLOAD_PRESET =
-  process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'hyptrix_unsigned';
+  process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'neelyo_unsigned';
 
 const ALLOWED_IMAGE_MIMES = new Set([
   'image/webp',

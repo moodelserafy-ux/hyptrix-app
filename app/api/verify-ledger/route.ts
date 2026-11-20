@@ -242,7 +242,7 @@ export async function POST(req: NextRequest) {
     if (supabase) {
       try {
         const { data: existingWallet } = await supabase
-          .from('hyptrix_studio_wallets')
+          .from('neelyo_studio_wallets')
           .select('*')
           .eq('studio_instance_id', studioInstanceId)
           .maybeSingle();
@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
 
         // Canonical schema matching lib/supabase.ts: verified_cash, verified_market_value
         const { error: upsertErr } = await supabase
-          .from('hyptrix_studio_wallets')
+          .from('neelyo_studio_wallets')
           .upsert(
             {
               studio_instance_id: studioInstanceId,
@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
 
         if (!upsertErr) {
           storageMode = 'supabase';
-          await supabase.from('hyptrix_ledger_transactions').insert({
+          await supabase.from('neelyo_ledger_transactions').insert({
             studio_instance_id: studioInstanceId,
             studio_name: String(studioName || 'Neelyo Studio').slice(0, 80),
             transaction_type: txType,
@@ -485,7 +485,7 @@ export async function GET(req: NextRequest) {
     if (supabase) {
       try {
         const { data: wallet } = await supabase
-          .from('hyptrix_studio_wallets')
+          .from('neelyo_studio_wallets')
           .select('*')
           .eq('studio_instance_id', studioInstanceId)
           .maybeSingle();
@@ -513,7 +513,7 @@ export async function GET(req: NextRequest) {
           // If legitimate progress occurred since last sync, refresh server wallet silently
           if (!check.tamperDetected && check.finalCash !== serverCash) {
             await supabase
-              .from('hyptrix_studio_wallets')
+              .from('neelyo_studio_wallets')
               .update({
                 verified_cash: check.finalCash,
                 verified_market_value: check.finalMv,

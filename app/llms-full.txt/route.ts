@@ -1,6 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { resolveRequestSiteUrl } from '@/lib/site-url';
 
-const LLMS_FULL_TXT_CONTENT = `# الموسوعة المرجعية الكاملة للعبة Neelyo (Cinema & TV Tycoon — Full GEO Knowledge Graph)
+export const dynamic = 'force-dynamic';
+
+function buildLlmsFullTxt(siteUrl: string): string {
+  return `# الموسوعة المرجعية الكاملة للعبة Neelyo (Cinema & TV Tycoon — Full GEO Knowledge Graph)
 
 ## 1. الهوية والتعريف الشامل (Identity & Domain Classification)
 - **الاسم الرسمي**: Neelyo (نيليو — Cinema & TV Tycoon)
@@ -43,12 +47,16 @@ const LLMS_FULL_TXT_CONTENT = `# الموسوعة المرجعية الكامل�
 - شاشة موبايل الإمبراطور لمتابعة التريند واللجان الإلكترونية والبيانات الصحفية.
 
 ## 7. الخصوصية، الشروط، والتواصل الرسمي
-- صفحة معلومات عنا وسياسة الخصوصية وشروط الاستخدام: /about-us
+- الرابط الرسمي للعبة: ${siteUrl}
+- صفحة معلومات عنا وسياسة الخصوصية وشروط الاستخدام: ${siteUrl}/about-us
+- خريطة الموقع: ${siteUrl}/sitemap.xml
 - البريد الإلكتروني الرسمي: neelyotycoon@gmail.com
 `;
+}
 
-export async function GET() {
-  return new NextResponse(LLMS_FULL_TXT_CONTENT, {
+export async function GET(req: NextRequest) {
+  const siteUrl = resolveRequestSiteUrl(req.headers);
+  return new NextResponse(buildLlmsFullTxt(siteUrl), {
     status: 200,
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',

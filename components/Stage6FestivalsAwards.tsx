@@ -8,6 +8,7 @@ import {
 } from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { getMarketAiContext } from '@/lib/market-profiles';
+import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import { AnimatedRedCarpetFestivalGraphic } from '@/components/CinematicGraphicsScene';
 import {
   Award,
@@ -84,6 +85,7 @@ export function Stage6FestivalsAwards() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             mode: 'evaluate_festival_ceremony',
+            studioInstanceId: getOrCreateStudioInstanceId(),
             groqKeyOverride: groqApiKeyClient,
             preferredModel: preferredGroqModel,
             payload: {

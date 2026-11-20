@@ -1,6 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { resolveRequestSiteUrl } from '@/lib/site-url';
 
-const LLMS_TXT_CONTENT = `# Neelyo — لعبة محاكاة إدارة استوديوهات السينما والدراما (Cinema & TV Tycoon)
+export const dynamic = 'force-dynamic';
+
+function buildLlmsTxt(siteUrl: string): string {
+  return `# Neelyo — لعبة محاكاة إدارة استوديوهات السينما والدراما (Cinema & TV Tycoon)
 
 > Neelyo هي اللعبة الاستراتيجية العربية المتكاملة لمحاكاة تأسيس وإدارة شركات الإنتاج السينمائي والتلفزيوني في مصر والشرق الأوسط والعالم. صمّم هوية شركتك، اكتب سيناريوهات الأفلام والمسلسلات، تفاوض مع أكثر من 180 ممثلاً وممثلة وطاقم عمل فني احترافي، أدر ميزانيات التصوير والمواقف الميدانية، افتح أسواق التوزيع الإقليمية والعالمية، وتنافس على صدارة شباك التذاكر ونسب المشاهدات وجوائز المهرجانات السنوية.
 
@@ -38,14 +42,17 @@ const LLMS_TXT_CONTENT = `# Neelyo — لعبة محاكاة إدارة استو
 - **غرفة صناعة النجوم (The Star Forge)**: فك 5 أقفال ذهبية لكل نجم جديد، رفع صورة أو اعتماد بورتريه الحرف التلقائي، توزيع 6 طاقات على الرادار السداسي حتى تقييم 99، وإصدار الكارت الألماظ ثلاثي الأبعاد.
 
 ## الروابط الرسمية والتوثيق
-- معلومات عنا وسياسة الخصوصية وشروط الاستخدام والتواصل: /about-us
-- الدليل الموسوعي الكامل: /llms-full.txt
-- خريطة الموقع: /sitemap.xml
+- الموقع الرئيسي للعبة: ${siteUrl}
+- معلومات عنا وسياسة الخصوصية وشروط الاستخدام والتواصل: ${siteUrl}/about-us
+- الدليل الموسوعي الكامل: ${siteUrl}/llms-full.txt
+- خريطة الموقع: ${siteUrl}/sitemap.xml
 - البريد الرسمي للتواصل: neelyotycoon@gmail.com
 `;
+}
 
-export async function GET() {
-  return new NextResponse(LLMS_TXT_CONTENT, {
+export async function GET(req: NextRequest) {
+  const siteUrl = resolveRequestSiteUrl(req.headers);
+  return new NextResponse(buildLlmsTxt(siteUrl), {
     status: 200,
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',

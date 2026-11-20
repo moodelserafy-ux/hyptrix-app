@@ -172,7 +172,7 @@ export async function GET(req: NextRequest) {
     if (supabase) {
       try {
         const { data, error } = await supabase
-          .from('hyptrix_leaderboard')
+          .from('neelyo_leaderboard')
           .select('*')
           .order('market_value', { ascending: false })
           .limit(500);
@@ -281,7 +281,7 @@ export async function POST(req: NextRequest) {
     if (supabase) {
       try {
         const { data: wallet } = await supabase
-          .from('hyptrix_studio_wallets')
+          .from('neelyo_studio_wallets')
           .select('verified_cash, verified_market_value, owned_assets')
           .eq('studio_instance_id', studioInstanceId)
           .maybeSingle();
@@ -375,7 +375,7 @@ export async function POST(req: NextRequest) {
       try {
         // Keyed strictly on studio_instance_id so duplicate studio names never overwrite each other!
         const { error: upsertErr } = await supabase
-          .from('hyptrix_leaderboard')
+          .from('neelyo_leaderboard')
           .upsert(
             {
               studio_instance_id: studioInstanceId,
@@ -386,6 +386,7 @@ export async function POST(req: NextRequest) {
               reputation,
               released_count: releasedCount,
               total_awards: totalAwards,
+              owned_assets_count: serverWalletAssetsCount,
               ledger_verified: isLedgerVerified,
               updated_at: nowIso,
             },
@@ -394,7 +395,7 @@ export async function POST(req: NextRequest) {
 
         if (!upsertErr) {
           const { data, error } = await supabase
-            .from('hyptrix_leaderboard')
+            .from('neelyo_leaderboard')
             .select('*')
             .order('market_value', { ascending: false })
             .limit(500);

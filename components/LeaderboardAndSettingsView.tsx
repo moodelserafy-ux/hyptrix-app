@@ -10,6 +10,7 @@ import {
   RealPlayersLeaderboardResponse,
   getOrCreateStudioInstanceId,
 } from '@/lib/supabase';
+import { getSiteUrl } from '@/lib/site-url';
 import { StudioLogoSvg } from './StudioLogoSvg';
 import { WorldFlagArt } from './WorldFlagArt';
 import {
@@ -330,7 +331,7 @@ export function LeaderboardAndSettingsView() {
     if (typeof window !== 'undefined') {
       return `${window.location.origin}/?ref=${encodeURIComponent(myStudioInstanceId)}`;
     }
-    return `https://neelyo.app/?ref=${myStudioInstanceId}`;
+    return `${getSiteUrl()}/?ref=${encodeURIComponent(myStudioInstanceId)}`;
   }, [botUsername, myStudioInstanceId]);
 
   const handleCopyReferralLink = async () => {

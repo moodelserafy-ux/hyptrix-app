@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useGameStore } from '@/lib/store';
 import { GENRES } from '@/lib/db-resolver';
 import { getMarketProfile } from '@/lib/market-profiles';
+import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import {
   AgeRating,
   GenreId,
@@ -125,6 +126,7 @@ export function Stage2ProjectSetup() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'generate_script_idea',
+          studioInstanceId: getOrCreateStudioInstanceId(),
           groqKeyOverride: groqApiKeyClient,
           preferredModel: preferredGroqModel,
           payload: {

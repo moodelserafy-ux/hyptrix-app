@@ -13,6 +13,7 @@ import { getResolvedDatabase } from '@/lib/db-resolver';
 import { getCurrencyLabel } from '@/lib/market-profiles';
 import { composeProceduralFilmingNews } from '@/lib/procedural-dialogue';
 import { formatMoney } from '@/lib/game-engine';
+import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import { AnimatedFilmingSetGraphic } from '@/components/CinematicGraphicsScene';
 import {
   Camera,
@@ -108,6 +109,7 @@ export function Stage4ProductionCrises() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'mid_production_crises',
+          studioInstanceId: getOrCreateStudioInstanceId(),
           groqKeyOverride: groqApiKeyClient,
           preferredModel: preferredGroqModel,
           payload: {

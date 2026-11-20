@@ -1,37 +1,39 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import Link from 'next/link';
 import { ArrowRight, Mail } from 'lucide-react';
-
-const APP_URL =
-  process.env.APP_URL ||
-  'https://ais-pre-rocpe6ymx4aaq2syvt4glo-1004117229529.europe-west2.run.app';
+import { resolveRequestSiteUrl } from '@/lib/site-url';
 
 const OFFICIAL_EMAIL = 'neelyotycoon@gmail.com';
 
-export const metadata: Metadata = {
-  title: 'معلومات عنا وسياسة الخصوصية وشروط الاستخدام | Neelyo',
-  description:
-    'التعريف الرسمي للعبة Neelyo لمحاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني العربية، إلى جانب سياسة الخصوصية، شروط الاستخدام، وبيانات التواصل الرسمية.',
-  alternates: {
-    canonical: `${APP_URL}/about-us`,
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
+export async function generateMetadata(): Promise<Metadata> {
+  const siteUrl = resolveRequestSiteUrl(await headers());
+
+  return {
+    title: 'معلومات عنا وسياسة الخصوصية وشروط الاستخدام | Neelyo',
+    description:
+      'التعريف الرسمي للعبة Neelyo لمحاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني العربية، إلى جانب سياسة الخصوصية، شروط الاستخدام، وبيانات التواصل الرسمية.',
+    alternates: {
+      canonical: `${siteUrl}/about-us`,
+    },
+    robots: {
       index: true,
       follow: true,
-      'max-snippet': -1,
-      'max-image-preview': 'large',
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-snippet': -1,
+        'max-image-preview': 'large',
+      },
     },
-  },
-};
+  };
+}
 
 const GAME_PILLARS = [
   {
     num: '01',
     title: 'تأسيس الاستوديو ومكتب الإمبراطور',
-    body: 'ابدأ برأس مال تأسيسي 75 مليون جنيه افتراضي، واختر اسم شركتك وشعارها الملكي وميزة المؤسس الاستراتيجية، وأدر كافة قراراتك من مكتب الإمبراطور التفاعلي.',
+    body: 'ابدأ برأس مال تأسيسي 75 مليون عملة افتراضية، واختر اسم شركتك وشعارها الملكي وميزة المؤسس الاستراتيجية، وأدر كافة قراراتك من مكتب الإمبراطور التفاعلي.',
   },
   {
     num: '02',
@@ -101,12 +103,13 @@ const TERMS_ARTICLES = [
   },
 ];
 
-export default function AboutUsPage() {
+export default async function AboutUsPage() {
+  const siteUrl = resolveRequestSiteUrl(await headers());
   const aboutJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'AboutPage',
-    '@id': `${APP_URL}/about-us#about`,
-    url: `${APP_URL}/about-us`,
+    '@id': `${siteUrl}/about-us#about`,
+    url: `${siteUrl}/about-us`,
     name: 'معلومات عنا وسياسة الخصوصية وشروط الاستخدام — Neelyo',
     inLanguage: ['ar', 'ar-EG'],
     description:
@@ -115,7 +118,7 @@ export default function AboutUsPage() {
       '@type': 'VideoGame',
       name: 'Neelyo',
       alternateName: 'Neelyo — Cinema & TV Tycoon',
-      url: APP_URL,
+      url: siteUrl,
       gamePlatform: [
         'Web Browser',
         'Mobile Web',
