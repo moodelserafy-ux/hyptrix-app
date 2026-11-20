@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowRight, Mail } from 'lucide-react';
 import { resolveRequestSiteUrl } from '@/lib/site-url';
 
@@ -15,6 +16,28 @@ export async function generateMetadata(): Promise<Metadata> {
       'التعريف الرسمي للعبة Neelyo لمحاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني العربية، إلى جانب سياسة الخصوصية، شروط الاستخدام، وبيانات التواصل الرسمية.',
     alternates: {
       canonical: `${siteUrl}/about-us`,
+    },
+    openGraph: {
+      title: 'معلومات عنا وسياسة الخصوصية وشروط الاستخدام | Neelyo',
+      description:
+        'التعريف الرسمي للعبة Neelyo لمحاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني العربية.',
+      url: `${siteUrl}/about-us`,
+      siteName: 'Neelyo',
+      images: [
+        {
+          url: `${siteUrl}/images/neelyo-og.png`,
+          width: 1200,
+          height: 630,
+          alt: 'Neelyo — لعبة محاكاة شركات الإنتاج السينمائي والتلفزيوني',
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: 'معلومات عنا | Neelyo',
+      description:
+        'التعريف الرسمي للعبة Neelyo لمحاكاة وإدارة شركات الإنتاج السينمائي والتلفزيوني العربية.',
+      images: [`${siteUrl}/images/neelyo-og.png`],
     },
     robots: {
       index: true,
@@ -155,9 +178,19 @@ export default async function AboutUsPage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-6 px-5 py-4 sm:px-8">
           <Link
             href="/"
-            className="font-display text-xl tracking-tight text-[#1A2530] whitespace-nowrap shrink-0"
+            className="flex items-center gap-2 font-display text-xl tracking-tight text-[#1A2530] whitespace-nowrap shrink-0"
           >
-            Neelyo
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0D1824] p-1.5 shadow-xs">
+              <Image
+                src="/images/neelyo-logo.png"
+                alt="Neelyo"
+                width={24}
+                height={24}
+                referrerPolicy="no-referrer"
+                className="h-full w-full object-contain"
+              />
+            </span>
+            <span>Neelyo</span>
           </Link>
 
           <nav

@@ -11,12 +11,12 @@ import {
 import { WorldFlagArt } from './WorldFlagArt';
 import { triggerTelegramHaptic } from './TelegramMiniAppBridge';
 import { playClapperboardSnap } from '@/lib/sound-fx';
+import Image from 'next/image';
 import {
   Globe,
   Lock,
   Check,
   ArrowLeft,
-  Film,
   Crown,
   BookOpen,
   Mail,
@@ -301,8 +301,16 @@ export function WelcomeMarketScreen({
             transition={{ duration: 0.3 }}
             className="mb-2 flex items-center gap-2.5"
           >
-            <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530] text-[#D4AF37] shadow-[0_8px_22px_rgba(26,37,48,0.18)]">
-              <Film className="h-5 w-5" />
+            <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl border-2 border-[#D4AF37] bg-[#0D1824] p-1.5 shadow-[0_8px_22px_rgba(26,37,48,0.18)]">
+              <Image
+                src="/images/neelyo-logo.png"
+                alt="Neelyo"
+                width={32}
+                height={32}
+                priority
+                referrerPolicy="no-referrer"
+                className="h-full w-full object-contain"
+              />
             </div>
             <span className="font-display text-2xl sm:text-3xl font-black tracking-wide text-[#1A2530]">
               Neelyo

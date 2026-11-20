@@ -42,6 +42,10 @@ import {
   playCashRegisterChaChing,
   playHeartbeatTick,
 } from '@/lib/sound-fx';
+import {
+  showRewardedAd,
+  getRewardedAdErrorMessage,
+} from '@/lib/ad-mediator';
 
 function SpinningOdometerRevenue({ targetValue }: { targetValue: number }) {
   const [displayed, setDisplayed] = React.useState(targetValue);
@@ -1486,10 +1490,20 @@ export function Stage5ReleaseSimulation() {
                       {!lastReleasedProject.intlDistributionAdUsed && (
                         <button
                           type="button"
-                          onClick={() => {
-                            claimInternationalDistributionAdBonus(
-                              lastReleasedProject.id
-                            );
+                          onClick={async () => {
+                            const adResult =
+                              await showRewardedAd('intl_distribution');
+                            if (adResult.completed) {
+                              claimInternationalDistributionAdBonus(
+                                lastReleasedProject.id
+                              );
+                            } else {
+                              const errMsg = getRewardedAdErrorMessage(
+                                adResult.reason,
+                                'لتفعيل مكافأة التوزيع الدولي'
+                              );
+                              if (errMsg) showToast(errMsg, 'warning');
+                            }
                           }}
                           className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3.5 py-2 text-xs font-black text-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
                         >

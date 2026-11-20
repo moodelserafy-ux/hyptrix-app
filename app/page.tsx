@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import Image from 'next/image';
 import {
   useGameStore,
   formatGameDate,
@@ -10,6 +11,7 @@ import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
 import { getCurrencyLabel } from '@/lib/market-profiles';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
+import { prewarmAdNetworks } from '@/lib/ad-mediator';
 import { WelcomeMarketScreen } from '@/components/WelcomeMarketScreen';
 import { Stage1StudioCreation } from '@/components/Stage1StudioCreation';
 import { StudioHubView } from '@/components/StudioHubView';
@@ -81,6 +83,7 @@ export default function HomePage() {
   const [secondsLeft, setSecondsLeft] = useState(DAY_DURATION_SECONDS);
   const [isPageActive, setIsPageActive] = useState(true);
   const [isClockDetached, setIsClockDetached] = useState(false);
+  const [isRewardedAdPlaying, setIsRewardedAdPlaying] = useState(false);
 
   const handleOpenInfo = (tab: NeelyoInfoTab = 'about') => {
     setInfoModalState({ open: true, tab });
@@ -100,6 +103,20 @@ export default function HomePage() {
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Prewarm AdsGram + Monetag mediation and pause game clock during rewarded ad playback
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    prewarmAdNetworks();
+    const handleAdState = (e: Event) => {
+      const detail = (e as CustomEvent<{ open?: boolean }>).detail;
+      setIsRewardedAdPlaying(Boolean(detail?.open));
+    };
+    window.addEventListener('neelyo:ad-state', handleAdState);
+    return () => {
+      window.removeEventListener('neelyo:ad-state', handleAdState);
+    };
   }, []);
 
   // Keep warm creamy viewport background unified across onboarding and Emperor's Desk
@@ -132,7 +149,8 @@ export default function HomePage() {
     breakingNewsQueue.length > 0 ||
     festivalModalQueue.length > 0;
   const isAnyModalOpen = isTopOverlayOpen || isChildModalOpen;
-  const isClockPausedByOverlay = isAnyModalOpen || isOnboardingSpotlightActive;
+  const isClockPausedByOverlay =
+    isAnyModalOpen || isOnboardingSpotlightActive || isRewardedAdPlaying;
 
   // Centralized Background Scroll & Touch Lock whenever ANY modal is open
   useEffect(() => {
@@ -451,9 +469,14 @@ export default function HomePage() {
                 </button>
               ) : (
                 <div className="flex items-center gap-2 shrink-0 min-w-0">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#D91624] border border-[#D4AF37] text-[#D4AF37] shadow">
-                    <DirectorChairIcon className="w-4 h-4" />
-                  </span>
+                  <Image
+                    src="/images/neelyo-logo.png"
+                    alt="Neelyo"
+                    width={32}
+                    height={32}
+                    referrerPolicy="no-referrer"
+                    className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 object-contain"
+                  />
                   <span className="font-display text-sm sm:text-base text-[#F9F6F0] truncate max-w-[140px] sm:max-w-[220px]">
                     {studioName}
                   </span>

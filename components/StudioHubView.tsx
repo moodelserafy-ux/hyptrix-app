@@ -57,6 +57,10 @@ import {
   Mail,
 } from 'lucide-react';
 import type { NeelyoInfoTab } from './NeelyoInfoModal';
+import {
+  showRewardedAd,
+  getRewardedAdErrorMessage,
+} from '@/lib/ad-mediator';
 
 export function StudioHubView({
   onOpenSettings,
@@ -117,6 +121,19 @@ export function StudioHubView({
       : 0;
   const canUseEmergencyBailout =
     isInLiquidityEmergency && bailoutCooldownRemaining === 0;
+
+  const handleEmergencyBailoutAd = async () => {
+    const adResult = await showRewardedAd('emergency_bailout');
+    if (adResult.completed) {
+      claimEmergencyInvestorBailoutWithAd();
+    } else {
+      const errMsg = getRewardedAdErrorMessage(
+        adResult.reason,
+        'لتفعيل تمويل الإنقاذ'
+      );
+      if (errMsg) showToast(errMsg, 'warning');
+    }
+  };
 
   useEffect(() => {
     setChildModalOpen(Boolean(activeSheet));
@@ -367,7 +384,7 @@ export function StudioHubView({
 
             <button
               type="button"
-              onClick={() => claimEmergencyInvestorBailoutWithAd()}
+              onClick={handleEmergencyBailoutAd}
               className="w-full sm:w-auto shrink-0 px-5 py-3.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-black text-xs sm:text-sm shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
             >
               <Film className="w-4 h-4 shrink-0" />
@@ -940,7 +957,7 @@ export function StudioHubView({
                       {canUseEmergencyBailout ? (
                         <button
                           type="button"
-                          onClick={() => claimEmergencyInvestorBailoutWithAd()}
+                          onClick={handleEmergencyBailoutAd}
                           className="shrink-0 px-4 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] hover:brightness-105 font-black text-xs transition cursor-pointer text-center shadow"
                         >
                           <div className="font-display text-sm text-[#1A2530]">

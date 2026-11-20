@@ -28,6 +28,10 @@ import {
 } from '@/lib/game-engine';
 import { getCurrencyLabel } from '@/lib/market-profiles';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
+import {
+  showRewardedAd,
+  getRewardedAdErrorMessage,
+} from '@/lib/ad-mediator';
 import { TalentPortrait } from '@/components/CinematicGraphicsScene';
 import {
   Fut3DTiltCard,
@@ -128,6 +132,22 @@ export function Stage3CrewCastCards() {
   } = useGameStore();
 
   const currencyLabel = getCurrencyLabel(worldMarket);
+
+  const handleSyndicateMediationAd = async (
+    talentId: string,
+    talentName: string
+  ) => {
+    const adResult = await showRewardedAd('syndicate_mediation');
+    if (adResult.completed) {
+      unlockSyndicateMediationWithAd(talentId, talentName);
+    } else {
+      const errMsg = getRewardedAdErrorMessage(
+        adResult.reason,
+        'لتفعيل وساطة النقابة'
+      );
+      if (errMsg) showToast(errMsg, 'warning');
+    }
+  };
 
   const studioAssetBenefits = useMemo(
     () => getStudioAssetBenefits(ownedStudioAssets),
@@ -1174,7 +1194,7 @@ export function Stage3CrewCastCards() {
                       <button
                         type="button"
                         onClick={() =>
-                          unlockSyndicateMediationWithAd(
+                          handleSyndicateMediationAd(
                             crewMember.id,
                             crewMember.name
                           )
@@ -1447,7 +1467,7 @@ export function Stage3CrewCastCards() {
                         <button
                           type="button"
                           onClick={() =>
-                            unlockSyndicateMediationWithAd(actor.id, actor.name)
+                            handleSyndicateMediationAd(actor.id, actor.name)
                           }
                           className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3 py-2 text-xs font-black text-[#1A2530] border-2 border-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
                         >

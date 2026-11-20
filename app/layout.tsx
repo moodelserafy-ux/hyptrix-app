@@ -89,6 +89,15 @@ export async function generateMetadata(): Promise<Metadata> {
       ar: '/',
     },
   },
+  icons: {
+    icon: [
+      { url: '/favicon.png', sizes: '96x96', type: 'image/png' },
+      { url: '/images/neelyo-icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/images/neelyo-icon.png', sizes: '512x512', type: 'image/png' },
+    ],
+    shortcut: ['/favicon.png'],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
   openGraph: {
     type: 'website',
     locale: 'ar_EG',
@@ -97,12 +106,27 @@ export async function generateMetadata(): Promise<Metadata> {
     title: 'Neelyo | لعبة محاكاة شركات الإنتاج وشباك التذاكر والدراما',
     description:
       'أسّس شركة إنتاجك السينمائي والدرامي في Neelyo، اكتب قصص أعمالك، تفاوض مع أكثر من 180 نجماً ومخرجاً حسب حجم الدور والميزانية، أدر كواليس التصوير، وتصدّر إيرادات السينما والمنصات الرقمية والقنوات الفضائية.',
+    images: [
+      {
+        url: `${siteUrl}/images/neelyo-og.png`,
+        width: 1200,
+        height: 630,
+        alt: 'Neelyo — لعبة محاكاة إدارة شركات الإنتاج السينمائي والدرامي',
+      },
+      {
+        url: `${siteUrl}/images/neelyo-icon.png`,
+        width: 512,
+        height: 512,
+        alt: 'شعار Neelyo',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Neelyo | محاكاة صناعة الأفلام والمسلسلات العربية',
     description:
       'تجربة استراتيجية متكاملة في Neelyo لإدارة استوديو إنتاج سينمائي وتلفزيوني: تأليف السيناريو، التعاقد مع النجوم والمخرجين، إدارة البلاتوه، التوزيع الإقليمي والعالمي، وحصد الجوائز السنوية.',
+    images: [`${siteUrl}/images/neelyo-og.png`],
   },
   robots: {
     index: true,
@@ -150,6 +174,7 @@ export default async function RootLayout({
           'Arabic Cinema & TV Studio Tycoon',
         ],
         url: siteUrl,
+        image: `${siteUrl}/images/neelyo-og.png`,
         inLanguage: ['ar', 'ar-EG'],
         applicationCategory: 'GameApplication',
         applicationSubCategory: 'Business & Cinema Studio Tycoon Simulation',
@@ -190,6 +215,7 @@ export default async function RootLayout({
           name: 'Neelyo Studio',
           email: 'neelyotycoon@gmail.com',
           url: siteUrl,
+          logo: `${siteUrl}/images/neelyo-icon.png`,
         },
       },
       {
@@ -359,6 +385,18 @@ export default async function RootLayout({
         <script
           src="https://telegram.org/js/telegram-web-app.js"
           defer
+        />
+        {/* Monetag Rewarded Interstitial SDK (Zone 12307661) */}
+        <script
+          src="https://libtl.com/sdk.js"
+          data-zone="12307661"
+          data-sdk="show_12307661"
+          async
+        />
+        {/* AdsGram Rewarded Video SDK (Block ID 60901) */}
+        <script
+          src="https://sad.adsgram.ai/js/sad.min.js"
+          async
         />
       </head>
       <body className="min-h-dvh w-full overflow-x-hidden bg-[#F9F6F0] text-[#1A2530] antialiased selection:bg-[#D91624] selection:text-white">

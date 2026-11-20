@@ -14,6 +14,10 @@ import { getCurrencyLabel } from '@/lib/market-profiles';
 import { composeProceduralFilmingNews } from '@/lib/procedural-dialogue';
 import { formatMoney } from '@/lib/game-engine';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
+import {
+  showRewardedAd,
+  getRewardedAdErrorMessage,
+} from '@/lib/ad-mediator';
 import { AnimatedFilmingSetGraphic } from '@/components/CinematicGraphicsScene';
 import {
   Camera,
@@ -390,7 +394,18 @@ export function Stage4ProductionCrises() {
 
                 <button
                   type="button"
-                  onClick={() => resolveCrisisWithRewardedAd(crisis.id)}
+                  onClick={async () => {
+                    const adResult = await showRewardedAd('crisis_settlement');
+                    if (adResult.completed) {
+                      resolveCrisisWithRewardedAd(crisis.id);
+                    } else {
+                      const errMsg = getRewardedAdErrorMessage(
+                        adResult.reason,
+                        'للتسوية المجانية'
+                      );
+                      if (errMsg) showToast(errMsg, 'warning');
+                    }
+                  }}
                   className="flex flex-col justify-between gap-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] hover:brightness-105 p-3 text-right transition cursor-pointer shadow-md"
                 >
                   <span className="text-xs font-black text-[#1A2530]">

@@ -43,6 +43,10 @@ import {
   uploadImageToCloudinary,
   isCloudinaryConfigured,
 } from '@/lib/cloudinary';
+import {
+  showRewardedAd,
+  getRewardedAdErrorMessage,
+} from '@/lib/ad-mediator';
 
 function getStatMetaForGender(gender: 'male' | 'female'): {
   key: keyof SixRadarStats;
@@ -301,17 +305,22 @@ export default function StarForgeModal() {
     triggerPhotoFlash(compressed.dataUrl);
   };
 
-  const handleWatchAdToUnlock = () => {
+  const handleWatchAdToUnlock = async () => {
     if (watchingAdIndex !== null || allLocksOpened) return;
     const currentLock = starForgeLocksOpened;
     setWatchingAdIndex(currentLock);
-    setTimeout(() => {
-      playMetalLockDrop();
-      setDroppedLockIndex(currentLock);
-      unlockNextStarForgeLockWithAd();
+    const adResult = await showRewardedAd('star_forge_lock');
+    if (!adResult.completed) {
       setWatchingAdIndex(null);
-      setTimeout(() => setDroppedLockIndex(null), 700);
-    }, 650);
+      const errMsg = getRewardedAdErrorMessage(adResult.reason, 'لفتح القفل');
+      if (errMsg) showToast(errMsg, 'warning');
+      return;
+    }
+    playMetalLockDrop();
+    setDroppedLockIndex(currentLock);
+    unlockNextStarForgeLockWithAd();
+    setWatchingAdIndex(null);
+    setTimeout(() => setDroppedLockIndex(null), 700);
   };
 
   const handleIncrementStat = (key: keyof SixRadarStats) => {
@@ -361,7 +370,7 @@ export default function StarForgeModal() {
     }));
   };
 
-  const handleAdTrainingCampBoost = () => {
+  const handleAdTrainingCampBoost = async () => {
     if (trainingAdLoading) return;
     if (trainingAdsUsed >= MAX_TRAINING_ADS_PER_STAR) {
       showToast(
@@ -379,32 +388,40 @@ export default function StarForgeModal() {
       return;
     }
     setTrainingAdLoading(true);
-    setTimeout(() => {
-      playCashRegisterChaChing();
-      setRadarStats((prev) => {
-        const next = { ...prev };
-        let pointsLeft = 4;
-        let guard = 0;
-        while (pointsLeft > 0 && guard < 20) {
-          guard++;
-          const pool = (Object.keys(next) as (keyof SixRadarStats)[]).filter(
-            (k) => next[k] < 99
-          );
-          if (pool.length === 0) break;
-          const pick = pool[Math.floor(Math.random() * pool.length)];
-          next[pick] = Math.min(99, next[pick] + 1);
-          pointsLeft--;
-        }
-        return next;
-      });
-      setTrainingAdsUsed((c) => c + 1);
+    const adResult = await showRewardedAd('star_forge_training');
+    if (!adResult.completed) {
       setTrainingAdLoading(false);
-      showToast(
-        'اكتمل معسكر التدريب المكثف! (+4 نقاط طاقة مجاناً)',
-        'success',
-        `متبقي ${Math.max(0, MAX_TRAINING_ADS_PER_STAR - (trainingAdsUsed + 1))} من ${MAX_TRAINING_ADS_PER_STAR} معسكرات مجانية لهذا النجم.`
+      const errMsg = getRewardedAdErrorMessage(
+        adResult.reason,
+        'للحصول على نقاط التدريب'
       );
-    }, 600);
+      if (errMsg) showToast(errMsg, 'warning');
+      return;
+    }
+    playCashRegisterChaChing();
+    setRadarStats((prev) => {
+      const next = { ...prev };
+      let pointsLeft = 4;
+      let guard = 0;
+      while (pointsLeft > 0 && guard < 20) {
+        guard++;
+        const pool = (Object.keys(next) as (keyof SixRadarStats)[]).filter(
+          (k) => next[k] < 99
+        );
+        if (pool.length === 0) break;
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        next[pick] = Math.min(99, next[pick] + 1);
+        pointsLeft--;
+      }
+      return next;
+    });
+    setTrainingAdsUsed((c) => c + 1);
+    setTrainingAdLoading(false);
+    showToast(
+      'اكتمل معسكر التدريب المكثف! (+4 نقاط طاقة مجاناً)',
+      'success',
+      `متبقي ${Math.max(0, MAX_TRAINING_ADS_PER_STAR - (trainingAdsUsed + 1))} من ${MAX_TRAINING_ADS_PER_STAR} معسكرات مجانية لهذا النجم.`
+    );
   };
 
   const overallRating = Math.min(

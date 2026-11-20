@@ -38,6 +38,10 @@ import {
   playSocialNotifPop,
   playCashRegisterChaChing,
 } from '@/lib/sound-fx';
+import {
+  showRewardedAd,
+  getRewardedAdErrorMessage,
+} from '@/lib/ad-mediator';
 
 export function WorldPopupsOverlay() {
   const {
@@ -63,6 +67,7 @@ export function WorldPopupsOverlay() {
     liquidateAndStartNewStudioInSameWorld,
     worldMarket,
     customDbPatch,
+    showToast,
   } = useGameStore();
 
   const currencyLabel = getCurrencyLabel(worldMarket);
@@ -282,7 +287,18 @@ export function WorldPopupsOverlay() {
                 <div className="space-y-2.5 pt-1">
                   <button
                     type="button"
-                    onClick={() => claimEmergencyInvestorBailoutWithAd()}
+                    onClick={async () => {
+                      const adResult = await showRewardedAd('emergency_bailout');
+                      if (adResult.completed) {
+                        claimEmergencyInvestorBailoutWithAd();
+                      } else {
+                        const errMsg = getRewardedAdErrorMessage(
+                          adResult.reason,
+                          'لتفعيل تمويل الإنقاذ'
+                        );
+                        if (errMsg) showToast(errMsg, 'warning');
+                      }
+                    }}
                     className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-black text-xs sm:text-sm border-2 border-[#1A2530] shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4 shrink-0" />

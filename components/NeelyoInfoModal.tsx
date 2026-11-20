@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -70,13 +71,23 @@ export function NeelyoInfoModal({
         >
           {/* Editorial Modal Header */}
           <div className="bg-[#1A2530] px-6 py-4 flex items-center justify-between gap-4 shrink-0">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold text-[#D4AF37]">
-                Neelyo Studio · المركز الرسمي
-              </p>
-              <h2 className="font-display text-lg sm:text-xl text-[#F9F6F0] truncate">
-                التعريف والوثائق القانونية
-              </h2>
+            <div className="flex items-center gap-3 min-w-0">
+              <Image
+                src="/images/neelyo-logo.png"
+                alt="Neelyo"
+                width={34}
+                height={34}
+                referrerPolicy="no-referrer"
+                className="h-8 w-8 shrink-0 object-contain"
+              />
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-[#D4AF37]">
+                  Neelyo Studio · المركز الرسمي
+                </p>
+                <h2 className="font-display text-lg sm:text-xl text-[#F9F6F0] truncate">
+                  التعريف والوثائق القانونية
+                </h2>
+              </div>
             </div>
 
             <button
