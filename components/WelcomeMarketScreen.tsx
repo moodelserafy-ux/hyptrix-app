@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  UI_LANGUAGE_OPTIONS,
   MARKET_PROFILES,
   type UiLanguageId,
   type WorldMarketId,
@@ -11,11 +10,11 @@ import {
 import { getLocalizedMarketInfo, getUiDir, tr } from '@/lib/i18n';
 import { useGameStore } from '@/lib/store';
 import { WorldFlagArt } from './WorldFlagArt';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { triggerTelegramHaptic } from './TelegramMiniAppBridge';
 import { playClapperboardSnap } from '@/lib/sound-fx';
 import Image from 'next/image';
 import {
-  Globe,
   Lock,
   Check,
   ArrowLeft,
@@ -23,7 +22,6 @@ import {
   Crown,
   BookOpen,
   Mail,
-  ChevronDown,
   X,
 } from 'lucide-react';
 import type { NeelyoInfoTab } from './NeelyoInfoModal';
@@ -39,16 +37,13 @@ export function WelcomeMarketScreen({
   onComplete: (language: UiLanguageId, market: WorldMarketId) => void;
   onOpenInfo?: (tab: NeelyoInfoTab) => void;
 }) {
-  const setUiLanguage = useGameStore((s) => s.setUiLanguage);
   const storeLang = useGameStore((s) => s.uiLanguage);
 
   const selectedLang: UiLanguageId = storeLang || initialLanguage;
   const [selectedMarket, setSelectedMarket] = useState<WorldMarketId>(
     initialMarket === 'saudi' ? 'saudi' : 'egypt'
   );
-  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const [lockedNotice, setLockedNotice] = useState<string | null>(null);
-  const langMenuRef = useRef<HTMLDivElement | null>(null);
 
   const isEn = selectedLang === 'en';
   const uiDir = getUiDir(selectedLang);
@@ -60,57 +55,14 @@ export function WelcomeMarketScreen({
     MARKET_PROFILES.usa,
   ];
 
-  const activeLangObj =
-    UI_LANGUAGE_OPTIONS.find((l) => l.id === selectedLang) ||
-    UI_LANGUAGE_OPTIONS[0];
   const activeMarketLoc = getLocalizedMarketInfo(selectedMarket, selectedLang);
   const isSaudiSelected = selectedMarket === 'saudi';
-
-  useEffect(() => {
-    if (!isLangMenuOpen) return;
-    const handlePointerDown = (e: MouseEvent) => {
-      if (
-        langMenuRef.current &&
-        !langMenuRef.current.contains(e.target as Node)
-      ) {
-        setIsLangMenuOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsLangMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isLangMenuOpen]);
 
   useEffect(() => {
     if (!lockedNotice) return;
     const timer = setTimeout(() => setLockedNotice(null), 3400);
     return () => clearTimeout(timer);
   }, [lockedNotice]);
-
-  const handleSelectLanguage = (langId: UiLanguageId, available: boolean) => {
-    if (!available) {
-      triggerTelegramHaptic('warning');
-      setLockedNotice(
-        tr(
-          selectedLang,
-          'This language is currently in production and will unlock in an upcoming update.',
-          'هذه اللغة قيد التجهيز وستُفتح قريباً في التحديث القادم.'
-        )
-      );
-      setIsLangMenuOpen(false);
-      return;
-    }
-    triggerTelegramHaptic('selection');
-    setUiLanguage(langId, true);
-    setLockedNotice(null);
-    setIsLangMenuOpen(false);
-  };
 
   const handleSelectMarket = (marketId: WorldMarketId, available: boolean) => {
     if (!available) {
@@ -225,100 +177,8 @@ export function WelcomeMarketScreen({
           )}
         </div>
 
-        {/* Compact Interactive Language Capsule Switcher (English + العربية Unlocked!) */}
-        <div className="relative" ref={langMenuRef}>
-          <button
-            type="button"
-            onClick={() => {
-              triggerTelegramHaptic('light');
-              setIsLangMenuOpen((prev) => !prev);
-            }}
-            aria-expanded={isLangMenuOpen}
-            aria-haspopup="listbox"
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-full border-2 border-[#D4AF37]/75 bg-[#FFFDF8] px-3.5 text-xs font-black text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer"
-          >
-            <Globe className="h-3.5 w-3.5 text-[#D91624]" />
-            <span>{activeLangObj.nativeLabel}</span>
-            <ChevronDown
-              className={`h-3.5 w-3.5 text-[#9A7209] transition-transform duration-200 ${
-                isLangMenuOpen ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-
-          <AnimatePresence>
-            {isLangMenuOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                transition={{ duration: 0.16 }}
-                role="listbox"
-                aria-label={tr(selectedLang, 'Interface language', 'اختيار لغة الواجهة')}
-                className={`absolute ${
-                  isEn ? 'right-0' : 'left-0'
-                } top-12 z-50 w-56 overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-[#FFFDF8] p-1.5 shadow-[0_18px_45px_rgba(26,37,48,0.18)]`}
-              >
-                <div className="px-2.5 py-1.5 text-[10px] font-black tracking-wide text-[#9A7209]">
-                  {tr(selectedLang, 'INTERFACE LANGUAGE', 'لغة الواجهة')}
-                </div>
-                <div className="space-y-1">
-                  {UI_LANGUAGE_OPTIONS.map((lang) => {
-                    const isCurrent = selectedLang === lang.id && lang.available;
-                    return (
-                      <button
-                        key={lang.id}
-                        type="button"
-                        role="option"
-                        aria-selected={isCurrent}
-                        onClick={() =>
-                          handleSelectLanguage(lang.id, lang.available)
-                        }
-                        className={`flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl px-3 py-2 ${
-                          isEn ? 'text-left' : 'text-right'
-                        } transition cursor-pointer ${
-                          isCurrent
-                            ? 'bg-[#FFF5D6] text-[#1A2530] border border-[#D4AF37]'
-                            : lang.available
-                            ? 'text-[#1A2530] hover:bg-[#F5EFE2]'
-                            : 'text-[#1A2530]/60 hover:bg-[#F5EFE2]/70'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="text-sm font-black truncate"
-                            dir={lang.dir}
-                          >
-                            {lang.nativeLabel}
-                          </span>
-                          {!isEn && lang.id !== 'ar' && (
-                            <span className="text-[10px] font-bold text-[#1A2530]/50">
-                              {lang.arabicLabel}
-                            </span>
-                          )}
-                        </div>
-                        {isCurrent ? (
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#D91624] text-white">
-                            <Check className="h-3.5 w-3.5 stroke-[3]" />
-                          </span>
-                        ) : lang.available ? (
-                          <span className="text-[10px] font-extrabold text-[#15803D]">
-                            {tr(selectedLang, 'Ready', 'متاح')}
-                          </span>
-                        ) : (
-                          <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-extrabold text-[#9A7209]">
-                            <Lock className="h-3 w-3" />
-                            <span>{tr(selectedLang, 'Soon', 'قريباً')}</span>
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        {/* Sleek Segmented Language Toggle (EN | عربي) */}
+        <LanguageSwitcher variant="compact" tone="light" />
       </header>
 
       {/* ==================== MAIN ROYAL OPENING STAGE ==================== */}

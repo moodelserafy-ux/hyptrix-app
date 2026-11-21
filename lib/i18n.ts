@@ -32,13 +32,46 @@ export function tr<T = string>(
   return lang === 'ar' ? ar : en;
 }
 
+export const UI_LANGUAGE_STORAGE_KEY = 'neelyo_ui_language_v1';
+
+/**
+ * Reads the player's explicitly chosen UI language synchronously from localStorage
+ * so reloads, hydration timing, or studio resets never overwrite their choice.
+ */
+export function readSavedUiLanguage(): UiLanguageId | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
+    if (raw === 'en' || raw === 'ar') return raw;
+  } catch {
+    // Ignore private-mode restrictions
+  }
+  return null;
+}
+
+/**
+ * Persists the player's chosen UI language synchronously to localStorage.
+ */
+export function writeSavedUiLanguage(lang: UiLanguageId): void {
+  if (typeof window === 'undefined') return;
+  if (lang !== 'en' && lang !== 'ar') return;
+  try {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, lang);
+  } catch {
+    // Ignore private-mode restrictions
+  }
+}
+
 /**
  * Auto-detects the player's preferred interface language on first entry:
- * 1. Telegram Mini App user `language_code` (ar* -> 'ar', everything else -> 'en').
- * 2. Browser `navigator.languages` / `navigator.language` (ar* -> 'ar', everything else -> 'en').
- * 3. Defaults to English ('en') as the global base language.
+ * 1. Saved manual user preference in localStorage (always wins).
+ * 2. Telegram Mini App user `language_code` (ar* -> 'ar', everything else -> 'en').
+ * 3. Browser `navigator.languages` / `navigator.language` (ar* -> 'ar', everything else -> 'en').
+ * 4. Defaults to English ('en') as the global base language.
  */
 export function detectPreferredUiLanguage(): UiLanguageId {
+  const saved = readSavedUiLanguage();
+  if (saved) return saved;
   if (typeof window === 'undefined') return 'en';
 
   const tgLang = (

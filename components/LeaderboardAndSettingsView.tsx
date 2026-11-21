@@ -19,6 +19,7 @@ import {
 import { getSiteUrl } from '@/lib/site-url';
 import { StudioLogoSvg } from './StudioLogoSvg';
 import { WorldFlagArt } from './WorldFlagArt';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import {
   Trophy,
   RotateCcw,
@@ -479,58 +480,58 @@ export function LeaderboardAndSettingsView() {
           )}
         </div>
 
-        {/* Segmented Filter Controls */}
-        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-[#0F171E] p-1.5 border border-[#D4AF37]/30">
+        {/* Mobile-First 2x2 -> Desktop 4-Column Segmented Tab Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-2xl bg-[#0F171E] p-1.5 border border-[#D4AF37]/30">
           <button
             type="button"
             onClick={() => setSubTab('real_players')}
-            className={`flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-black transition cursor-pointer whitespace-nowrap ${
               subTab === 'real_players'
                 ? 'bg-[#D91624] text-white border border-[#D4AF37] shadow'
                 : 'text-[#F9F6F0]/75 hover:text-[#F9F6F0]'
             }`}
           >
-            <Globe className="h-3.5 w-3.5 text-[#D4AF37]" />
-            <span>{tr(uiLanguage, 'Real Players (Top 15)', 'ترتيب اللاعبين الحقيقيين (أفضل 15)')}</span>
+            <Globe className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
+            <span className="truncate">{tr(uiLanguage, 'Top 15 Players', 'أفضل 15 لاعب')}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSubTab('world_studios')}
-            className={`flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-black transition cursor-pointer whitespace-nowrap ${
               subTab === 'world_studios'
                 ? 'bg-[#D4AF37] text-[#1A2530] shadow'
                 : 'text-[#F9F6F0]/75 hover:text-[#F9F6F0]'
             }`}
           >
-            <Building2 className="h-3.5 w-3.5" />
-            <span>{tr(uiLanguage, 'World Studios', 'بورصة شركات العالم')}</span>
+            <Building2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{tr(uiLanguage, 'World Studios', 'شركات العالم')}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSubTab('challenges')}
-            className={`flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-black transition cursor-pointer whitespace-nowrap ${
               subTab === 'challenges'
                 ? 'bg-[#15803D] text-white border border-[#D4AF37] shadow'
                 : 'text-[#F9F6F0]/75 hover:text-[#F9F6F0]'
             }`}
           >
-            <Flame className="h-3.5 w-3.5 text-[#D4AF37]" />
-            <span>{tr(uiLanguage, 'Challenges & Invites', 'التحدي والدعوات')}</span>
+            <Flame className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
+            <span className="truncate">{tr(uiLanguage, 'Challenges', 'التحدي والدعوات')}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSubTab('system')}
-            className={`flex min-h-[38px] items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition cursor-pointer whitespace-nowrap ${
+            className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-black transition cursor-pointer whitespace-nowrap ${
               subTab === 'system'
-                ? 'bg-[#D91624] text-white shadow'
+                ? 'bg-[#D91624] text-white border border-[#D4AF37] shadow'
                 : 'text-[#F9F6F0]/75 hover:text-[#F9F6F0]'
             }`}
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>{tr(uiLanguage, 'Reset / Market', 'إعادة التأسيس')}</span>
+            <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{tr(uiLanguage, 'Settings', 'الإعدادات')}</span>
           </button>
         </div>
       </div>
@@ -1154,70 +1155,95 @@ export function LeaderboardAndSettingsView() {
         </div>
       )}
 
-      {/* TAB 4: SYSTEM, WORLD MARKET SWITCH & RESET */}
+      {/* TAB 4: MOBILE-FIRST SETTINGS, LANGUAGE, MARKET SWITCH & RESET */}
       {subTab === 'system' && (
-        <div className="space-y-3">
-          <div className="flex flex-col items-center justify-between gap-3 rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] p-5 text-[#F9F6F0] shadow-md sm:flex-row">
-            <div className="flex items-center gap-3">
-              <div className="rounded-xl border border-[#D4AF37]/60 bg-white/10 p-2 shrink-0">
-                <WorldFlagArt market={worldMarket} className="h-8 w-12 rounded" />
+        <div className="space-y-4">
+          {/* Section 1: Interface & AI Language */}
+          <section className="rounded-3xl border border-[#1A2530]/12 bg-white p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="font-display text-sm sm:text-base font-black text-[#1A2530]">
+                {tr(uiLanguage, 'Interface & AI Language', 'لغة الواجهة والذكاء الاصطناعي')}
+              </h3>
+              <span className="text-[11px] font-bold text-[#9A7209]">
+                {tr(uiLanguage, 'Saved automatically', 'تُحفظ تلقائياً')}
+              </span>
+            </div>
+            <LanguageSwitcher variant="card" tone="light" />
+          </section>
+
+          {/* Section 2: Active Production World */}
+          <section className="overflow-hidden rounded-3xl border border-[#D4AF37]/50 bg-[#1A2530] text-[#F9F6F0] shadow-md">
+            <div className="flex items-center gap-3.5 p-4 sm:p-5">
+              <div className="w-14 shrink-0 overflow-hidden rounded-lg shadow-xs ring-1 ring-white/15">
+                <WorldFlagArt market={worldMarket} />
               </div>
-              <div>
-                <h3 className="font-display text-sm font-black text-[#D4AF37]">
-                  {tr(uiLanguage, 'Active Production World:', 'عالم الإنتاج النشط:')}{' '}
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold text-[#D4AF37]">
+                  {tr(uiLanguage, 'Active Production World', 'عالم الإنتاج النشط')}
+                </p>
+                <h3 className="font-display text-base font-black text-white truncate">
                   {marketInfo.nativeTitle}
                 </h3>
-                <p className="mt-0.5 text-xs font-bold text-[#F9F6F0]/75">
-                  {tr(
-                    uiLanguage,
-                    `Currency: ${marketInfo.currencyFullName} (${currencyLabel}) · Switch anytime to launch an independent career in another cinema market.`,
-                    `العملة: ${marketInfo.currencyFullName} (${currencyLabel}) · يمكنك الانتقال لعالم إنتاج جديد (مثل السعودية والخليج أو مصر) بمسيرة مستقلة.`
-                  )}
+                <p className="mt-0.5 text-xs font-bold text-[#F9F6F0]/70">
+                  {marketInfo.currencyFullName} ({currencyLabel})
                 </p>
               </div>
             </div>
 
-            <div className="shrink-0">
+            <div className="border-t border-white/10 px-4 py-3.5 sm:px-5">
               {!confirmSwitchMarket ? (
                 <button
                   type="button"
-                  onClick={() => setConfirmSwitchMarket(true)}
-                  className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-[#D4AF37] px-4 py-2 text-xs font-black text-[#1A2530] shadow hover:brightness-110 cursor-pointer"
+                  onClick={() => {
+                    setConfirmSwitchMarket(true);
+                    setConfirmReset(false);
+                  }}
+                  className="flex min-h-[46px] w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#D4AF37] px-5 py-2.5 text-xs font-black text-[#1A2530] shadow hover:brightness-110 active:scale-[0.98] transition cursor-pointer"
                 >
-                  <Globe className="h-3.5 w-3.5" />
-                  <span>{tr(uiLanguage, 'Switch Market', 'تغيير الدولة / السوق')}</span>
+                  <Globe className="h-4 w-4" />
+                  <span>{tr(uiLanguage, 'Switch Country / Market', 'تغيير الدولة / السوق')}</span>
                 </button>
               ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      openMarketSelector();
-                      setConfirmSwitchMarket(false);
-                    }}
-                    className="min-h-[40px] rounded-xl bg-[#D91624] border border-[#D4AF37] px-3.5 py-2 text-xs font-black text-white cursor-pointer"
-                  >
-                    {tr(uiLanguage, 'Yes, Open Markets', 'نعم، فتح اختيار الدول')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmSwitchMarket(false)}
-                    className="min-h-[40px] rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-xs font-black text-white cursor-pointer"
-                  >
-                    {tr(uiLanguage, 'Cancel', 'إلغاء')}
-                  </button>
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-[#F9F6F0]/85 leading-relaxed">
+                    {tr(
+                      uiLanguage,
+                      'Switch to another country market to launch an independent career with its own stars, currency, and festivals.',
+                      'يمكنك الانتقال لعالم إنتاج جديد (مثل السعودية والخليج أو مصر) بمسيرة مستقلة مع الاحتفاظ بلغتك.'
+                    )}
+                  </p>
+                  <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openMarketSelector();
+                        setConfirmSwitchMarket(false);
+                      }}
+                      className="min-h-[46px] rounded-xl bg-[#D91624] border border-[#D4AF37] px-4 py-2 text-xs font-black text-white active:scale-[0.98] transition cursor-pointer"
+                    >
+                      {tr(uiLanguage, 'Yes, Open Markets', 'نعم، فتح اختيار الدول')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmSwitchMarket(false)}
+                      className="min-h-[46px] rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-xs font-black text-white active:scale-[0.98] transition cursor-pointer"
+                    >
+                      {tr(uiLanguage, 'Cancel', 'إلغاء')}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
-          </div>
+          </section>
 
-          <div className="flex flex-col items-center justify-between gap-3 rounded-3xl border-2 border-[#D91624] bg-white p-5 shadow-md sm:flex-row">
+          {/* Section 3: Studio Reset */}
+          <section className="rounded-3xl border border-[#D91624]/30 bg-[#FFF7F7] p-4 sm:p-5 space-y-3">
             <div>
-              <h3 className="flex items-center gap-1.5 font-display text-sm font-black text-[#D91624]">
-                <AlertTriangle className="h-4 w-4 text-[#D91624]" />
+              <h3 className="flex items-center gap-2 font-display text-sm sm:text-base font-black text-[#D91624]">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-[#D91624]" />
                 <span>{tr(uiLanguage, 'Reset Studio From Scratch', 'إعادة تأسيس الاستوديو من الصفر')}</span>
               </h3>
-              <p className="mt-1 text-xs font-bold text-[#1A2530]/75">
+              <p className="mt-1 text-xs font-bold text-[#1A2530]/70 leading-relaxed">
                 {tr(
                   uiLanguage,
                   'Your progress is auto-saved. Wipe current data only if you want to found a brand-new studio from Year 1.',
@@ -1226,39 +1252,40 @@ export function LeaderboardAndSettingsView() {
               </p>
             </div>
 
-            <div className="shrink-0">
-              {!confirmReset ? (
+            {!confirmReset ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmReset(true);
+                  setConfirmSwitchMarket(false);
+                }}
+                className="flex min-h-[46px] w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#D91624] px-5 py-2.5 text-xs font-black text-white shadow-xs hover:brightness-110 active:scale-[0.98] transition cursor-pointer"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span>{tr(uiLanguage, 'Reset Game', 'إعادة ضبط اللعبة')}</span>
+              </button>
+            ) : (
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setConfirmReset(true)}
-                  className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-[#D91624] border border-[#D4AF37] px-4 py-2 text-xs font-black text-white shadow hover:brightness-110 cursor-pointer"
+                  onClick={() => {
+                    resetEntireGameAndStartFresh();
+                    setConfirmReset(false);
+                  }}
+                  className="min-h-[46px] rounded-xl bg-[#D91624] px-4 py-2 text-xs font-black text-white active:scale-[0.98] transition cursor-pointer"
                 >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span>{tr(uiLanguage, 'Reset Game', 'إعادة ضبط اللعبة')}</span>
+                  {tr(uiLanguage, 'Confirm Wipe', 'تأكيد المسح النهائي')}
                 </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetEntireGameAndStartFresh();
-                      setConfirmReset(false);
-                    }}
-                    className="min-h-[40px] rounded-xl bg-[#D91624] px-3.5 py-2 text-xs font-black text-white cursor-pointer"
-                  >
-                    {tr(uiLanguage, 'Confirm Wipe', 'تأكيد المسح النهائي')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmReset(false)}
-                    className="min-h-[40px] rounded-xl border-2 border-[#1A2530] bg-[#F9F6F0] px-3.5 py-2 text-xs font-black text-[#1A2530] cursor-pointer"
-                  >
-                    {tr(uiLanguage, 'Cancel', 'إلغاء')}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReset(false)}
+                  className="min-h-[46px] rounded-xl border border-[#1A2530]/25 bg-white px-4 py-2 text-xs font-black text-[#1A2530] active:scale-[0.98] transition cursor-pointer"
+                >
+                  {tr(uiLanguage, 'Cancel', 'إلغاء')}
+                </button>
+              </div>
+            )}
+          </section>
         </div>
       )}
     </div>

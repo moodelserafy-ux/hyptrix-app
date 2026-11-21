@@ -3,17 +3,17 @@
 import type { UiLanguageId } from './market-profiles';
 
 /**
- * Rewarded Ad Mediation Engine — AdsGram (60901) + Optional Monetag (12307661)
+ * Rewarded Ad Mediation Engine — AdsGram (61123) + Optional Monetag (12307661)
  *
  * Review-Safe Architecture:
  * - While `NEXT_PUBLIC_ENABLE_MONETAG !== 'true'` (default during AdsGram review),
- *   ONLY the clean standalone AdsGram SDK (Block ID: 60901) is invoked — zero Monetag
+ *   ONLY the clean standalone AdsGram SDK (Block ID: 61123) is invoked — zero Monetag
  *   scripts, zero cascading overlays, 100% policy-compliant opt-in rewarded video.
  * - Once `NEXT_PUBLIC_ENABLE_MONETAG="true"` is enabled after approval, full hybrid
  *   AdsGram <-> Monetag anti-fatigue rotation and instant waterfall failover activates automatically.
  */
 
-export const ADSGRAM_BLOCK_ID = '60901';
+export const ADSGRAM_BLOCK_ID = '61123';
 export const MONETAG_ZONE_ID = '12307661';
 export const IS_MONETAG_ENABLED =
   process.env.NEXT_PUBLIC_ENABLE_MONETAG === 'true';

@@ -1,9 +1,12 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ArrowRight, Globe, Mail } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Mail } from 'lucide-react';
 import { useGameStore } from '@/lib/store';
+import { readSavedUiLanguage } from '@/lib/i18n';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 const OFFICIAL_EMAIL = 'neelyotycoon@gmail.com';
 
@@ -220,13 +223,16 @@ export default function AboutUsContent() {
   const uiLanguage = useGameStore((s) => s.uiLanguage);
   const setUiLanguage = useGameStore((s) => s.setUiLanguage);
 
+  useEffect(() => {
+    const saved = readSavedUiLanguage();
+    if (saved && saved !== useGameStore.getState().uiLanguage) {
+      setUiLanguage(saved, true);
+    }
+  }, [setUiLanguage]);
+
   const lang: 'en' | 'ar' = uiLanguage === 'ar' ? 'ar' : 'en';
   const copy = CONTENT[lang];
   const isRtl = copy.dir === 'rtl';
-
-  const handleToggleLanguage = () => {
-    setUiLanguage(lang === 'en' ? 'ar' : 'en', true);
-  };
 
   return (
     <div
@@ -290,18 +296,11 @@ export default function AboutUsContent() {
           </nav>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleToggleLanguage}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#1A2530]/20 bg-white px-3 py-2 text-xs font-extrabold text-[#1A2530] hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Globe className="h-3.5 w-3.5 text-[#B8860B]" />
-              <span>{copy.toggleLabel}</span>
-            </button>
+            <LanguageSwitcher variant="compact" tone="light" />
 
             <Link
               href="/"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#1A2530] px-4 py-2 text-xs font-extrabold text-[#F9F6F0] hover:bg-[#D91624] transition-colors whitespace-nowrap shrink-0"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#1A2530] px-4 py-2 text-xs font-extrabold text-[#F9F6F0] hover:bg-[#D91624] transition-colors whitespace-nowrap shrink-0"
             >
               {isRtl ? (
                 <ArrowRight className="h-3.5 w-3.5" />

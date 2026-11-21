@@ -11,6 +11,7 @@ import {
   tr,
 } from '@/lib/i18n';
 import { WorldFlagArt } from './WorldFlagArt';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { triggerTelegramHaptic } from './TelegramMiniAppBridge';
 import { playHeavyIronStamp, playClapperboardSnap } from '@/lib/sound-fx';
 import {
@@ -40,7 +41,6 @@ import {
   X,
   Upload,
   Trash2,
-  Globe,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { NeelyoInfoTab } from './NeelyoInfoModal';
@@ -85,7 +85,6 @@ export function Stage1StudioCreation({
 } = {}) {
   const {
     uiLanguage,
-    setUiLanguage,
     worldMarket,
     openMarketSelector,
     initializeStudio,
@@ -338,20 +337,9 @@ export function Stage1StudioCreation({
           </span>
         </div>
 
-        {/* Right/End: Quick Language Toggle + Info */}
+        {/* Right/End: Sleek Segmented Language Toggle + Info */}
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              triggerTelegramHaptic('selection');
-              setUiLanguage(isEn ? 'ar' : 'en', true);
-            }}
-            className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-[#D4AF37]/60 bg-[#FFFDF8] px-2.5 text-xs font-black text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer"
-            title={tr(uiLanguage, 'Switch to Arabic', 'التبديل إلى الإنجليزية')}
-          >
-            <Globe className="h-3.5 w-3.5 text-[#D91624]" />
-            <span>{isEn ? 'العربية' : 'EN'}</span>
-          </button>
+          <LanguageSwitcher variant="compact" tone="light" />
 
           {onOpenInfo && (
             <button

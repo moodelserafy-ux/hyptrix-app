@@ -47,6 +47,8 @@ import {
   localizeEntityName,
   PR_CAMPAIGNS_EN,
   STUDIO_ASSETS_EN,
+  readSavedUiLanguage,
+  writeSavedUiLanguage,
 } from './i18n';
 
 export const DAYS_PER_GAME_YEAR = 120; // 10 game days per month × 12 months
@@ -3286,6 +3288,7 @@ export const useGameStore = create<NeelyoGameState>()(
       dismissToast: () => set({ activeToast: null }),
 
       selectLanguageAndMarket: (language, market) => {
+        writeSavedUiLanguage(language);
         const safeMarket: WorldMarketId = market === 'saudi' ? 'saudi' : 'egypt';
         const profile = getMarketProfile(safeMarket);
         const primaryReg = profile.primaryRegion;
@@ -3330,13 +3333,17 @@ export const useGameStore = create<NeelyoGameState>()(
         });
       },
 
-      setUiLanguage: (language, isManual = true) =>
+      setUiLanguage: (language, isManual = true) => {
+        if (isManual) {
+          writeSavedUiLanguage(language);
+        }
         set((state) => ({
           uiLanguage: language,
           hasManuallySelectedLanguage: isManual
             ? true
             : state.hasManuallySelectedLanguage,
-        })),
+        }));
+      },
 
       openMarketSelector: () => {
         get().resetEntireGameAndStartFresh();
@@ -4881,6 +4888,7 @@ export const useGameStore = create<NeelyoGameState>()(
 
       hydrateCloudState: (snapshot) => {
         if (!snapshot || typeof snapshot !== 'object') return;
+        const savedLocalLang = readSavedUiLanguage();
         set((state) => {
           const cloudDay = Number(snapshot.gameDay || 0);
           const cloudCreated = Boolean(snapshot.studioCreated);
@@ -4889,10 +4897,19 @@ export const useGameStore = create<NeelyoGameState>()(
             return state;
           }
           if (!cloudCreated) return state;
-          return {
+          const merged = {
             ...state,
             ...(snapshot as Partial<NeelyoGameState>),
           };
+          // Never let a cloud snapshot revert the player's explicitly chosen local language
+          if (savedLocalLang) {
+            merged.uiLanguage = savedLocalLang;
+            merged.hasManuallySelectedLanguage = true;
+          } else if (state.hasManuallySelectedLanguage) {
+            merged.uiLanguage = state.uiLanguage;
+            merged.hasManuallySelectedLanguage = true;
+          }
+          return merged;
         });
       },
 
@@ -5546,7 +5563,15 @@ export const useGameStore = create<NeelyoGameState>()(
           state.isChildModalOpen = false;
           state.isPrWarRoomOpen = false;
           if (!state.worldMarket) state.worldMarket = 'egypt';
-          if (!state.uiLanguage) state.uiLanguage = 'en';
+          const savedLocalLang = readSavedUiLanguage();
+          if (savedLocalLang) {
+            state.uiLanguage = savedLocalLang;
+            state.hasManuallySelectedLanguage = true;
+          } else if (!state.uiLanguage) {
+            state.uiLanguage = 'en';
+          } else if (state.hasManuallySelectedLanguage) {
+            writeSavedUiLanguage(state.uiLanguage);
+          }
           if (state.studioCreated && !state.hasSelectedMarket) {
             state.hasSelectedMarket = true;
           }

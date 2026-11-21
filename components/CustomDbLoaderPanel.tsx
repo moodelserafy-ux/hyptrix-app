@@ -70,7 +70,13 @@ function summarizePackChanges(
   return parts.length > 0 ? ` (${parts.join(' · ')})` : '';
 }
 
-export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) {
+export function CustomDbLoaderPanel({
+  compact = false,
+  embedded = false,
+}: {
+  compact?: boolean;
+  embedded?: boolean;
+}) {
   const {
     worldMarket,
     uiLanguage,
@@ -249,68 +255,72 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
   return (
     <div
       dir={dir}
-      className={`rounded-3xl border-2 border-[#1A2530]/20 bg-white p-4 ${
-        isAr ? 'text-right' : 'text-left'
-      } text-[#1A2530] shadow-xs space-y-3`}
+      className={`${
+        embedded
+          ? 'space-y-3.5'
+          : 'rounded-3xl border border-[#1A2530]/15 bg-white p-4 shadow-xs space-y-3.5'
+      } ${isAr ? 'text-right' : 'text-left'} text-[#1A2530]`}
     >
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1A2530]/15 pb-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D4AF37] bg-[#1A2530] text-[#D4AF37]">
-            <Database className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-black text-[#1A2530]">
-              {tr(
-                uiLanguage,
-                'Custom Mod Packs, Names & Portraits',
-                'إدارة حزم المود والأسماء والصور المخصصة'
-              )}
-            </h3>
-            {!compact && (
-              <p className="text-[11px] font-bold text-[#1A2530]/65">
+      {/* Header (omitted when embedded inside Settings accordion) */}
+      {!embedded && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1A2530]/12 pb-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1A2530] text-[#D4AF37]">
+              <Database className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-black text-[#1A2530] truncate">
                 {tr(
                   uiLanguage,
-                  'Automatically merges custom talent names, portraits, and platform logos',
-                  'يدمج أسماء وصور الممثلين والمخرجين وشعارات المنصات تلقائياً'
+                  'Custom Mod Packs, Names & Portraits',
+                  'إدارة حزم المود والأسماء والصور المخصصة'
                 )}
-              </p>
-            )}
+              </h3>
+              {!compact && (
+                <p className="text-[11px] font-bold text-[#1A2530]/60">
+                  {tr(
+                    uiLanguage,
+                    'Automatically merges custom talent names, portraits, and platform logos',
+                    'يدمج أسماء وصور الممثلين والمخرجين وشعارات المنصات تلقائياً'
+                  )}
+                </p>
+              )}
+            </div>
           </div>
+          <span className="text-[11px] font-extrabold text-[#9A7209] tabular-nums">
+            {resolvedDb.meta.pack_name}
+          </span>
         </div>
-        <span className="rounded-full border border-[#D4AF37]/70 bg-[#FFF9E6] px-2.5 py-0.5 text-[10px] font-black text-[#1A2530] tabular-nums">
-          {resolvedDb.meta.pack_name}
-        </span>
-      </div>
+      )}
 
       {/* Method 1: Direct CORS-friendly JSON Link */}
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <label className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
             <Globe className="h-3.5 w-3.5 text-[#D91624]" />
             <span>
               {tr(
                 uiLanguage,
-                'Method 1: Paste a Direct JSON URL',
-                'الطريقة 1: لصق رابط ملف JSON مباشر'
+                'Paste Direct JSON URL',
+                'لصق رابط ملف JSON مباشر'
               )}
             </span>
           </label>
-          <span className="text-[10px] font-bold text-[#1A2530]/60">
-            GitHub Raw · jsDelivr · Cloudflare
+          <span className="text-[10px] font-bold text-[#1A2530]/55">
+            GitHub Raw · jsDelivr
           </span>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">
-            <Link2 className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-[#1A2530]/40" />
+            <Link2 className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-[#1A2530]/40" />
             <input
               type="url"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://raw.githubusercontent.com/.../mod.json"
               aria-label={tr(uiLanguage, 'External database pack URL', 'رابط حزمة البيانات الخارجية')}
-              className="w-full rounded-xl border-2 border-[#1A2530]/20 bg-[#F9F6F0] py-2 pr-9 pl-3 text-left text-sm font-medium text-[#1A2530] focus:border-[#D4AF37] focus:bg-white focus:outline-none"
+              className="min-h-[46px] w-full rounded-xl border border-[#1A2530]/20 bg-white py-2.5 pr-9 pl-3 text-left text-sm font-medium text-[#1A2530] focus:border-[#D4AF37] focus:outline-none"
               dir="ltr"
             />
           </div>
@@ -318,7 +328,7 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
             type="button"
             onClick={handleFetchFromUrl}
             disabled={loading}
-            className="min-h-[42px] shrink-0 rounded-xl border border-[#D4AF37] bg-[#D91624] px-4 py-2 text-xs font-black text-white shadow-xs transition hover:brightness-110 disabled:opacity-60 cursor-pointer"
+            className="min-h-[46px] w-full sm:w-auto shrink-0 rounded-xl bg-[#D91624] px-4 py-2 text-xs font-black text-white shadow-xs transition hover:brightness-110 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
           >
             {loading
               ? tr(uiLanguage, 'Loading...', 'جاري التحميل...')
@@ -327,8 +337,8 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         </div>
       </div>
 
-      {/* Method 2: Prominent Device File Upload Button */}
-      <div className="space-y-2 pt-1">
+      {/* Method 2: Prominent Mobile-First Device File Upload Button */}
+      <div className="space-y-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -341,71 +351,69 @@ export function CustomDbLoaderPanel({ compact = false }: { compact?: boolean }) 
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className={`group flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-[#D4AF37] bg-[#FFF9E6] px-4 py-3 ${
+          className={`group flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl border border-dashed border-[#D4AF37] bg-[#FFF9E6] px-3.5 py-3 ${
             isAr ? 'text-right' : 'text-left'
-          } transition hover:border-[#D91624] hover:bg-[#FEF3C7] cursor-pointer`}
+          } transition hover:border-[#D91624] hover:bg-[#FEF3C7] active:scale-[0.99] cursor-pointer`}
         >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1A2530] text-[#D4AF37] shadow-xs transition group-hover:scale-105">
-              <FileJson className="h-5 w-5" />
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1A2530] text-[#D4AF37]">
+              <FileJson className="h-4.5 w-4.5" />
             </div>
-            <div>
-              <div className="text-xs sm:text-sm font-black text-[#1A2530]">
+            <div className="min-w-0">
+              <div className="text-xs sm:text-sm font-black text-[#1A2530] truncate">
                 {tr(
                   uiLanguage,
-                  'Method 2: Upload Mod File (.json) from Device',
-                  'الطريقة 2: رفع ملف المود (.json) من جهازك'
+                  'Upload Mod File (.json)',
+                  'رفع ملف المود (.json)'
                 )}
               </div>
-              <div className="text-[11px] font-bold text-[#1A2530]/70">
+              <div className="text-[11px] font-bold text-[#1A2530]/65 truncate">
                 {tr(
                   uiLanguage,
-                  'Tap to select a local JSON mod pack from your phone or computer',
-                  'اضغط هنا لاختيار ملف JSON المحفوظ على هاتفك أو جهازك وتفعيله فوراً'
+                  'Select a JSON file from your device',
+                  'اختر ملف JSON محفوظ على جهازك'
                 )}
               </div>
             </div>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#1A2530] px-3 py-2 text-xs font-black text-[#D4AF37] shadow-xs">
+          <span className="inline-flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-lg bg-[#1A2530] px-3 text-xs font-black text-[#D4AF37]">
             <Upload className="h-3.5 w-3.5" />
-            <span>{tr(uiLanguage, 'Choose File', 'اختيار ملف')}</span>
+            <span>{tr(uiLanguage, 'Choose', 'اختيار')}</span>
           </span>
         </button>
 
         {customDbPatch && (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => {
-                clearCustomDatabase();
-                setUrlInput('');
-                setStatusMsg({
-                  type: 'success',
-                  text: tr(
-                    uiLanguage,
-                    'Default database restored successfully.',
-                    'تمت استعادة قاعدة البيانات الافتراضية بنجاح.'
-                  ),
-                });
-              }}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[#D91624]/40 bg-[#D91624]/10 px-3 py-1.5 text-xs font-black text-[#D91624] hover:bg-[#D91624]/15 cursor-pointer"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span>
-                {tr(
+          <button
+            type="button"
+            onClick={() => {
+              clearCustomDatabase();
+              setUrlInput('');
+              setStatusMsg({
+                type: 'success',
+                text: tr(
                   uiLanguage,
-                  'Restore Default Database',
-                  'استعادة قاعدة البيانات الافتراضية'
-                )}
-              </span>
-            </button>
-          </div>
+                  'Default database restored successfully.',
+                  'تمت استعادة قاعدة البيانات الافتراضية بنجاح.'
+                ),
+              });
+            }}
+            className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#D91624]/35 bg-[#D91624]/10 px-3 py-2 text-xs font-black text-[#D91624] hover:bg-[#D91624]/15 active:scale-[0.99] cursor-pointer"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>
+              {tr(
+                uiLanguage,
+                'Restore Default Database',
+                'استعادة قاعدة البيانات الافتراضية'
+              )}
+            </span>
+          </button>
         )}
       </div>
 
       {statusMsg && (
         <div
-          className={`flex items-start gap-2 rounded-xl p-2.5 text-xs font-bold leading-relaxed ${
+          className={`flex items-start gap-2 rounded-xl p-3 text-xs font-bold leading-relaxed ${
             statusMsg.type === 'success'
               ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
               : 'border border-rose-200 bg-rose-50 text-rose-800'

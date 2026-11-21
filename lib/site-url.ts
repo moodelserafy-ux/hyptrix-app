@@ -1,4 +1,4 @@
-const DEFAULT_SITE_URL = 'https://neelyo.vercel.app';
+const DEFAULT_SITE_URL = 'https://neelyo-studio.vercel.app';
 
 const PLACEHOLDER_TOKENS = [
   'my_app_url',

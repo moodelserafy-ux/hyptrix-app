@@ -396,7 +396,7 @@ export default async function RootLayout({
             async
           />
         )}
-        {/* AdsGram Rewarded Video SDK (Block ID 60901) */}
+        {/* AdsGram Rewarded Video SDK (Block ID 61123) */}
         <script
           src="https://sad.adsgram.ai/js/sad.min.js"
           async

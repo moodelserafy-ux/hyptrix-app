@@ -10,7 +10,13 @@ import {
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
 import { getCurrencyLabel } from '@/lib/market-profiles';
-import { detectPreferredUiLanguage, getUiDir, tr } from '@/lib/i18n';
+import {
+  detectPreferredUiLanguage,
+  getUiDir,
+  readSavedUiLanguage,
+  tr,
+  writeSavedUiLanguage,
+} from '@/lib/i18n';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import { prewarmAdNetworks } from '@/lib/ad-mediator';
 import { WelcomeMarketScreen } from '@/components/WelcomeMarketScreen';
@@ -41,8 +47,6 @@ const DAY_DURATION_SECONDS = 18;
 export default function HomePage() {
   const {
     uiLanguage,
-    hasManuallySelectedLanguage,
-    setUiLanguage,
     worldMarket,
     hasSelectedMarket,
     selectLanguageAndMarket,
@@ -124,14 +128,51 @@ export default function HomePage() {
     };
   }, []);
 
-  // Auto-detect user's preferred language once on entry if they haven't manually switched yet
+  // Honor saved UI language immediately and ONLY auto-detect after Zustand persist hydration finishes
   useEffect(() => {
-    if (typeof window === 'undefined' || hasManuallySelectedLanguage) return;
-    const detected = detectPreferredUiLanguage();
-    if (detected !== uiLanguage) {
-      setUiLanguage(detected, false);
+    if (typeof window === 'undefined') return;
+
+    const resolveLanguageOnceHydrated = () => {
+      const saved = readSavedUiLanguage();
+      const state = useGameStore.getState();
+
+      if (saved) {
+        if (state.uiLanguage !== saved || !state.hasManuallySelectedLanguage) {
+          state.setUiLanguage(saved, true);
+        }
+        return;
+      }
+
+      if (state.hasManuallySelectedLanguage) {
+        writeSavedUiLanguage(state.uiLanguage);
+        return;
+      }
+
+      const detected = detectPreferredUiLanguage();
+      if (detected !== state.uiLanguage) {
+        state.setUiLanguage(detected, false);
+      }
+    };
+
+    // Immediately honor any saved language even before async IndexedDB hydration completes
+    const earlySaved = readSavedUiLanguage();
+    if (earlySaved) {
+      const current = useGameStore.getState();
+      if (current.uiLanguage !== earlySaved || !current.hasManuallySelectedLanguage) {
+        current.setUiLanguage(earlySaved, true);
+      }
     }
-  }, [hasManuallySelectedLanguage, uiLanguage, setUiLanguage]);
+
+    if (useGameStore.persist.hasHydrated()) {
+      resolveLanguageOnceHydrated();
+      return;
+    }
+
+    const unsub = useGameStore.persist.onFinishHydration(() => {
+      resolveLanguageOnceHydrated();
+    });
+    return () => unsub();
+  }, []);
 
   // Sync <html dir lang> dynamically on every language switch + keep warm ivory viewport background
   useEffect(() => {
