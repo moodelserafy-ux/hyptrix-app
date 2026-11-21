@@ -1,22 +1,24 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   MARKET_PROFILES,
+  UI_LANGUAGE_OPTIONS,
   type UiLanguageId,
   type WorldMarketId,
 } from '@/lib/market-profiles';
 import { getLocalizedMarketInfo, getUiDir, tr } from '@/lib/i18n';
 import { useGameStore } from '@/lib/store';
 import { WorldFlagArt } from './WorldFlagArt';
-import { LanguageSwitcher } from './LanguageSwitcher';
 import { triggerTelegramHaptic } from './TelegramMiniAppBridge';
 import { playClapperboardSnap } from '@/lib/sound-fx';
 import Image from 'next/image';
 import {
+  Globe,
   Lock,
   Check,
+  ChevronDown,
   ArrowLeft,
   ArrowRight,
   Crown,
@@ -38,12 +40,15 @@ export function WelcomeMarketScreen({
   onOpenInfo?: (tab: NeelyoInfoTab) => void;
 }) {
   const storeLang = useGameStore((s) => s.uiLanguage);
+  const setUiLanguage = useGameStore((s) => s.setUiLanguage);
 
   const selectedLang: UiLanguageId = storeLang || initialLanguage;
   const [selectedMarket, setSelectedMarket] = useState<WorldMarketId>(
     initialMarket === 'saudi' ? 'saudi' : 'egypt'
   );
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [lockedNotice, setLockedNotice] = useState<string | null>(null);
+  const langMenuRef = useRef<HTMLDivElement>(null);
 
   const isEn = selectedLang === 'en';
   const uiDir = getUiDir(selectedLang);
@@ -55,14 +60,67 @@ export function WelcomeMarketScreen({
     MARKET_PROFILES.usa,
   ];
 
+  const activeLangOption =
+    UI_LANGUAGE_OPTIONS.find((opt) => opt.id === selectedLang) ||
+    UI_LANGUAGE_OPTIONS[0];
   const activeMarketLoc = getLocalizedMarketInfo(selectedMarket, selectedLang);
   const isSaudiSelected = selectedMarket === 'saudi';
 
   useEffect(() => {
     if (!lockedNotice) return;
-    const timer = setTimeout(() => setLockedNotice(null), 3400);
+    const timer = setTimeout(() => setLockedNotice(null), 3200);
     return () => clearTimeout(timer);
   }, [lockedNotice]);
+
+  useEffect(() => {
+    if (!langMenuOpen) return;
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      if (
+        langMenuRef.current &&
+        !langMenuRef.current.contains(e.target as Node)
+      ) {
+        setLangMenuOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLangMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside, { passive: true });
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [langMenuOpen]);
+
+  const handleSelectLanguage = (
+    opt: (typeof UI_LANGUAGE_OPTIONS)[number]
+  ) => {
+    if (!opt.available) {
+      triggerTelegramHaptic('light');
+      setLockedNotice(
+        tr(
+          selectedLang,
+          `${opt.nativeLabel} interface is coming soon alongside its dedicated cinema market!`,
+          `واجهة اللغة ${opt.arabicLabel} (${opt.nativeLabel}) قادمة قريباً مع إطلاق سوقها السينمائي الخاص!`
+        )
+      );
+      setLangMenuOpen(false);
+      return;
+    }
+
+    if (opt.id !== selectedLang) {
+      triggerTelegramHaptic('selection');
+      playClapperboardSnap();
+      setUiLanguage(opt.id as UiLanguageId, true);
+    } else {
+      triggerTelegramHaptic('light');
+    }
+    setLockedNotice(null);
+    setLangMenuOpen(false);
+  };
 
   const handleSelectMarket = (marketId: WorldMarketId, available: boolean) => {
     if (!available) {
@@ -100,17 +158,15 @@ export function WelcomeMarketScreen({
       className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-[#F9F6F0] text-[#1A2530]"
       dir={uiDir}
     >
-      {/* Warm Creamy Ivory & Golden Ambient Glow */}
+      {/* Zero-Cost Radial Ambient Glow (replaces heavy mobile blur filters for 60 FPS) */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 left-1/2 h-[320px] w-[540px] -translate-x-1/2 rounded-full bg-[#D4AF37]/18 blur-[90px]" />
-        <motion.div
-          animate={{
-            backgroundColor: isSaudiSelected
-              ? 'rgba(4, 106, 56, 0.11)'
-              : 'rgba(217, 22, 36, 0.10)',
-          }}
-          transition={{ duration: 0.45 }}
-          className="absolute bottom-[-90px] left-1/2 h-[290px] w-[480px] -translate-x-1/2 rounded-full blur-[100px]"
+        <div className="absolute -top-24 left-1/2 h-[360px] w-[620px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.22)_0%,rgba(212,175,55,0)_70%)]" />
+        <div
+          className={`absolute -bottom-24 left-1/2 h-[340px] w-[580px] -translate-x-1/2 transition-opacity duration-300 ${
+            isSaudiSelected
+              ? 'bg-[radial-gradient(ellipse_at_center,rgba(4,106,56,0.14)_0%,rgba(4,106,56,0)_70%)]'
+              : 'bg-[radial-gradient(ellipse_at_center,rgba(217,22,36,0.12)_0%,rgba(217,22,36,0)_70%)]'
+          }`}
         />
       </div>
 
@@ -118,16 +174,16 @@ export function WelcomeMarketScreen({
       <AnimatePresence>
         {lockedNotice && (
           <motion.div
-            initial={{ opacity: 0, y: -16 }}
+            initial={{ opacity: 0, y: -14 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, y: -14 }}
+            transition={{ duration: 0.16 }}
             className="fixed top-16 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2"
           >
             <div className="flex items-center justify-between gap-2.5 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530] px-4 py-2.5 text-xs font-extrabold text-[#F9F6F0] shadow-[0_14px_34px_rgba(26,37,48,0.28)]">
               <div className="flex items-center gap-2 min-w-0">
                 <Lock className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
-                <span className="truncate">{lockedNotice}</span>
+                <span className="line-clamp-2">{lockedNotice}</span>
               </div>
               <button
                 type="button"
@@ -153,7 +209,7 @@ export function WelcomeMarketScreen({
                 triggerTelegramHaptic('light');
                 onOpenInfo('about');
               }}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-[#D4AF37]/60 bg-[#FFFDF8] px-3 text-xs font-extrabold text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition cursor-pointer"
+              className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl border border-[#D4AF37]/55 bg-[#FFFDF8] px-3 text-xs font-extrabold text-[#1A2530] shadow-xs hover:border-[#D4AF37] hover:bg-[#FFF9E6] transition-colors cursor-pointer"
             >
               <BookOpen className="h-3.5 w-3.5 text-[#D91624]" />
               <span>{tr(selectedLang, 'About Neelyo', 'عن Neelyo')}</span>
@@ -166,7 +222,7 @@ export function WelcomeMarketScreen({
                 triggerTelegramHaptic('light');
                 onOpenInfo('contact');
               }}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#1A2530]/15 bg-[#FFFDF8] px-2.5 text-xs font-extrabold text-[#1A2530]/80 shadow-xs hover:border-[#D4AF37] hover:text-[#1A2530] transition cursor-pointer"
+              className="inline-flex min-h-[42px] min-w-[42px] items-center justify-center gap-1.5 rounded-xl border border-[#1A2530]/15 bg-[#FFFDF8] px-2.5 text-xs font-extrabold text-[#1A2530]/80 shadow-xs hover:border-[#D4AF37] hover:text-[#1A2530] transition-colors cursor-pointer"
               aria-label={tr(selectedLang, 'Contact us', 'تواصل معنا')}
             >
               <Mail className="h-3.5 w-3.5 text-[#B8860B]" />
@@ -177,20 +233,123 @@ export function WelcomeMarketScreen({
           )}
         </div>
 
-        {/* Sleek Segmented Language Toggle (EN | عربي) */}
-        <LanguageSwitcher variant="compact" tone="light" />
+        {/* Sleek Royal 4-Language Dropdown (English, العربية, Türkçe Soon, 한국어 Soon) */}
+        <div ref={langMenuRef} className="relative">
+          <button
+            type="button"
+            onClick={() => {
+              triggerTelegramHaptic('light');
+              setLangMenuOpen((prev) => !prev);
+            }}
+            aria-haspopup="listbox"
+            aria-expanded={langMenuOpen}
+            className={`inline-flex min-h-[42px] items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-extrabold shadow-xs transition-colors cursor-pointer ${
+              langMenuOpen
+                ? 'border-[#D4AF37] bg-[#1A2530] text-[#FFFDF8]'
+                : 'border-[#D4AF37]/65 bg-[#FFFDF8] text-[#1A2530] hover:border-[#D4AF37] hover:bg-[#FFF9E6]'
+            }`}
+          >
+            <Globe
+              className={`h-3.5 w-3.5 shrink-0 ${
+                langMenuOpen ? 'text-[#D4AF37]' : 'text-[#B8860B]'
+              }`}
+            />
+            <span>{activeLangOption.nativeLabel}</span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${
+                langMenuOpen ? 'rotate-180 text-[#D4AF37]' : 'text-[#1A2530]/55'
+              }`}
+            />
+          </button>
+
+          <AnimatePresence>
+            {langMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.14, ease: 'easeOut' }}
+                role="listbox"
+                aria-label={tr(selectedLang, 'Interface language', 'لغة الواجهة')}
+                className={`absolute top-full mt-2 z-50 w-56 overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-[#FFFDF8] p-1.5 shadow-[0_18px_40px_rgba(26,37,48,0.22)] ${
+                  isEn ? 'right-0' : 'left-0'
+                }`}
+              >
+                <div className="px-2.5 pt-1 pb-1.5 text-[10px] font-black uppercase tracking-wider text-[#9A7209]">
+                  {tr(selectedLang, 'Select Language', 'اختر لغة الواجهة')}
+                </div>
+                <div className="space-y-1">
+                  {UI_LANGUAGE_OPTIONS.map((opt) => {
+                    const isActive = opt.id === selectedLang;
+                    const isLocked = !opt.available;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => handleSelectLanguage(opt)}
+                        className={`flex w-full min-h-[42px] items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-xs font-extrabold transition-colors cursor-pointer ${
+                          isActive
+                            ? 'bg-[#1A2530] text-[#FFFDF8] shadow-xs'
+                            : isLocked
+                            ? 'bg-[#F9F6F0]/70 text-[#1A2530]/55 hover:bg-[#F5EFE3]'
+                            : 'text-[#1A2530] hover:bg-[#FFF6DA]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`inline-flex h-6 w-7 shrink-0 items-center justify-center rounded-lg font-typewriter text-[10px] font-black uppercase ${
+                              isActive
+                                ? 'bg-[#D4AF37] text-[#1A2530]'
+                                : isLocked
+                                ? 'bg-[#1A2530]/8 text-[#1A2530]/45'
+                                : 'bg-[#D4AF37]/18 text-[#9A7209]'
+                            }`}
+                          >
+                            {opt.id}
+                          </span>
+                          <div className="min-w-0 text-start leading-tight">
+                            <div className="truncate font-black">
+                              {opt.nativeLabel}
+                            </div>
+                            <div
+                              className={`truncate text-[10px] font-bold ${
+                                isActive
+                                  ? 'text-[#F9F6F0]/70'
+                                  : 'text-[#1A2530]/50'
+                              }`}
+                            >
+                              {isEn ? opt.subtitle : opt.arabicLabel}
+                            </div>
+                          </div>
+                        </div>
+
+                        {isActive ? (
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-[#1A2530]">
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          </span>
+                        ) : isLocked ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#D4AF37]/15 px-1.5 py-0.5 text-[10px] font-black text-[#9A7209]">
+                            <Lock className="h-2.5 w-2.5" />
+                            <span>{tr(selectedLang, 'Soon', 'قريباً')}</span>
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </header>
 
       {/* ==================== MAIN ROYAL OPENING STAGE ==================== */}
       <div className="relative z-10 mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center gap-4 px-4 py-2 sm:gap-6 sm:px-6">
         {/* Brand Crest & Single Punchy Headline */}
         <div className="flex flex-col items-center text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="mb-2 flex items-center gap-2.5"
-          >
+          <div className="mb-2 flex items-center gap-2.5">
             <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl border-2 border-[#D4AF37] bg-[#0D1824] p-1.5 shadow-[0_8px_22px_rgba(26,37,48,0.18)]">
               <Image
                 src="/images/neelyo-logo.png"
@@ -205,7 +364,7 @@ export function WelcomeMarketScreen({
             <span className="font-display text-2xl sm:text-3xl font-black tracking-wide text-[#1A2530]">
               Neelyo
             </span>
-          </motion.div>
+          </div>
 
           <h1 className="font-display text-2xl sm:text-4xl font-black text-[#1A2530] leading-tight text-balance">
             {tr(
@@ -231,19 +390,18 @@ export function WelcomeMarketScreen({
             const loc = getLocalizedMarketInfo(market.id, selectedLang);
 
             return (
-              <motion.button
+              <button
                 key={market.id}
                 type="button"
-                whileTap={{ scale: 0.98 }}
                 onClick={() => handleSelectMarket(market.id, true)}
                 className={`group relative flex flex-col overflow-hidden rounded-[22px] sm:rounded-[28px] border-2 ${
                   isEn ? 'text-left' : 'text-right'
-                } transition-all duration-200 cursor-pointer ${
+                } transition-colors duration-150 cursor-pointer ${
                   isSelected
                     ? isSaudi
-                      ? 'border-[#046A38] bg-gradient-to-b from-[#FFFDF8] via-[#F7FBF8] to-[#ECF7F0] shadow-[0_16px_38px_rgba(4,106,56,0.18)] ring-2 ring-[#D4AF37]/75'
-                      : 'border-[#D91624] bg-gradient-to-b from-[#FFFDF8] via-[#FFF9EE] to-[#FDF1D6] shadow-[0_16px_38px_rgba(217,22,36,0.16)] ring-2 ring-[#D4AF37]/75'
-                    : 'border-[#D4AF37]/40 bg-[#FFFDF8]/95 hover:border-[#D4AF37] shadow-[0_8px_22px_rgba(26,37,48,0.06)]'
+                      ? 'border-[#046A38] bg-gradient-to-b from-[#FFFDF8] via-[#F7FBF8] to-[#ECF7F0] shadow-[0_14px_32px_rgba(4,106,56,0.16)] ring-2 ring-[#D4AF37]/75'
+                      : 'border-[#D91624] bg-gradient-to-b from-[#FFFDF8] via-[#FFF9EE] to-[#FDF1D6] shadow-[0_14px_32px_rgba(217,22,36,0.14)] ring-2 ring-[#D4AF37]/75'
+                    : 'border-[#D4AF37]/40 bg-[#FFFDF8]/95 hover:border-[#D4AF37] shadow-[0_6px_18px_rgba(26,37,48,0.06)]'
                 }`}
               >
                 {/* Silk Flag Showcase Header */}
@@ -259,7 +417,7 @@ export function WelcomeMarketScreen({
                       {loc.countryName} · {loc.currencyLabel}
                     </span>
                     <span
-                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition ${
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
                         isSelected
                           ? 'bg-[#D4AF37] text-[#1A2530] shadow-md'
                           : 'border border-white/40 bg-black/25'
@@ -270,7 +428,7 @@ export function WelcomeMarketScreen({
                   </div>
 
                   {/* Silk Flag Poster Visual */}
-                  <div className="relative mx-auto w-full max-w-[230px] aspect-[320/190] drop-shadow-[0_10px_20px_rgba(0,0,0,0.45)] transition-transform duration-200 group-hover:scale-[1.03]">
+                  <div className="relative mx-auto w-full max-w-[230px] aspect-[320/190] drop-shadow-[0_10px_20px_rgba(0,0,0,0.42)] transition-transform duration-150 group-hover:scale-[1.03]">
                     <WorldFlagArt market={market.id} />
                   </div>
                 </div>
@@ -292,7 +450,7 @@ export function WelcomeMarketScreen({
                     ))}
                   </div>
                 </div>
-              </motion.button>
+              </button>
             );
           })}
         </div>
@@ -327,10 +485,10 @@ export function WelcomeMarketScreen({
                   onClick={() => handleSelectMarket(market.id, false)}
                   className={`group flex min-h-[54px] items-center justify-between gap-1.5 rounded-2xl border border-[#D4AF37]/40 bg-[#FFFDF8]/90 px-2.5 py-2 sm:px-3.5 sm:py-2.5 ${
                     isEn ? 'text-left' : 'text-right'
-                  } shadow-2xs transition hover:border-[#D4AF37] hover:bg-[#FFF9E6] cursor-pointer`}
+                  } shadow-2xs transition-colors hover:border-[#D4AF37] hover:bg-[#FFF9E6] cursor-pointer`}
                 >
                   <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                    <div className="w-7 sm:w-10 shrink-0 opacity-90 group-hover:opacity-100 transition">
+                    <div className="w-7 sm:w-10 shrink-0 opacity-90 group-hover:opacity-100 transition-opacity">
                       <WorldFlagArt market={market.id} />
                     </div>
                     <div className="min-w-0">

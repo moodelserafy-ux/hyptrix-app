@@ -387,12 +387,12 @@ export default async function RootLayout({
           src="https://telegram.org/js/telegram-web-app.js"
           defer
         />
-        {/* Monetag Rewarded Interstitial SDK (disabled during AdsGram review; enable via NEXT_PUBLIC_ENABLE_MONETAG=true) */}
-        {process.env.NEXT_PUBLIC_ENABLE_MONETAG === 'true' && (
+        {/* Monetag Rewarded Interstitial SDK (Zone 12317990 — active by default; set NEXT_PUBLIC_ENABLE_MONETAG=false to disable) */}
+        {process.env.NEXT_PUBLIC_ENABLE_MONETAG !== 'false' && (
           <script
             src="https://libtl.com/sdk.js"
-            data-zone="12307661"
-            data-sdk="show_12307661"
+            data-zone="12317990"
+            data-sdk="show_12317990"
             async
           />
         )}

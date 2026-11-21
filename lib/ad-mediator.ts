@@ -3,20 +3,31 @@
 import type { UiLanguageId } from './market-profiles';
 
 /**
- * Rewarded Ad Mediation Engine — AdsGram (61123) + Optional Monetag (12307661)
+ * High-Yield Smart Hybrid Ad Mediation Engine
+ * AdsGram Rewarded Video (Block ID: 61123) + Monetag Rewarded Interstitial (Zone: 12317990)
  *
- * Review-Safe Architecture:
- * - While `NEXT_PUBLIC_ENABLE_MONETAG !== 'true'` (default during AdsGram review),
- *   ONLY the clean standalone AdsGram SDK (Block ID: 61123) is invoked — zero Monetag
- *   scripts, zero cascading overlays, 100% policy-compliant opt-in rewarded video.
- * - Once `NEXT_PUBLIC_ENABLE_MONETAG="true"` is enabled after approval, full hybrid
- *   AdsGram <-> Monetag anti-fatigue rotation and instant waterfall failover activates automatically.
+ * Yield-Maximization Strategy:
+ * 1. Environment-Aware Primary Routing:
+ *    - Web / Mobile Browser / PWA: Monetag primary (highest global web fill & eCPM), AdsGram backup.
+ *    - Telegram Mini App: Dynamic yield routing between AdsGram (61123) and Monetag (12317990).
+ * 2. Anti-Fatigue & Fresh-Impression Ping-Pong:
+ *    - Rapid consecutive placements (Star Forge locks / training) alternate strictly AdsGram <-> Monetag
+ *      so every single impression lands as a fresh, high-eCPM first-view on each network.
+ *    - High-value placements prefer AdsGram when fresh (>120s since last AdsGram view), then pivot
+ *      to Monetag during AdsGram's frequency-cap window to avoid CPM decay, while maintaining
+ *      balanced session impression share across both networks.
+ * 3. Adaptive Exponential Cooldown:
+ *    - No-fills trigger progressive cooldowns (45s -> 90s -> 180s), instantly reset to 0 on fill,
+ *      so healthy inventory is always tried first with near-zero latency.
+ * 4. Strict User-Cancel Integrity:
+ *    - If the player intentionally closes an ad early, never ambush them with the backup network.
+ *    - Silent instant waterfall triggers ONLY on technical load error or no-fill.
  */
 
 export const ADSGRAM_BLOCK_ID = '61123';
-export const MONETAG_ZONE_ID = '12307661';
+export const MONETAG_ZONE_ID = '12317990';
 export const IS_MONETAG_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_MONETAG === 'true';
+  process.env.NEXT_PUBLIC_ENABLE_MONETAG !== 'false';
 
 export type AdPlacementId =
   | 'star_forge_lock'
@@ -54,22 +65,28 @@ interface AdsgramGlobal {
 
 declare global {
   interface Window {
-    show_12307661?: () => Promise<unknown>;
+    show_12317990?: () => Promise<unknown>;
     Adsgram?: AdsgramGlobal;
   }
 }
 
+type LiveNetwork = 'adsgram' | 'monetag';
+
 interface MediatorSessionState {
-  lastCompletedNetwork: 'adsgram' | 'monetag' | null;
-  lastCompletedAt: Record<'adsgram' | 'monetag', number>;
-  cooldownUntil: Record<'adsgram' | 'monetag', number>;
-  impressions: Record<'adsgram' | 'monetag', number>;
+  lastCompletedNetwork: LiveNetwork | null;
+  lastCompletedAt: Record<LiveNetwork, number>;
+  cooldownUntil: Record<LiveNetwork, number>;
+  impressions: Record<LiveNetwork, number>;
+  consecutiveNoFills: Record<LiveNetwork, number>;
+  totalNoFills: Record<LiveNetwork, number>;
 }
 
-const SESSION_STORAGE_KEY = 'neelyo_ad_mediator_v1';
-const NETWORK_COOLDOWN_MS = 90_000;
-const HIGH_VALUE_ADSGRAM_FRESH_WINDOW_MS = 150_000;
-const MONETAG_FAST_FAIL_MS = 1_800;
+const SESSION_STORAGE_KEY = 'neelyo_ad_mediator_v2';
+const BASE_COOLDOWN_MS = 45_000;
+const MAX_COOLDOWN_MS = 180_000;
+const ADSGRAM_FRESH_WINDOW_MS = 120_000;
+const MONETAG_FRESH_WINDOW_MS = 95_000;
+const MONETAG_FAST_FAIL_MS = 1_600;
 
 const RAPID_CONSECUTIVE_PLACEMENTS = new Set<AdPlacementId>([
   'star_forge_lock',
@@ -85,6 +102,8 @@ function createEmptySessionState(): MediatorSessionState {
     lastCompletedAt: { adsgram: 0, monetag: 0 },
     cooldownUntil: { adsgram: 0, monetag: 0 },
     impressions: { adsgram: 0, monetag: 0 },
+    consecutiveNoFills: { adsgram: 0, monetag: 0 },
+    totalNoFills: { adsgram: 0, monetag: 0 },
   };
 }
 
@@ -111,6 +130,14 @@ function readSessionState(): MediatorSessionState {
       impressions: {
         adsgram: Number(parsed.impressions?.adsgram || 0),
         monetag: Number(parsed.impressions?.monetag || 0),
+      },
+      consecutiveNoFills: {
+        adsgram: Number(parsed.consecutiveNoFills?.adsgram || 0),
+        monetag: Number(parsed.consecutiveNoFills?.monetag || 0),
+      },
+      totalNoFills: {
+        adsgram: Number(parsed.totalNoFills?.adsgram || 0),
+        monetag: Number(parsed.totalNoFills?.monetag || 0),
       },
     };
   } catch {
@@ -177,31 +204,29 @@ function getOrCreateAdsgramController(): AdsgramAdController | null {
 }
 
 /**
- * Eagerly initializes the AdsGram controller once scripts hydrate so the
- * player's very first rewarded ad tap opens smoothly.
+ * Eagerly initializes AdsGram (61123) and validates Monetag (12317990) readiness
+ * right after hydration so the very first rewarded ad opens instantaneously.
  */
 export function prewarmAdNetworks(): void {
   if (typeof window === 'undefined') return;
-  if (isRunningInsideTelegramMiniApp() || !IS_MONETAG_ENABLED) {
+  getOrCreateAdsgramController();
+  window.setTimeout(() => {
     getOrCreateAdsgramController();
-    window.setTimeout(() => {
-      getOrCreateAdsgramController();
-    }, 1500);
-  }
+  }, 1400);
 }
 
 async function waitForNetworkSdk(
-  network: 'adsgram' | 'monetag',
+  network: LiveNetwork,
   maxAttempts = 4
 ): Promise<boolean> {
   const isReady = () =>
     network === 'adsgram'
       ? Boolean(window.Adsgram && typeof window.Adsgram.init === 'function')
-      : IS_MONETAG_ENABLED && typeof window.show_12307661 === 'function';
+      : IS_MONETAG_ENABLED && typeof window.show_12317990 === 'function';
 
   if (isReady()) return true;
   for (let i = 0; i < maxAttempts; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    await new Promise((resolve) => setTimeout(resolve, 160));
     if (isReady()) return true;
   }
   return false;
@@ -232,7 +257,7 @@ function isAdsgramTechnicalOrNoFill(payload: unknown): boolean {
 }
 
 async function tryAdsgram(): Promise<SingleNetworkOutcome> {
-  const ready = await waitForNetworkSdk('adsgram', 4);
+  const ready = await waitForNetworkSdk('adsgram', 3);
   if (!ready) return { status: 'no_fill' };
 
   const controller = getOrCreateAdsgramController();
@@ -258,14 +283,14 @@ async function tryAdsgram(): Promise<SingleNetworkOutcome> {
 async function tryMonetag(): Promise<SingleNetworkOutcome> {
   if (!IS_MONETAG_ENABLED) return { status: 'no_fill' };
 
-  const ready = await waitForNetworkSdk('monetag', 4);
-  if (!ready || typeof window.show_12307661 !== 'function') {
+  const ready = await waitForNetworkSdk('monetag', 3);
+  if (!ready || typeof window.show_12317990 !== 'function') {
     return { status: 'no_fill' };
   }
 
   const startedAt = Date.now();
   try {
-    await window.show_12307661();
+    await window.show_12317990();
     return { status: 'completed' };
   } catch (err) {
     const elapsedMs = Date.now() - startedAt;
@@ -276,7 +301,9 @@ async function tryMonetag(): Promise<SingleNetworkOutcome> {
 
     const looksLikeTechnicalFailure =
       elapsedMs < MONETAG_FAST_FAIL_MS ||
-      /no\s*ad|no\s*fill|network|timeout|load|blocked|failed|script/.test(msg);
+      /no\s*ad|no\s*fill|network|timeout|load|blocked|failed|script|unavailable/.test(
+        msg
+      );
 
     return looksLikeTechnicalFailure
       ? { status: 'no_fill' }
@@ -284,11 +311,14 @@ async function tryMonetag(): Promise<SingleNetworkOutcome> {
   }
 }
 
+/**
+ * Computes the highest-yield waterfall order for the current placement, platform,
+ * frequency-cap window, impression balance, and adaptive no-fill health.
+ */
 function resolveNetworkWaterfall(
   placement: AdPlacementId,
   state: MediatorSessionState
-): ('adsgram' | 'monetag')[] {
-  // Clean AdsGram-only mode during AdsGram review (Monetag completely off)
+): LiveNetwork[] {
   if (!IS_MONETAG_ENABLED) {
     return ['adsgram'];
   }
@@ -298,10 +328,15 @@ function resolveNetworkWaterfall(
   const adsgramCooling = state.cooldownUntil.adsgram > now;
   const monetagCooling = state.cooldownUntil.monetag > now;
 
+  // 1. Standard Web / Mobile Browser / PWA: Monetag dominates global web fill & CPM
   if (!inTelegram) {
+    if (monetagCooling && !adsgramCooling) {
+      return ['adsgram', 'monetag'];
+    }
     return ['monetag', 'adsgram'];
   }
 
+  // 2. Inside Telegram Mini App — Health Priority First
   if (adsgramCooling && !monetagCooling) {
     return ['monetag', 'adsgram'];
   }
@@ -309,19 +344,50 @@ function resolveNetworkWaterfall(
     return ['adsgram', 'monetag'];
   }
 
+  // 3. Rapid Consecutive Placements (Star Forge locks / training) -> Strict Ping-Pong
+  // Keeps every single ad as a high-eCPM fresh impression on its respective network!
   if (RAPID_CONSECUTIVE_PLACEMENTS.has(placement)) {
     return state.lastCompletedNetwork === 'adsgram'
       ? ['monetag', 'adsgram']
       : ['adsgram', 'monetag'];
   }
 
-  const adsgramRecentlyShown =
-    state.lastCompletedNetwork === 'adsgram' &&
-    now - state.lastCompletedAt.adsgram < HIGH_VALUE_ADSGRAM_FRESH_WINDOW_MS;
+  // 4. Frequency-Cap Freshness & Yield Balancing
+  const adsgramAgeMs = now - (state.lastCompletedAt.adsgram || 0);
+  const monetagAgeMs = now - (state.lastCompletedAt.monetag || 0);
+  const adsgramFresh =
+    state.lastCompletedAt.adsgram === 0 || adsgramAgeMs >= ADSGRAM_FRESH_WINDOW_MS;
+  const monetagFresh =
+    state.lastCompletedAt.monetag === 0 || monetagAgeMs >= MONETAG_FRESH_WINDOW_MS;
 
-  return adsgramRecentlyShown
-    ? ['monetag', 'adsgram']
-    : ['adsgram', 'monetag'];
+  // If AdsGram was just shown within its frequency-cap window and Monetag is fresher,
+  // route to Monetag first to capture fresh top-tier bid instead of diminished 2nd-view CPM.
+  if (!adsgramFresh && monetagFresh) {
+    return ['monetag', 'adsgram'];
+  }
+
+  // If Monetag was just shown and AdsGram is fresh, switch back to AdsGram first.
+  if (!monetagFresh && adsgramFresh) {
+    return ['adsgram', 'monetag'];
+  }
+
+  // Balanced RPM distribution: prevent one network from monopolizing >2 extra impressions
+  const impressionDiff =
+    (state.impressions.adsgram || 0) - (state.impressions.monetag || 0);
+  if (impressionDiff >= 2) {
+    return ['monetag', 'adsgram'];
+  }
+  if (impressionDiff <= -2) {
+    return ['adsgram', 'monetag'];
+  }
+
+  // Tie-breaker: alternate away from the most recently completed network for maximum advertiser variety
+  if (state.lastCompletedNetwork === 'adsgram') {
+    return ['monetag', 'adsgram'];
+  }
+
+  // Very first Telegram Mini App impression -> AdsGram primary, instant Monetag backup
+  return ['adsgram', 'monetag'];
 }
 
 /**
@@ -357,7 +423,7 @@ export async function showRewardedAd(
   try {
     const hasAnySdkInitially =
       Boolean(window.Adsgram) ||
-      (IS_MONETAG_ENABLED && typeof window.show_12307661 === 'function');
+      (IS_MONETAG_ENABLED && typeof window.show_12317990 === 'function');
 
     if (!hasAnySdkInitially) {
       const waitList: Promise<boolean>[] = [waitForNetworkSdk('adsgram', 4)];
@@ -371,11 +437,11 @@ export async function showRewardedAd(
       window.Adsgram && typeof window.Adsgram.init === 'function'
     );
     const hasMonetagSdk =
-      IS_MONETAG_ENABLED && typeof window.show_12307661 === 'function';
+      IS_MONETAG_ENABLED && typeof window.show_12317990 === 'function';
 
     if (!hasAdsgramSdk && !hasMonetagSdk) {
-      // Offline / local preview fallback when external ad script is blocked
-      await new Promise((resolve) => setTimeout(resolve, 450));
+      // Offline / local preview fallback when external ad scripts are unavailable
+      await new Promise((resolve) => setTimeout(resolve, 420));
       attempts.push('fallback');
       return { completed: true, source: 'fallback', attempts };
     }
@@ -395,12 +461,14 @@ export async function showRewardedAd(
         state.lastCompletedNetwork = network;
         state.lastCompletedAt[network] = now;
         state.cooldownUntil[network] = 0;
+        state.consecutiveNoFills[network] = 0;
         state.impressions[network] = (state.impressions[network] || 0) + 1;
         writeSessionState(state);
         return { completed: true, source: network, attempts };
       }
 
       if (outcome.status === 'cancelled') {
+        // Respect user cancellation — never ambush with secondary network
         return {
           completed: false,
           source: network,
@@ -409,13 +477,21 @@ export async function showRewardedAd(
         };
       }
 
-      state.cooldownUntil[network] = Date.now() + NETWORK_COOLDOWN_MS;
+      // Adaptive exponential backoff cooldown on no-fill (45s -> 90s -> 180s)
+      const nextStreak = (state.consecutiveNoFills[network] || 0) + 1;
+      state.consecutiveNoFills[network] = nextStreak;
+      state.totalNoFills[network] = (state.totalNoFills[network] || 0) + 1;
+      const cooldownMs = Math.min(
+        MAX_COOLDOWN_MS,
+        BASE_COOLDOWN_MS * Math.pow(2, nextStreak - 1)
+      );
+      state.cooldownUntil[network] = Date.now() + cooldownMs;
       writeSessionState(state);
     }
 
     return {
       completed: false,
-      source: attempts[attempts.length - 1] || 'adsgram',
+      source: attempts[attempts.length - 1] || 'monetag',
       reason: 'no_fill',
       attempts,
     };

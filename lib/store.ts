@@ -328,6 +328,10 @@ export interface LiveSocialFeedPost {
 const PRIMARY_STORAGE_KEY = 'neelyo_tycoon_state_v1';
 
 // Hybrid IndexedDB + localStorage storage adapter
+// Keeps localStorage writes immediate for crash safety while debouncing IndexedDB
+// writes so rapid slider drags / casting clicks never stall the UI thread.
+const pendingIdbTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 const hybridStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
     if (typeof window === 'undefined') return null;
@@ -345,13 +349,26 @@ const hybridStorage: StateStorage = {
     if (typeof window === 'undefined') return;
     try {
       window.localStorage.setItem(name, value);
-      await idbSet(name, value);
     } catch {
-      // Fallback
+      // Quota or private-mode fallback handled by IndexedDB below
     }
+    const existingTimer = pendingIdbTimers.get(name);
+    if (existingTimer) clearTimeout(existingTimer);
+    pendingIdbTimers.set(
+      name,
+      setTimeout(() => {
+        pendingIdbTimers.delete(name);
+        idbSet(name, value).catch(() => {});
+      }, 350)
+    );
   },
   removeItem: async (name: string): Promise<void> => {
     if (typeof window === 'undefined') return;
+    const existingTimer = pendingIdbTimers.get(name);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      pendingIdbTimers.delete(name);
+    }
     try {
       window.localStorage.removeItem(name);
       await idbDel(name);
@@ -5552,10 +5569,22 @@ export const useGameStore = create<NeelyoGameState>()(
     {
       name: PRIMARY_STORAGE_KEY,
       storage: createJSONStorage(() => hybridStorage),
-      // Store customDbPatch ONLY in CUSTOM_DB_STORAGE_KEY (avoid doubling localStorage quota)
+      // Omit customDbPatch (stored separately) and transient modal/toast UI flags
+      // so opening modals or showing toasts never triggers full-state JSON serialization.
       partialize: (state) => {
-        const { customDbPatch: _omittedCustomPatch, ...persisted } = state;
+        const {
+          customDbPatch: _omittedCustomPatch,
+          activeToast: _omittedToast,
+          isChildModalOpen: _omittedChildModal,
+          isPrWarRoomOpen: _omittedPrModal,
+          isStarForgeOpen: _omittedStarForge,
+          ...persisted
+        } = state;
         void _omittedCustomPatch;
+        void _omittedToast;
+        void _omittedChildModal;
+        void _omittedPrModal;
+        void _omittedStarForge;
         return persisted;
       },
       onRehydrateStorage: () => (state) => {

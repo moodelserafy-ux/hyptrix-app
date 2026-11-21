@@ -282,12 +282,14 @@ export function Stage1StudioCreation({
       className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-[#F9F6F0] text-[#1A2530]"
       dir={uiDir}
     >
-      {/* Warm Creamy Ivory & Golden Ambient Glow */}
+      {/* Zero-Cost Radial Ambient Glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 left-1/2 h-[320px] w-[540px] -translate-x-1/2 rounded-full bg-[#D4AF37]/18 blur-[90px]" />
+        <div className="absolute -top-24 left-1/2 h-[360px] w-[620px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgba(212,175,55,0.22)_0%,rgba(212,175,55,0)_70%)]" />
         <div
-          className={`absolute bottom-[-95px] left-1/2 h-[280px] w-[460px] -translate-x-1/2 rounded-full blur-[100px] ${
-            isSaudi ? 'bg-[#046A38]/10' : 'bg-[#D91624]/10'
+          className={`absolute -bottom-24 left-1/2 h-[340px] w-[580px] -translate-x-1/2 ${
+            isSaudi
+              ? 'bg-[radial-gradient(ellipse_at_center,rgba(4,106,56,0.13)_0%,rgba(4,106,56,0)_70%)]'
+              : 'bg-[radial-gradient(ellipse_at_center,rgba(217,22,36,0.11)_0%,rgba(217,22,36,0)_70%)]'
           }`}
         />
       </div>

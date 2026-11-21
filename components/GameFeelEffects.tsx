@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useGameStore } from '@/lib/store';
 import { formatMoney } from '@/lib/game-engine';
-import { getCurrencyLabel } from '@/lib/market-profiles';
+import { getCurrencyLabel, type UiLanguageId } from '@/lib/market-profiles';
 import {
   playCashRegisterChaChing,
   playClapperboardSnap,
@@ -18,22 +18,30 @@ interface FloatingMoneyItem {
   createdAt: number;
 }
 
-const BUBBLE_LIFETIME_MS = 1650;
-const BUBBLE_SWEEP_MAX_AGE_MS = 1950;
+const BUBBLE_LIFETIME_MS = 1450;
+const BUBBLE_MAX_AGE_MS = 1700;
 
-const SCREEN_TITLES: Record<string, string> = {
-  STUDIO_CREATION: 'تأسيس الاستوديو',
-  STUDIO_HUB: 'مكتب الإمبراطور',
-  PROJECT_SETUP: 'ورشة كتابة السيناريو',
-  CREW_CAST_CARDS: 'سبورة الكاستينج والنجوم',
-  PRODUCTION_CRISES: 'بلاتوه التصوير الميداني',
-  RELEASE_SIMULATION: 'بورصة شباك التذاكر',
-  FESTIVALS_AWARDS: 'المسرح الذهبي للجوائز',
+const SCREEN_TITLES: Record<string, { en: string; ar: string }> = {
+  STUDIO_CREATION: { en: 'Studio Foundation', ar: 'تأسيس الاستوديو' },
+  STUDIO_HUB: { en: "Emperor's Desk", ar: 'مكتب الإمبراطور' },
+  PROJECT_SETUP: { en: "Writers' Room", ar: 'ورشة كتابة السيناريو' },
+  CREW_CAST_CARDS: { en: 'Casting Board', ar: 'سبورة الكاستينج والنجوم' },
+  PRODUCTION_CRISES: { en: 'Live Soundstage', ar: 'بلاتوه التصوير الميداني' },
+  RELEASE_SIMULATION: { en: 'Box-Office Exchange', ar: 'بورصة شباك التذاكر' },
+  FESTIVALS_AWARDS: { en: 'Golden Awards Stage', ar: 'المسرح الذهبي للجوائز' },
+  LEADERBOARD_SETTINGS: { en: 'Global Rankings', ar: 'التصنيف العالمي' },
 };
+
+function getSceneTitle(screen: string, lang: UiLanguageId): string {
+  const entry = SCREEN_TITLES[screen];
+  if (entry) return lang === 'en' ? entry.en : entry.ar;
+  return lang === 'en' ? 'Next Scene' : 'مشهد جديد';
+}
 
 export function GameFeelEffects() {
   const worldMarket = useGameStore((s) => s.worldMarket);
-  const currencyLabel = getCurrencyLabel(worldMarket);
+  const uiLanguage = useGameStore((s) => s.uiLanguage);
+  const currencyLabel = getCurrencyLabel(worldMarket, uiLanguage);
 
   const [clapperTransition, setClapperTransition] = useState<{
     active: boolean;
@@ -49,18 +57,16 @@ export function GameFeelEffects() {
   const clapperTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const crisisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Subscribe once to Zustand store changes so rapid sequential cash/screen updates
-  // never cancel earlier floating bubble removal timers.
   useEffect(() => {
     const timersMap = bubbleTimersRef.current;
 
     const unsubscribe = useGameStore.subscribe((state, prevState) => {
-      // 1. Clapperboard transition when switching screens
+      // 1. Snappy GPU-only Clapperboard transition when switching screens
       if (state.activeScreen !== prevState.activeScreen) {
         playClapperboardSnap();
         setClapperTransition({
           active: true,
-          sceneName: SCREEN_TITLES[state.activeScreen] || 'مشهد جديد',
+          sceneName: getSceneTitle(state.activeScreen, state.uiLanguage),
         });
         if (clapperTimerRef.current) {
           clearTimeout(clapperTimerRef.current);
@@ -68,20 +74,20 @@ export function GameFeelEffects() {
         clapperTimerRef.current = setTimeout(() => {
           setClapperTransition((prev) => ({ ...prev, active: false }));
           clapperTimerRef.current = null;
-        }, 620);
+        }, 320);
       }
 
-      // 2. Floating Cash Deltas when cash changes
+      // 2. Floating Cash Deltas when cash changes meaningfully
       const diff = state.cash - prevState.cash;
       if (Math.abs(diff) >= 50_000) {
         const now = Date.now();
         const id = `delta_${now}_${Math.random().toString(36).slice(2, 6)}`;
-        const xOffset = Math.round((Math.random() - 0.5) * 84);
+        const xOffset = Math.round((Math.random() - 0.5) * 76);
         playCashRegisterChaChing();
 
         setFloatingDeltas((prev) => {
           const fresh = prev.filter(
-            (item) => now - item.createdAt < BUBBLE_SWEEP_MAX_AGE_MS
+            (item) => now - item.createdAt < BUBBLE_MAX_AGE_MS
           );
           return [...fresh.slice(-3), { id, delta: diff, xOffset, createdAt: now }];
         });
@@ -108,25 +114,12 @@ export function GameFeelEffects() {
         crisisTimerRef.current = setTimeout(() => {
           setCrisisRedFlash(false);
           crisisTimerRef.current = null;
-        }, 680);
+        }, 580);
       }
     });
 
-    // Safety sweeper guarantees no floating bubble can ever get stuck even if the tab is throttled
-    const sweepInterval = setInterval(() => {
-      const now = Date.now();
-      setFloatingDeltas((prev) => {
-        if (prev.length === 0) return prev;
-        const remaining = prev.filter(
-          (item) => now - item.createdAt < BUBBLE_SWEEP_MAX_AGE_MS
-        );
-        return remaining.length === prev.length ? prev : remaining;
-      });
-    }, 750);
-
     return () => {
       unsubscribe();
-      clearInterval(sweepInterval);
       timersMap.forEach((t) => clearTimeout(t));
       timersMap.clear();
       if (clapperTimerRef.current) clearTimeout(clapperTimerRef.current);
@@ -136,7 +129,7 @@ export function GameFeelEffects() {
 
   return (
     <>
-      {/* FLOATING MONEY DELTAS (-5,000,000 ج.م / +12,000,000 ج.م) */}
+      {/* FLOATING MONEY DELTAS */}
       <div className="pointer-events-none fixed top-16 right-0 left-0 z-[70] flex justify-center">
         <AnimatePresence>
           {floatingDeltas.map((item) => {
@@ -144,21 +137,21 @@ export function GameFeelEffects() {
             return (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, y: 16, x: item.xOffset, scale: 0.86 }}
+                initial={{ opacity: 0, y: 14, x: item.xOffset, scale: 0.88 }}
                 animate={{
                   opacity: [0, 1, 1, 0],
-                  y: [16, -12, -40, -68],
+                  y: [14, -12, -38, -64],
                   x: item.xOffset,
-                  scale: [0.86, 1.05, 1, 0.92],
+                  scale: [0.88, 1.04, 1, 0.92],
                 }}
-                exit={{ opacity: 0, y: -76, scale: 0.9 }}
+                exit={{ opacity: 0, y: -70, scale: 0.9 }}
                 transition={{
-                  duration: 1.55,
+                  duration: 1.38,
                   times: [0, 0.16, 0.72, 1],
                   ease: 'easeOut',
                 }}
                 dir="ltr"
-                className={`absolute rounded-2xl border-2 px-3.5 py-1.5 font-typewriter text-sm font-black shadow-xl ${
+                className={`absolute rounded-2xl border-2 px-3.5 py-1.5 font-typewriter text-sm font-black shadow-xl will-change-transform ${
                   isNegative
                     ? 'border-[#1A2530] bg-[#D91624] text-white'
                     : 'border-[#1A2530] bg-[#D4AF37] text-[#1A2530]'
@@ -178,15 +171,15 @@ export function GameFeelEffects() {
           <motion.div
             key="crisis_red_flash"
             initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 0.42, 0.12, 0.35, 0] }}
+            animate={{ opacity: [0, 0.38, 0.1, 0.3, 0] }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.65 }}
-            className="pointer-events-none fixed inset-0 z-[65] bg-[#D91624]/45 mix-blend-multiply"
+            transition={{ duration: 0.55 }}
+            className="pointer-events-none fixed inset-0 z-[65] bg-[#D91624]/40"
           />
         )}
       </AnimatePresence>
 
-      {/* CINEMA CLAPPERBOARD SCREEN TRANSITION */}
+      {/* SNAPPY GPU-ONLY CLAPPERBOARD TRANSITION (Zero full-screen backdrop-blur lag) */}
       <AnimatePresence>
         {clapperTransition.active && (
           <motion.div
@@ -194,33 +187,32 @@ export function GameFeelEffects() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="pointer-events-none fixed inset-0 z-[75] flex items-center justify-center bg-[#1A2530]/55 backdrop-blur-xs"
+            transition={{ duration: 0.12 }}
+            className="pointer-events-none fixed inset-0 z-[75] flex items-center justify-center bg-[#1A2530]/40"
           >
             <motion.div
-              initial={{ scale: 0.78, rotate: -6 }}
+              initial={{ scale: 0.86, rotate: -4 }}
               animate={{ scale: 1, rotate: 0 }}
-              exit={{ scale: 1.12, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 24 }}
-              className="w-72 overflow-hidden rounded-2xl border-3 border-[#D4AF37] bg-[#1A2530] text-[#F9F6F0] shadow-2xl"
+              exit={{ scale: 1.06, opacity: 0 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="w-64 overflow-hidden rounded-2xl border-3 border-[#D4AF37] bg-[#1A2530] text-[#F9F6F0] shadow-2xl will-change-transform"
             >
-              {/* Top Clapper Arm */}
               <motion.div
-                initial={{ rotate: -26 }}
+                initial={{ rotate: -22 }}
                 animate={{ rotate: 0 }}
-                transition={{ duration: 0.14, ease: 'easeIn' }}
+                transition={{ duration: 0.11, ease: 'easeIn' }}
                 style={{
                   transformOrigin: 'left bottom',
                   backgroundImage:
                     'repeating-linear-gradient(-45deg, #1A2530, #1A2530 14px, #D4AF37 14px, #D4AF37 28px)',
                 }}
-                className="h-7 w-full border-b-2 border-[#D4AF37]"
+                className="h-6 w-full border-b-2 border-[#D4AF37]"
               />
-              <div className="p-4 text-center">
+              <div className="p-3.5 text-center">
                 <div className="font-typewriter text-[10px] font-bold tracking-widest text-[#D4AF37]">
-                  SCENE TAKE · DAYLIGHT STUDIO
+                  NEELYO · SCENE TAKE
                 </div>
-                <div className="font-display mt-1 text-lg font-black text-white">
+                <div className="font-display mt-1 text-base font-black text-white">
                   {clapperTransition.sceneName}
                 </div>
               </div>

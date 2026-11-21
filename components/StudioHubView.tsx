@@ -69,7 +69,6 @@ export function StudioHubView({
 }: {
   onOpenSettings?: () => void;
   onOpenInfo?: (tab: NeelyoInfoTab) => void;
-  secondsLeft?: number;
 } = {}) {
   const {
     studioName,
