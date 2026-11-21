@@ -346,6 +346,7 @@ export interface RealPlayersLeaderboardResponse {
   fifteenthMarketValue: number;
   tamperClamped?: boolean;
   verified?: boolean;
+  syncWarning?: string;
 }
 
 export async function syncAndFetchRealPlayersLeaderboard(payload: {

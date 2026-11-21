@@ -406,14 +406,17 @@ export interface DeepTalentEvaluationResult {
     | 'weak_character_or_script'
     | 'genre_mismatch'
     | 'low_director_or_reputation'
+    | 'underfunded_production'
+    | 'ego_clash'
     | 'underpaid';
   detailedReason: string;
 }
 
 /**
  * Deep multi-factor contract evaluation engine:
- * Evaluates Role Billing Size vs. Star Tier/Ego, Character & Script Depth,
- * Genre Mastery, Director Prestige, Studio Reputation, and Financial Offer + VIP Dinner.
+ * Strictly evaluates Role Billing Size vs. Star Tier/Ego, Real Script Craft & Spam detection,
+ * Genre Mastery, Director Prestige, Studio Reputation vs. Tier, Production Budget Adequacy,
+ * Cast Ego Clash, Prior Rejection Escalation, and Financial Package + VIP Dinner.
  */
 export function evaluateTalentOfferDeep(params: {
   talentName: string;
@@ -434,10 +437,18 @@ export function evaluateTalentOfferDeep(params: {
   studioReputation: number;
   directorOverall?: number | null;
   directorName?: string | null;
+  productionBudget?: number;
+  priorRejections?: number;
+  existingLeadMaxEgo?: number;
+  existingLeadName?: string | null;
+  crewRole?: string;
+  format?: 'film' | 'series';
+  studioName?: string;
   currencyLabel?: string;
   uiLanguage?: UiLanguageId;
 }): DeepTalentEvaluationResult {
   const {
+    talentName,
     isActor,
     starTier,
     overall,
@@ -455,24 +466,48 @@ export function evaluateTalentOfferDeep(params: {
     studioReputation,
     directorOverall = null,
     directorName = null,
+    productionBudget = 0,
+    priorRejections = 0,
+    existingLeadMaxEgo = 0,
+    existingLeadName = null,
+    crewRole = '',
+    format = 'film',
+    studioName = '',
     currencyLabel,
     uiLanguage = 'ar',
   } = params;
 
   const isEn = uiLanguage === 'en';
   const cur = currencyLabel || (isEn ? 'EGP' : 'ج.م');
+  const formatWord =
+    format === 'series'
+      ? isEn
+        ? 'series'
+        : 'المسلسل'
+      : isEn
+      ? 'film'
+      : 'الفيلم';
 
   const hasTopDirector = Boolean(directorOverall && directorOverall >= 86);
-  const { expectedMinimumSalary } = calculateTalentExpectedSalary({
-    baseSalary,
-    ego,
-    genreMasteryScore,
-    studioReputation,
-    roleBillingSize: isActor ? roleBillingSize : 'lead_star',
-    starTier,
-    hasTopDirector,
-  });
+  const { expectedMinimumSalary: rawExpectedSalary } =
+    calculateTalentExpectedSalary({
+      baseSalary,
+      ego,
+      genreMasteryScore,
+      studioReputation,
+      roleBillingSize: isActor ? roleBillingSize : 'lead_star',
+      starTier,
+      hasTopDirector,
+    });
 
+  // Escalate expectations if the player already offended or got rejected by this talent before
+  const rejectionInflation =
+    priorRejections >= 2 ? 1.14 : priorRejections === 1 ? 1.07 : 1.0;
+  const expectedMinimumSalary =
+    Math.round((rawExpectedSalary * rejectionInflation) / 50_000) * 50_000;
+
+  // Evaluate real script craft & spam detection
+  const scriptEval = evaluateScriptCraftScore(scriptSynopsis);
   const scriptWords = scriptSynopsis.trim()
     ? scriptSynopsis.trim().split(/\s+/).length
     : 0;
@@ -482,76 +517,150 @@ export function evaluateTalentOfferDeep(params: {
 
   let roleFitScore = 82;
   let roleFitVerdict = isEn
-    ? 'Role billing fits the talent’s market standing perfectly.'
-    : 'حجم الدور مناسب تماماً لمكانة الفنان في السوق';
+    ? 'Role scope aligns cleanly with the talent’s market standing.'
+    : 'حجم الدور والمسؤولية يناسبان تماماً مكانة الفنان في السوق.';
 
   if (isActor) {
     if (roleBillingSize === 'supporting') {
       if (starTier === 'S' || overall >= 89 || ego >= 86) {
-        roleFitScore = 18;
+        roleFitScore = 15;
         roleFitVerdict = isEn
-          ? 'Artistically rejected: S-Tier marquee stars will not accept a supporting billing slot.'
-          : 'مرفوض فنياً: نجم صف أول (فئة S) لا يقبل بدور مساعد أو ثانوي على الأفيش';
+          ? 'Hard pass: S-Tier marquee stars will never accept a supporting billing slot.'
+          : 'مرفوض فنياً: نجم صف أول (فئة S) لا يقبل بدور مساعد أو ثانٍ على الأفيش.';
       } else if (starTier === 'A' || overall >= 83) {
-        roleFitScore = 52;
+        roleFitScore = 44;
         roleFitVerdict = isEn
-          ? 'Role is smaller than the star’s usual billing and demands strong financial & creative incentives.'
-          : 'حجم الدور أصغر من مكانة النجم المعتادة ويتطلب إغراءً مالياً وفنياً كبيراً';
+          ? 'Supporting billing is below this star’s market rank and requires heavy financial compensation.'
+          : 'مساحة الدور أصغر من مكانة النجم المعتادة وتتطلب تعويضاً مالياً ونسبة أرباح قوية.';
       } else {
         roleFitScore = 92;
         roleFitVerdict = isEn
-          ? 'An ideal opportunity to cement the actor’s footprint in the market.'
-          : 'فرصة ممتازة ومناسبة جداً لتثبيت أقدام الممثل في السوق';
+          ? 'Strong showcase opportunity to cement the actor’s footprint.'
+          : 'فرصة قوية لتثبيت أقدام الممثل في السوق السينمائي.';
       }
     } else if (roleBillingSize === 'lead_star') {
       if (starTier === 'S' || starTier === 'A') {
         roleFitScore = 96;
         roleFitVerdict = isEn
           ? 'Top-billed solo lead matches the star’s marquee box-office stature.'
-          : 'البطولة المطلقة تناسب تماماً نجومية الفنان وتاريخه في شباك التذاكر';
-      } else if (starTier === 'B') {
-        roleFitScore = 90;
-        roleFitVerdict = isEn
-          ? 'A golden breakout lead opportunity that genuinely excites the actor.'
-          : 'فرصة ذهبية للبطولة المطلقة يتحمس لها الفنان بشدة';
+          : 'البطولة المطلقة تناسب تماماً نجومية الفنان وتاريخه في شباك التذاكر.';
       } else {
-        roleFitScore = 95;
+        roleFitScore = 93;
         roleFitVerdict = isEn
-          ? 'An extraordinary marquee lead launchpad for a rising talent.'
-          : 'بطولة مطلقة استثنائية تمنح الموهبة الصاعدة انطلاقة كبرى';
+          ? 'A breakout marquee lead opportunity that genuinely excites the actor.'
+          : 'فرصة بطولة مطلقة استثنائية تمنح الممثل انطلاقة كبرى.';
       }
     } else if (roleBillingSize === 'co_lead') {
-      if (starTier === 'S' && ego >= 91) {
-        roleFitScore = 68;
+      if (starTier === 'S' && ego >= 89) {
+        roleFitScore = 62;
         roleFitVerdict = isEn
-          ? 'The star prefers solo top billing, though a strong deal can lock in a co-lead.'
-          : 'النجم يفضل البطولة المطلقة المنفردة لكنه قد يقبل البطولة المشتركة بشروط قوية';
+          ? 'The star prefers solo top billing; sharing marquee space requires premium terms.'
+          : 'النجم يفضل البطولة المطلقة المنفردة؛ تقاسم الأفيش يتطلب شروطاً وتقديراً استثنائياً.';
+      } else {
+        roleFitScore = 88;
+        roleFitVerdict = isEn
+          ? 'Co-lead billing creates an appealing dramatic balance.'
+          : 'البطولة المشتركة تمنح توازناً درامياً جذاباً للنجم.';
+      }
+    } else if (roleBillingSize === 'antagonist') {
+      if (starTier === 'S' && ego >= 90) {
+        roleFitScore = 66;
+        roleFitVerdict = isEn
+          ? 'The star demands equal billing weight with the hero to play the antagonist.'
+          : 'النجم يشترط أن تكون مساحة الشرير المحوري موازية تماماً للبطل على الأفيش.';
       } else {
         roleFitScore = 90;
         roleFitVerdict = isEn
-          ? 'Co-lead billing creates an appealing dramatic balance for the actor.'
-          : 'البطولة المشتركة تمنح توازناً درامياً جذاباً للفنان';
-      }
-    } else if (roleBillingSize === 'antagonist') {
-      if (starTier === 'S' && ego >= 92) {
-        roleFitScore = 70;
-        roleFitVerdict = isEn
-          ? 'The star insists the central villain shares equal poster prominence with the hero.'
-          : 'النجم يشترط أن تكون مساحة الشرير المحوري موازية للبطل على الأفيش';
-      } else {
-        roleFitScore = 91;
-        roleFitVerdict = isEn
-          ? 'Playing the central antagonist is a juicy dramatic showcase for the star.'
-          : 'دور الشرير المحوري يمثل تحدياً تمثيلياً مغرياً للفنان';
+          ? 'Playing the central villain is a juicy dramatic showcase.'
+          : 'دور الشرير المحوري يمثل تحدياً تمثيلياً مغرياً للفنان.';
       }
     } else if (roleBillingSize === 'cameo') {
-      roleFitScore = 88;
+      roleFitScore = starTier === 'S' ? 78 : 86;
       roleFitVerdict = isEn
         ? 'A prestigious special cameo requires minimal shoot days while adding marquee weight.'
-        : 'ظهور خاص كضيف شرف لا يتطلب تفرغاً طويلاً ويضيف ثقلاً للعمل';
+        : 'ظهور خاص كضيف شرف لا يتطلب تفرغاً طويلاً ويضيف ثقلاً تسويقياً للعمل.';
+    }
+  } else {
+    // Crew-specific fit evaluation
+    if (crewRole === 'director') {
+      roleFitScore = scriptEval.score >= 72 ? 93 : scriptEval.score >= 55 ? 74 : 42;
+      roleFitVerdict =
+        scriptEval.score >= 72
+          ? isEn
+            ? 'The script gives the director clear visual and dramatic meat to work with.'
+            : 'المعالجة الدرامية تمنح المخرج مساحة إبداعية واضحة لتنفيذ رؤيته.'
+          : isEn
+          ? 'The director is concerned the script lacks strong dramatic structure.'
+          : 'المخرج قلق من ضعف البناء الدرامي في ملخص السيناريو الحالي.';
+    } else if (crewRole === 'dop' || crewRole === 'vfx' || crewRole === 'production_designer') {
+      roleFitScore = productionBudget >= 10_000_000 ? 92 : productionBudget >= 5_500_000 ? 78 : 54;
+      roleFitVerdict =
+        productionBudget >= 10_000_000
+          ? isEn
+            ? 'Production department funding supports high-end visual craft.'
+            : 'ميزانية الإنتاج تسمح بتنفيذ صورة بصرية ومؤثرات على أعلى مستوى.'
+          : isEn
+          ? 'Department head worries the technical production budget is too tight.'
+          : 'رئيس القسم يخشى أن ميزانية التنفيذ الفني لا تكفي لتحقيق جودة عالية.';
     }
   }
 
+  const backendBoost =
+    backendPoints * (starTier === 'S' || starTier === 'A' ? 0.022 : 0.016);
+  const dinnerBoost = vipDinner ? 0.1 : 0;
+  const effectiveFinancialOffer =
+    offeredSalary * (1 + backendBoost + dinnerBoost);
+  const financialRatio =
+    effectiveFinancialOffer / Math.max(1, expectedMinimumSalary);
+
+  const roleDescBonus =
+    !isActor || roleWords >= 4 ? 6 : roleWords >= 2 ? 1 : -10;
+  const directorBonus =
+    !isActor && crewRole === 'director'
+      ? 0
+      : directorOverall
+      ? directorOverall >= 90
+        ? 10
+        : directorOverall >= 83
+        ? 5
+        : directorOverall < 76
+        ? -8
+        : -2
+      : isActor && (starTier === 'S' || starTier === 'A')
+      ? -10 // Signing without any attached director hurts prestige confidence!
+      : -3;
+  const repBonus =
+    studioReputation >= 82
+      ? 8
+      : studioReputation >= 65
+      ? 2
+      : studioReputation < 48
+      ? -12
+      : -5;
+  const budgetBonus =
+    productionBudget >= 16_000_000
+      ? 6
+      : productionBudget > 0 && productionBudget < 5_000_000
+      ? -8
+      : 0;
+
+  const artisticFitScore = Math.max(
+    18,
+    Math.min(
+      100,
+      Math.round(
+        genreMasteryScore * 0.42 +
+          scriptEval.score * 0.34 +
+          roleFitScore * 0.24 +
+          roleDescBonus +
+          directorBonus +
+          repBonus +
+          budgetBonus
+      )
+    )
+  );
+
+  // GATE 1: S-Tier Supporting Billing Hard Reject
   if (
     isActor &&
     roleBillingSize === 'supporting' &&
@@ -561,57 +670,22 @@ export function evaluateTalentOfferDeep(params: {
       willAccept: false,
       expectedMinimumSalary,
       roleFitScore,
-      artisticFitScore: 40,
-      financialRatio: offeredSalary / Math.max(1, expectedMinimumSalary),
+      artisticFitScore: Math.min(45, artisticFitScore),
+      financialRatio,
       roleFitVerdict,
       rejectionCategory: 'role_too_small_for_star',
       detailedReason: isEn
-        ? `I must respectfully pass on "${projectTitle}". My box-office stature as an A-list marquee lead doesn't allow me to take a supporting slot—I only sign on as a lead or an iconic special cameo.`
-        : `أعتذر عن المشاركة في «${projectTitle}»؛ مكانتي الفنية وتاريخي كبطل صف أول لا يسمحان بقبول دور ثانٍ أو مساعد، ولا أشارك إلا في بطولة العمل أو كضيف شرف استثنائي.`,
+        ? `I have to turn down "${projectTitle}". At my level (OVR ${overall}), my agency cannot sign me onto a supporting billing slot—my name goes top-billed as a lead or an unforgettable special cameo.`
+        : `أعتذر بوضوح عن «${projectTitle}»؛ نجم في مكانتي (تقييم ${overall}) وتاريخي في شباك التذاكر لا يمكن أن يظهر في دور مساعد أو ثانٍ على الأفيش، لا أوقّع إلا على بطولة أولى أو ظهور شرفي استثنائي.`,
     };
   }
 
-  const scriptDepthScore =
-    scriptWords >= 18 ? 92 : scriptWords >= 10 ? 78 : 52;
-  const roleDescBonus =
-    !isActor || roleWords >= 3 ? 6 : roleWords >= 2 ? 2 : -8;
-  const directorBonus = directorOverall
-    ? directorOverall >= 90
-      ? 10
-      : directorOverall >= 82
-      ? 5
-      : -4
-    : 0;
-  const repBonus =
-    studioReputation >= 80 ? 6 : studioReputation < 48 ? -8 : 0;
-
-  const artisticFitScore = Math.max(
-    25,
-    Math.min(
-      100,
-      Math.round(
-        genreMasteryScore * 0.48 +
-          scriptDepthScore * 0.32 +
-          roleFitScore * 0.2 +
-          roleDescBonus +
-          directorBonus +
-          repBonus
-      )
-    )
-  );
-
-  const backendBoost =
-    backendPoints * (starTier === 'S' || starTier === 'A' ? 0.024 : 0.018);
-  const dinnerBoost = vipDinner ? 0.11 : 0;
-  const effectiveFinancialOffer =
-    offeredSalary * (1 + backendBoost + dinnerBoost);
-  const financialRatio =
-    effectiveFinancialOffer / Math.max(1, expectedMinimumSalary);
-
+  // GATE 2: Spam / Weak Script Gate (Strict for S, A, and Elite Crew!)
   if (
-    (starTier === 'S' || starTier === 'A') &&
-    scriptWords < 7 &&
-    financialRatio < 1.25
+    scriptEval.isSpam ||
+    ((starTier === 'S' || starTier === 'A' || overall >= 84) &&
+      (scriptWords < 8 || scriptEval.score < 54) &&
+      financialRatio < 1.38)
   ) {
     return {
       willAccept: false,
@@ -621,13 +695,114 @@ export function evaluateTalentOfferDeep(params: {
       financialRatio,
       roleFitVerdict,
       rejectionCategory: 'weak_character_or_script',
-      detailedReason: isEn
-        ? `I read the brief for "${projectTitle}", but the dramatic treatment and character arc are still far too thin to justify staking my name on the project right now.`
-        : `قرأت ملخص «${projectTitle}»، لكن المعالجة الدرامية وتفاصيل الدور لا تزال مختصرة جداً ولا توضح أبعاد الشخصية الكافية للمغامرة بقبول العمل حالياً.`,
+      detailedReason: scriptEval.isSpam
+        ? isEn
+          ? `My agency read the pages for "${projectTitle}" and returned them immediately—this looks like unfinished placeholder text rather than a real dramatic screenplay. Bring me a real story with real stakes.`
+          : `قرأ مكتبي أوراق «${projectTitle}» وأعادها فوراً؛ ما أرسلتموه يبدو ككلام عشوائي غير مكتمل وليس معالجة درامية حقيقية! اكتب قصة واضحة وصراعاً حقيقياً قبل أن تطرح اسمي على المشروع.`
+        : isEn
+        ? `The concept for "${projectTitle}" (script score ${scriptEval.score}/100) still feels underdeveloped${
+            isActor && roleWords < 2
+              ? ' and you barely defined my character arc'
+              : ''
+          }. I won’t gamble my career on a half-baked brief—flesh out the plot and character stakes first.`
+        : `فكرة «${projectTitle}» (تقييم الورق ${scriptEval.score}/100) ما زالت سطحية ومختصرة جداً${
+            isActor && roleWords < 2
+              ? ' ولم تكتب حتى ملامح واضحة لشخصيتي'
+              : ''
+          }. لا أستطيع المغامرة باسمي في مشروع ورقه غير ناضج؛ طوّر الحبكة الدرامية ثم عاود التواصل.`,
     };
   }
 
-  if (genreMasteryScore < 70 && financialRatio < 1.12 && !vipDinner) {
+  // GATE 3: Studio Reputation & Director Prestige Gate for S-Tier Icons
+  if (
+    (starTier === 'S' || overall >= 90) &&
+    studioReputation < 60 &&
+    !hasTopDirector &&
+    !(vipDinner && backendPoints >= 8 && financialRatio >= 1.15)
+  ) {
+    return {
+      willAccept: false,
+      expectedMinimumSalary,
+      roleFitScore,
+      artisticFitScore,
+      financialRatio,
+      roleFitVerdict,
+      rejectionCategory: 'low_director_or_reputation',
+      detailedReason: isEn
+        ? `Honestly, ${studioName || 'your studio'}’s current market reputation (${studioReputation}/100) isn’t yet at the Tier-S benchmark${
+            !directorName
+              ? ', and there isn’t even an A-list director attached to "' + projectTitle + '"'
+              : `—even with ${directorName} attached`
+          }. Either sign a heavyweight director (86+ OVR) first, or pitch me over a VIP dinner with real profit points (8%+) and a premium fee.`
+        : `بصراحة مهنية، سمعة استوديو «${studioName || 'الاستوديو'}» الحالية (${studioReputation}/100) لم تصل بعد لمستوى مشاريع الفئة S${
+            !directorName
+              ? `، ولا يوجد حتى الآن مخرج صف أول متعاقد على «${projectTitle}»`
+              : ` رغم وجود المخرج ${directorName}`
+          }. تعاقد أولاً مع مخرج كبير (تقييم +86) أو قدّم جلسة عشاء VIP مع نسبة أرباح مجزية (+8%) وعرض مالي استثنائي.`,
+    };
+  }
+
+  // GATE 4: Underfunded Production Scale Gate (Strict for Elite Crew & S-Tier Leads)
+  const minProdBudgetForTalent =
+    !isActor && overall >= 87
+      ? 10_000_000
+      : !isActor && overall >= 80
+      ? 5_500_000
+      : isActor && starTier === 'S'
+      ? 8_000_000
+      : 0;
+  if (
+    productionBudget > 0 &&
+    minProdBudgetForTalent > 0 &&
+    productionBudget < minProdBudgetForTalent &&
+    financialRatio < 1.24
+  ) {
+    return {
+      willAccept: false,
+      expectedMinimumSalary,
+      roleFitScore,
+      artisticFitScore,
+      financialRatio,
+      roleFitVerdict,
+      rejectionCategory: 'underfunded_production',
+      detailedReason: !isActor
+        ? isEn
+          ? `I inspected the technical budget for "${projectTitle}" (${formatMoney(productionBudget)} ${cur}). As a Tier-${starTier} department head, I refuse to cut corners on cameras, sets, and post-production—raise the production budget above ${formatMoney(minProdBudgetForTalent)} ${cur} before calling me back.`
+          : `راجعت ميزانية الإنتاج الفني لـ«${projectTitle}» (${formatMoney(productionBudget)} ${cur})؛ كصانع فئة ${starTier} لا أقبل العمل بإمكانيات ضعيفة تشوّه اسمي على الشاشة. ارفع ميزانية التنفيذ والإنتاج فوق ${formatMoney(minProdBudgetForTalent)} ${cur} أولاً.`
+        : isEn
+        ? `A marquee release like "${projectTitle}" can’t look cheap on screen—the current production backing (${formatMoney(productionBudget)} ${cur}) is far below what my audience expects from a ${formatWord} carrying my name.`
+        : `الجمهور ينتظر من أي ${formatWord} يحمل اسمي صورة إنتاجية ضخمة، لكن الميزانية الفنية المرصودة لـ«${projectTitle}» (${formatMoney(productionBudget)} ${cur}) متواضعة جداً ولا تضمن خروج العمل بمستوى يليق بي.`,
+    };
+  }
+
+  // GATE 5: Cast Ego Clash Gate (Two High-Ego S-Tier Leads)
+  if (
+    isActor &&
+    starTier === 'S' &&
+    ego >= 88 &&
+    existingLeadMaxEgo >= 88 &&
+    (roleBillingSize === 'lead_star' || roleBillingSize === 'co_lead') &&
+    !(vipDinner && financialRatio >= 1.12 && backendPoints >= 6)
+  ) {
+    return {
+      willAccept: false,
+      expectedMinimumSalary,
+      roleFitScore,
+      artisticFitScore,
+      financialRatio,
+      roleFitVerdict,
+      rejectionCategory: 'ego_clash',
+      detailedReason: isEn
+        ? `I know ${existingLeadName || 'another marquee heavyweight'} is already attached to "${projectTitle}". Sharing top billing creates a serious poster and contract clash—without a VIP executive dinner, 6%+ backend points, and a top-tier quote, I’m out.`
+        : `علمت أن «${existingLeadName || 'نجماً ثقيلاً آخر'}» وقّع بالفعل على «${projectTitle}». تقاسم الصدارة على الأفيش يسبب صداماً تسويقياً كبيراً لي؛ بدون عشاء VIP لحسم ترتيب الأسماء ونسبة أرباح (+6%) وأجر يليق بوضعي لن أوقّع.`,
+    };
+  }
+
+  // GATE 6: Strict Genre Mismatch Gate
+  if (
+    genreMasteryScore < 72 &&
+    !(financialRatio >= 1.18 && (vipDinner || backendPoints >= 6))
+  ) {
     return {
       willAccept: false,
       expectedMinimumSalary,
@@ -637,25 +812,37 @@ export function evaluateTalentOfferDeep(params: {
       roleFitVerdict,
       rejectionCategory: 'genre_mismatch',
       detailedReason: isEn
-        ? `The (${genreName}) genre on "${projectTitle}" falls outside my core wheelhouse. Taking that creative risk requires either a private VIP table read or a compensation package that justifies the leap.`
-        : `تصنيف (${genreName}) في «${projectTitle}» بعيد عن منطقتي الفنية المعتادة، ولا يمكنني خوض هذه المجازفة دون جلسة عمل خاصة أو تقدير مالي يعوض هذه النقلة.`,
+        ? `(${genreName}) is simply not my strong suit (my fit is only ${genreMasteryScore}%). Risking my audience on "${projectTitle}" outside my core genre demands a private VIP pitch or a heavyweight offer well above ${formatMoney(expectedMinimumSalary)} ${cur}.`
+        : `تصنيف (${genreName}) ليس ملعبي الحقيقي (توافقي معه ${genreMasteryScore}% فقط). المغامرة مع جمهوري في «${projectTitle}» خارج منطقتي المعتادة تحتاج جلسة إقناع VIP وعرضاً مالياً يتجاوز ${formatMoney(expectedMinimumSalary)} ${cur}.`,
     };
   }
 
-  const roleModifier = (roleFitScore - 80) * 0.004;
-  const artisticModifier = (artisticFitScore - 75) * 0.004;
+  // FINAL COMPOSITE SCORING (Noticeably tougher & strategic!)
+  const roleModifier = (roleFitScore - 82) * 0.0045;
+  const artisticModifier = (artisticFitScore - 78) * 0.0045;
   const totalAcceptanceScore =
     financialRatio + roleModifier + artisticModifier;
 
-  const requiredThreshold =
+  const baseThreshold =
     starTier === 'S' || ego >= 90
-      ? 1.0
+      ? 1.07
       : starTier === 'A' || ego >= 82
-      ? 0.95
-      : 0.89;
+      ? 1.01
+      : starTier === 'B'
+      ? 0.94
+      : 0.88;
+  const requiredThreshold = baseThreshold + priorRejections * 0.05;
+  const minCashFloor =
+    starTier === 'S'
+      ? 0.9
+      : starTier === 'A'
+      ? 0.87
+      : starTier === 'B'
+      ? 0.84
+      : 0.8;
 
   const willAccept =
-    financialRatio >= 0.82 && totalAcceptanceScore >= requiredThreshold;
+    financialRatio >= minCashFloor && totalAcceptanceScore >= requiredThreshold;
 
   const roleBillingLabelEnMap: Record<RoleBillingSize, string> = {
     lead_star: 'Lead Role',
@@ -669,48 +856,85 @@ export function evaluateTalentOfferDeep(params: {
     ? isEn
       ? roleBillingLabelEnMap[roleBillingSize] || 'Role'
       : ROLE_BILLING_META[roleBillingSize]?.label.split(' ')[0] || 'الدور'
+    : crewRole === 'director'
+    ? isEn
+      ? 'directing helm'
+      : 'الإخراج'
+    : crewRole === 'dop'
+    ? isEn
+      ? 'cinematography'
+      : 'إدارة التصوير'
+    : crewRole === 'composer'
+    ? isEn
+      ? 'original score'
+      : 'الموسيقى التصويرية'
+    : crewRole === 'vfx'
+    ? isEn
+      ? 'VFX supervision'
+      : 'المؤثرات البصرية'
     : isEn
-    ? 'creative helm'
-    : 'قيادة العمل';
+    ? 'creative leadership'
+    : 'القيادة الفنية';
 
   const seedVal = Array.from(
-    `${params.talentName}_${projectTitle}_${offeredSalary}_${roleBillingSize}`
+    `${talentName}_${projectTitle}_${offeredSalary}_${roleBillingSize}_${priorRejections}`
   ).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
 
   if (willAccept) {
-    const directorClause = directorName
-      ? isEn
-        ? ` alongside director ${directorName}`
-        : ` وبالتعاون مع المخرج ${directorName}`
-      : '';
-    const dinnerClause = vipDinner
-      ? isEn
-        ? ' especially after our private VIP table read,'
-        : ' وبعد جلسة القراءة الخاصة،'
-      : '';
+    const strengthsEn: string[] = [];
+    const strengthsAr: string[] = [];
+
+    if (genreMasteryScore >= 86) {
+      strengthsEn.push(`${genreName} is right in my wheelhouse (${genreMasteryScore}% fit)`);
+      strengthsAr.push(`تصنيف (${genreName}) هو ملعبي المفضل (توافق ${genreMasteryScore}%)`);
+    }
+    if (scriptEval.score >= 76) {
+      strengthsEn.push(`the screenplay’s dramatic tension (${scriptEval.score}/100) hooked me immediately`);
+      strengthsAr.push(`قوة الحبكة الدرامية في الورق (${scriptEval.score}/100) خطفتني من أول قراءة`);
+    }
+    if (directorName && (isActor || crewRole !== 'director')) {
+      strengthsEn.push(`working under ${directorName} guarantees serious craft`);
+      strengthsAr.push(`العمل تحت قيادة المخرج ${directorName} يضمن مستوى فنياً رفيعاً`);
+    }
+    if (vipDinner) {
+      strengthsEn.push(`our private VIP dinner cleared every reservation I had`);
+      strengthsAr.push(`جلسة العشاء الخاصة حسمت كل تفاصيل الرؤية وأزالت أي تردد`);
+    }
+    if (backendPoints >= 5) {
+      strengthsEn.push(`the ${backendPoints}% backend profit share shows real partnership`);
+      strengthsAr.push(`نسبة الـ${backendPoints}% من الأرباح تثبت أننا شركاء نجاح حقيقيون`);
+    }
+    if (!isActor && productionBudget >= 10_000_000) {
+      strengthsEn.push(`the ${formatMoney(productionBudget)} ${cur} production backing gives my department room to shine`);
+      strengthsAr.push(`ميزانية الإنتاج (${formatMoney(productionBudget)} ${cur}) تمنحني حرية تنفيذ رؤية سينمائية فخمة`);
+    }
+
+    const pickedReasonEn =
+      strengthsEn.slice(0, 2).join(', and ') ||
+      `the ${genreName} direction of "${projectTitle}" fits my career trajectory`;
+    const pickedReasonAr =
+      strengthsAr.slice(0, 2).join('، كما أن ') ||
+      `مسار «${projectTitle}» في (${genreName}) يضيف نقلة ذكية لمسيرتي`;
+
     const roleText = customRoleDescription.trim() || roleBillingLabel;
     const finText = `${formatMoney(offeredSalary)} ${cur}${
       backendPoints > 0
         ? isEn
-          ? ` + ${backendPoints}% backend points`
-          : ` + ${backendPoints}% من الأرباح`
+          ? ` + ${backendPoints}% backend`
+          : ` + ${backendPoints}% أرباح`
         : ''
     }`;
 
     const acceptVariants = isEn
       ? [
-          `I'm genuinely fired up about "${roleText}" in "${projectTitle}"${directorClause};${dinnerClause} the deal (${finText}) respects both the project's ambition and my stature. Count me in—I'm signing!`,
-          `After reviewing the script for "${projectTitle}" with my agency, "${roleText}" feels like a powerhouse leap in (${genreName})${directorClause}, and the offer (${finText}) is rock-solid. Excited to join the cast!`,
-          `The hook of "${projectTitle}" and screen presence of "${roleText}"${directorClause} won me over,${dinnerClause} and the package (${finText}) seals the deal. Let's roll cameras!`,
-          `"${projectTitle}" has every hallmark of a commercial and critical triumph, and "${roleText}" is sharply written${directorClause}. I accept (${finText}) and am ready for pre-production.`,
-          `I'm betting my season on "${projectTitle}"—"${roleText}" hits every dramatic chord I've been looking for${directorClause}, and (${finText}) works for both sides.`,
+          `Deal sealed on "${projectTitle}"! ${pickedReasonEn.charAt(0).toUpperCase() + pickedReasonEn.slice(1)}. At ${finText} for ${roleText}, I’m all in—send the final contract.`,
+          `After weighing the numbers and creative upside on "${projectTitle}", I’m signing for ${roleText} (${finText}). Simply put: ${pickedReasonEn}.`,
+          `You convinced both me and my agency on "${projectTitle}"—${pickedReasonEn}. The ${finText} package for ${roleText} is fair; let’s get to work!`,
         ]
       : [
-          `تحمست جداً لتفاصيل شخصية «${roleText}» في سيناريو «${projectTitle}»${directorClause}،${dinnerClause} كما أن العرض المالي (${finText}) يليق بحجم العمل ومكانتي الفنية. أوافق رسمياً على التوقيع!`,
-          `بعد مراجعة ورق «${projectTitle}» مع مكتب إدارة أعمالي، وجدت أن دور «${roleText}» يمثل نقلة فنية قوية في (${genreName})${directorClause}، والعقد المقدم (${finText}) عادل جداً. يسعدني الانضمام للفريق!`,
-          `أعجبتني حبكة «${projectTitle}» ومساحة دور «${roleText}» على الشاشة${directorClause}،${dinnerClause} والتقدير المادي (${finText}) يحسم قراري بالموافقة الفورية وبدء التحضيرات.`,
-          `مشروع «${projectTitle}» يمتلك كل مقومات النجاح الجماهيري والنقدي، ودور «${roleText}» مكتوب بعناية${directorClause}. أقبل العرض المالي (${finText}) ومستعد لدخول البلاتوه.`,
-          `رهاني هذا الموسم سيكون على «${projectTitle}»؛ شخصية «${roleText}» استفزت طاقتي التمثيلية${directorClause}، وبنود التعاقد (${finText}) مرضية تماماً لطرفينا.`,
+          `تم الاتفاق رسمياً على «${projectTitle}»! ${pickedReasonAr}. ومع عرض (${finText}) لـ«${roleText}» أنا متحمس تماماً وجاهز لتوقيع العقود.`,
+          `بعد مراجعة كافة البنود الفنية والمالية لمشروع «${projectTitle}»، أوافق على تولّي «${roleText}» مقابل (${finText})؛ السبب الحقيقي هو أن ${pickedReasonAr}.`,
+          `أقنعتني وأقنعت مكتب إدارة أعمالي بمشروع «${projectTitle}» — ${pickedReasonAr}، والعرض (${finText}) منصف جداً. لنبدأ التحضيرات فوراً!`,
         ];
 
     return {
@@ -725,6 +949,7 @@ export function evaluateTalentOfferDeep(params: {
     };
   }
 
+  // SPECIFIC DIAGNOSTIC REJECTION REASONS (Never repetitive canned salary text!)
   if (isActor && roleBillingSize === 'supporting' && starTier === 'A') {
     return {
       willAccept: false,
@@ -735,23 +960,84 @@ export function evaluateTalentOfferDeep(params: {
       roleFitVerdict,
       rejectionCategory: 'role_too_small_for_star',
       detailedReason: isEn
-        ? `The supporting slot "${customRoleDescription || 'Supporting Role'}" in "${projectTitle}" carries less screen weight than my current billing tier. I'd need either top billing or a significant boost in salary and backend points.`
-        : `دور «${customRoleDescription || 'مساعد'}» في «${projectTitle}» مساحته الدرامية أقل من البطولات التي أقدمها حالياً، ولا يمكنني قبوله بهذا الأجر دون رفع مساحة الدور إلى بطولة أو زيادة العرض المالي ونسبة الأرباح.`,
+        ? `Taking "${customRoleDescription || 'a supporting slot'}" in "${projectTitle}" is a step down from my A-list billing. Unless you upgrade my billing to Lead/Co-Lead or pay well over ${formatMoney(expectedMinimumSalary)} ${cur} with profit points, I have to pass.`
+        : `دور «${customRoleDescription || 'المساعد'}» في «${projectTitle}» أقل من حجم البطولات التي أقدمها في الفئة A. إما ترقية مساحتي لبطولة مشتركة أو رفع الأجر فوق ${formatMoney(expectedMinimumSalary)} ${cur} مع نسبة أرباح.`,
     };
   }
 
+  // Identify exact weak pillars to construct a sharp, tailored explanation
+  const gapPct = Math.max(
+    5,
+    Math.round((1 - offeredSalary / Math.max(1, expectedMinimumSalary)) * 100)
+  );
+  const weakPillarsEn: string[] = [];
+  const weakPillarsAr: string[] = [];
+
+  if (financialRatio < 0.96) {
+    weakPillarsEn.push(
+      `your fee (${formatMoney(offeredSalary)} ${cur}) sits ~${gapPct}% below my quote (${formatMoney(expectedMinimumSalary)} ${cur})`
+    );
+    weakPillarsAr.push(
+      `الأجر المعروض (${formatMoney(offeredSalary)} ${cur}) يقل بنحو ${gapPct}% عن أجري السوقي (${formatMoney(expectedMinimumSalary)} ${cur})`
+    );
+  }
+  if (!directorName && isActor && (starTier === 'S' || starTier === 'A')) {
+    weakPillarsEn.push(`there is no proven director attached yet`);
+    weakPillarsAr.push(`لم تتعاقد بعد مع مخرج له ثقل يطمئنني على خروج العمل`);
+  } else if (directorOverall && directorOverall < 80 && starTier === 'S') {
+    weakPillarsEn.push(
+      `I’m unconvinced the attached director (${directorName}) can elevate a Tier-S project`
+    );
+    weakPillarsAr.push(
+      `لست مقتنعاً بأن المخرج الحالي (${directorName}) هو الأنسب لمشروع بهذا الحجم`
+    );
+  }
+  if (scriptEval.score < 70) {
+    weakPillarsEn.push(`the script treatment (${scriptEval.score}/100) lacks real dramatic punch`);
+    weakPillarsAr.push(`المعالجة الدرامية (${scriptEval.score}/100) تحتاج صياغة أعمق وصراعاً أقوى`);
+  }
+  if (studioReputation < 62 && (starTier === 'S' || starTier === 'A')) {
+    weakPillarsEn.push(`studio prestige (${studioReputation}/100) still feels risky`);
+    weakPillarsAr.push(`سمعة الاستوديو الحالية (${studioReputation}/100) تجعل القرار مجازفة`);
+  }
+  if (backendPoints === 0 && (starTier === 'S' || starTier === 'A')) {
+    weakPillarsEn.push(`there are zero backend profit points on the table`);
+    weakPillarsAr.push(`العقد يخلو تماماً من أي نسبة مشاركة في أرباح الشباك`);
+  }
+
+  const diagnosisEn =
+    weakPillarsEn.slice(0, 2).join(', and ') ||
+    `the total package (${formatMoney(offeredSalary)} ${cur}) doesn’t clear my Tier-${starTier} threshold (${formatMoney(expectedMinimumSalary)} ${cur})`;
+  const diagnosisAr =
+    weakPillarsAr.slice(0, 2).join('، كما أن ') ||
+    `إجمالي العرض (${formatMoney(offeredSalary)} ${cur}) لا يرقى لمتطلبات الفئة ${starTier} التي تبدأ من ${formatMoney(expectedMinimumSalary)} ${cur}`;
+
+  const rejectionCategory: DeepTalentEvaluationResult['rejectionCategory'] =
+    financialRatio >= 0.96 && (!directorName || studioReputation < 62)
+      ? 'low_director_or_reputation'
+      : financialRatio >= 0.96 && scriptEval.score < 70
+      ? 'weak_character_or_script'
+      : 'underpaid';
+
+  const priorNoteEn =
+    priorRejections >= 1
+      ? ' This is already our second round of talks, so my agency expects a serious step up.'
+      : '';
+  const priorNoteAr =
+    priorRejections >= 1
+      ? ' وهذه ليست أول جولة تفاوض بيننا، لذا يتوقع مكتبي عرضاً أكثر جدية هذه المرة.'
+      : '';
+
   const rejectVariants = isEn
     ? [
-        `While I admire the premise of "${projectTitle}" and the "${customRoleDescription || roleBillingLabel}" arc, the offer (${formatMoney(offeredSalary)} ${cur}) falls short of my market floor (${formatMoney(expectedMinimumSalary)} ${cur}) for this commitment.`,
-        `My agency has advised declining "${projectTitle}" at this figure—(${formatMoney(offeredSalary)} ${cur}) does not reflect Tier-${starTier} rates, which start at ${formatMoney(expectedMinimumSalary)} ${cur}.`,
-        `The screenplay for "${projectTitle}" has real promise, but the gap between your offer (${formatMoney(offeredSalary)} ${cur}) and my contractual minimum (${formatMoney(expectedMinimumSalary)} ${cur}) keeps us from closing.`,
-        `After reviewing the deal memo for "${projectTitle}", my quote needs to move closer to ${formatMoney(expectedMinimumSalary)} ${cur}—or include stronger backend profit points—before I can commit.`,
+        `I’m passing on "${projectTitle}" for now: ${diagnosisEn}.${priorNoteEn} Improve those terms or invite me to a VIP dinner if you want to reopen negotiations.`,
+        `My agency advised declining "${projectTitle}"—specifically because ${diagnosisEn}.${priorNoteEn} Come back closer to ${formatMoney(expectedMinimumSalary)} ${cur} with stronger backing.`,
+        `I wanted to make "${projectTitle}" work, but ${diagnosisEn}.${priorNoteEn} At Tier ${starTier}, I can’t sign under these conditions.`,
       ]
     : [
-        `رغم إعجابي بفكرة «${projectTitle}» ودور «${customRoleDescription || roleBillingLabel}»، إلا أن العرض المالي (${formatMoney(offeredSalary)} ${cur}) يقل عن أجري السوقي المتوقع (${formatMoney(expectedMinimumSalary)} ${cur}) لحجم التفرغ المطلوب.`,
-        `اعتذر وكيل أعمالي عن عدم إتمام التعاقد على «${projectTitle}»؛ القيمة المالية المعروضة (${formatMoney(offeredSalary)} ${cur}) لا تتناسب مع أجر الفئة (${starTier}) الذي لا يقل عن ${formatMoney(expectedMinimumSalary)} ${cur}.`,
-        `النص الدرامي لعمل «${projectTitle}» واعد، لكن الفجوة المالية بين عرضكم (${formatMoney(offeredSalary)} ${cur}) ومتطلبات التعاقد (${formatMoney(expectedMinimumSalary)} ${cur}) تحول دون توقيعي حالياً.`,
-        `بعد دراسة عرض «${projectTitle}»، أرى أن الميزانية المخصصة لأجري (${formatMoney(offeredSalary)} ${cur}) تحتاج إلى مراجعة لتصل إلى حدود ${formatMoney(expectedMinimumSalary)} ${cur} أو تعويضها بنسبة أرباح أعلى.`,
+        `أعتذر عن قبول «${projectTitle}» حالياً؛ السبب ببساطة أن ${diagnosisAr}.${priorNoteAr} عدّل هذه النقاط أو رتّب جلسة عشاء VIP إذا أردت فتح التفاوض مجدداً.`,
+        `نصحني وكيل أعمالي برفض عرض «${projectTitle}» لأن ${diagnosisAr}.${priorNoteAr} نحتاج عرضاً يقترب من ${formatMoney(expectedMinimumSalary)} ${cur} وضمانات أقوى.`,
+        `كنت أتمنى المشاركة في «${projectTitle}»، لكن ${diagnosisAr}.${priorNoteAr} بصفتي فئة ${starTier} لا يمكنني التوقيع بهذه الشروط.`,
       ];
 
   return {
@@ -761,7 +1047,7 @@ export function evaluateTalentOfferDeep(params: {
     artisticFitScore,
     financialRatio,
     roleFitVerdict,
-    rejectionCategory: 'underpaid',
+    rejectionCategory,
     detailedReason: rejectVariants[seedVal % rejectVariants.length],
   };
 }
@@ -1349,9 +1635,32 @@ export function calculateFinancialsAndQuality(
   const trajectoryLegAdjust =
     trajectory === 'sleeper' ? 1.22 : trajectory === 'front_loaded' ? 0.88 : 1.0;
 
+  // Sharper Risk & Reward:
+  // 1) Skimping on script or marketing genuinely hurts box office so low-effort films can lose money.
+  // 2) Lean Indie Sleeper Hits (smart budget <= 24M + strong script >= 72 + strong critics >= 7.3) earn a breakout surge!
+  const estimatedTotalCost =
+    productionSpend + input.marketingBudget + distributionFeesTotal +
+    input.director.base_salary +
+    mainCast.reduce((s, a) => s + a.base_salary, 0);
+  const isSkimpedRisk =
+    scriptEval.isSpam ||
+    playerScriptCraft < 58 ||
+    (input.format === 'film' && input.marketingBudget < 2_500_000);
+  const isSmartIndieBreakout =
+    !isSkimpedRisk &&
+    estimatedTotalCost <= 24_000_000 &&
+    playerScriptCraft >= 72 &&
+    expectedCriticScore >= 7.3;
+
+  const riskRewardMult = isSkimpedRisk
+    ? 0.66
+    : isSmartIndieBreakout
+    ? 1.34
+    : 1.0;
+
   const totalBoxOfficeRevenue =
     input.format === 'film'
-      ? Math.round(firstWeekRevenue * wordOfMouthLegs * trajectoryLegAdjust)
+      ? Math.round(firstWeekRevenue * wordOfMouthLegs * trajectoryLegAdjust * riskRewardMult)
       : 0;
 
   const episodeScale =
@@ -1448,12 +1757,12 @@ export function calculateStudioMarketValue(params: {
     facilitiesLevels,
   } = params;
 
-  const baseEnterpriseBrand = 35_000_000 + reputation * 750_000;
+  const baseEnterpriseBrand = 16_000_000 + reputation * 620_000;
   const catalogVal = releasedProjects.reduce((sum, proj) => {
     const libraryResidual = Math.round(proj.totalGrossRevenue * 0.42);
-    const profitBonus = proj.netProfit > 0 ? Math.round(proj.netProfit * 0.45) : 0;
-    const criticPrestige = proj.criticScore >= 7.5 ? 16_000_000 : 4_000_000;
-    const awardsPrestige = (proj.awardsWon?.length || 0) * 14_000_000;
+    const profitBonus = proj.netProfit > 0 ? Math.round(proj.netProfit * 0.48) : 0;
+    const criticPrestige = proj.criticScore >= 7.5 ? 16_000_000 : proj.criticScore >= 6.5 ? 6_000_000 : 0;
+    const awardsPrestige = (proj.awardsWon?.length || 0) * 16_000_000;
     return sum + libraryResidual + profitBonus + criticPrestige + awardsPrestige;
   }, 0);
 
@@ -1465,7 +1774,7 @@ export function calculateStudioMarketValue(params: {
     : 0;
 
   return Math.max(
-    40_000_000,
+    25_000_000,
     Math.round(
       cash * 0.85 +
         baseEnterpriseBrand +

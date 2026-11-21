@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
 import {
   useGameStore,
   formatGameDate,
@@ -14,7 +14,6 @@ import {
   ActorItem,
   CrewItem,
 } from '@/lib/db-resolver';
-import { composeProceduralOfferReply } from '@/lib/procedural-dialogue';
 import {
   ROLE_BILLING_META,
   RoleBillingSize,
@@ -24,6 +23,10 @@ import {
   evaluateTalentOfferDeep,
   formatMoney,
 } from '@/lib/game-engine';
+import {
+  computeStudioProgression,
+  getActorTierRequiredLevel,
+} from '@/lib/progression';
 import { getCurrencyLabel, type UiLanguageId } from '@/lib/market-profiles';
 import {
   getLocalizedGenreInfo,
@@ -71,7 +74,8 @@ type WizardStepId = 1 | 2 | 3 | 4 | 5 | 6;
 
 function getStepMeta(
   step: WizardStepId,
-  lang: UiLanguageId
+  lang: UiLanguageId,
+  maxDirectors: 1 | 2
 ): {
   currentActionLabel: string;
   crewRole?: 'director' | 'cinematographer' | 'composer' | 'editor_vfx';
@@ -80,13 +84,20 @@ function getStepMeta(
   switch (step) {
     case 1:
       return {
-        currentActionLabel: tr(
-          lang,
-          'Select Director (1 to 2 Directors Max)',
-          'اختيار مخرج العمل (متاح من 1 إلى 2 مخرج كحد أقصى)'
-        ),
+        currentActionLabel:
+          maxDirectors === 1
+            ? tr(
+                lang,
+                'Select Director (1 Max · Lv.3 unlocks Co-Director)',
+                'اختيار المخرج (مخرج واحد · المستوى 3 يفتح مخرجَين)'
+              )
+            : tr(
+                lang,
+                'Select Director (1 to 2 Directors Max)',
+                'اختيار مخرج العمل (متاح من 1 إلى 2 مخرج كحد أقصى)'
+              ),
         crewRole: 'director',
-        maxAllowed: 2,
+        maxAllowed: maxDirectors,
       };
     case 2:
       return {
@@ -143,6 +154,8 @@ export function Stage3CrewCastCards() {
     updateDraft,
     setActiveScreen,
     cash,
+    marketValue,
+    releasedProjects,
     reputation,
     currentYear,
     gameDay,
@@ -168,6 +181,16 @@ export function Stage3CrewCastCards() {
     worldMarket,
     uiLanguage,
   } = useGameStore();
+
+  const progression = useMemo(
+    () =>
+      computeStudioProgression({
+        marketValue,
+        releasedProjects,
+        uiLanguage,
+      }),
+    [marketValue, releasedProjects, uiLanguage]
+  );
 
   const isEn = uiLanguage !== 'ar';
   const uiDir = getUiDir(uiLanguage);
@@ -218,6 +241,8 @@ export function Stage3CrewCastCards() {
 
   const [wizardStep, setWizardStep] = useState<WizardStepId>(1);
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearch = useDeferredValue(searchQuery);
+  const [visibleActorCount, setVisibleActorCount] = useState(16);
   const [selectedTier, setSelectedTier] = useState<
     'ALL' | 'S' | 'A' | 'B' | 'C' | 'RISING' | 'OFFERS'
   >('ALL');
@@ -260,15 +285,19 @@ export function Stage3CrewCastCards() {
     [draft.primaryGenre, uiLanguage]
   );
 
-  const currentStepMeta = getStepMeta(wizardStep, uiLanguage);
+  const currentStepMeta = getStepMeta(
+    wizardStep,
+    uiLanguage,
+    progression.maxDirectors
+  );
 
   const crewForCurrentStep = useMemo(() => {
     const role = currentStepMeta.crewRole;
     if (!role) return [];
     return db.crew.filter((c) => {
       if (c.role !== role) return false;
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
+      if (!deferredSearch.trim()) return true;
+      const q = deferredSearch.toLowerCase();
       const locName = localizeEntityName(c.name, uiLanguage).toLowerCase();
       const locSpec = localizeTalentBio(c.specialty, uiLanguage, c.role).toLowerCase();
       return (
@@ -278,7 +307,7 @@ export function Stage3CrewCastCards() {
         locSpec.includes(q)
       );
     });
-  }, [db.crew, currentStepMeta.crewRole, searchQuery, uiLanguage]);
+  }, [db.crew, currentStepMeta.crewRole, deferredSearch, uiLanguage]);
 
   const activeActorsPool = useMemo(
     () =>
@@ -311,8 +340,8 @@ export function Stage3CrewCastCards() {
         if (genderFilter === 'female' && !isFemale) return false;
         if (genderFilter === 'male' && isFemale) return false;
       }
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
+      if (!deferredSearch.trim()) return true;
+      const q = deferredSearch.toLowerCase();
       const locName = localizeEntityName(a.name, uiLanguage).toLowerCase();
       const locBio = localizeTalentBio(a.archetype, uiLanguage, 'actor').toLowerCase();
       return (
@@ -326,10 +355,15 @@ export function Stage3CrewCastCards() {
     activeActorsPool,
     selectedTier,
     genderFilter,
-    searchQuery,
+    deferredSearch,
     draft.talentOffers,
     uiLanguage,
   ]);
+
+  const visibleActors = useMemo(
+    () => filteredActors.slice(0, visibleActorCount),
+    [filteredActors, visibleActorCount]
+  );
 
   const directors = useMemo(
     () => db.crew.filter((c) => c.role === 'director'),
@@ -421,6 +455,43 @@ export function Stage3CrewCastCards() {
   const openNegotiation = (
     target: { kind: 'crew'; item: CrewItem } | { kind: 'actor'; item: ActorItem }
   ) => {
+    if (target.kind === 'actor') {
+      const actor = target.item;
+      const reqLevel = getActorTierRequiredLevel(actor.tier, actor.isCustomStar);
+      if (progression.level < reqLevel) {
+        showToast(
+          reqLevel === 2
+            ? tr(
+                uiLanguage,
+                `Tier A stars unlock at Studio Level 2 (Release 2 films + 7.0+ critic score or 110M valuation).`,
+                `نجوم فئة A تُفتح في المستوى 2 (أنتج عملين + تقييم نقاد 7.0+ أو قيمة سوقية 110M).`
+              )
+            : tr(
+                uiLanguage,
+                `Tier S legends unlock at Studio Level 3 (250M market value + 1 festival award).`,
+                `أساطير فئة S تُفتح في المستوى 3 (قيمة سوقية 250M + جائزة مهرجان واحدة).`
+              ),
+          'warning'
+        );
+        return;
+      }
+      if (actor.busyUntilDay && actor.busyUntilDay > gameDay) {
+        const daysLeftBusy = Math.max(1, actor.busyUntilDay - gameDay);
+        const rivalStudioDisp = localizeEntityName(
+          actor.busyWithStudio || 'Rival Studio',
+          uiLanguage
+        );
+        showToast(
+          tr(
+            uiLanguage,
+            `${localizeEntityName(actor.name, uiLanguage)} is currently filming with "${rivalStudioDisp}" — free in ${daysLeftBusy} days.`,
+            `النجم «${actor.name}» مرتبط حالياً بتصوير عمل مع «${rivalStudioDisp}» — يتفرغ بعد ${daysLeftBusy} يوم.`
+          ),
+          'warning'
+        );
+        return;
+      }
+    }
     const existingOffer = draft.talentOffers[target.item.id];
     setNegotiatingTarget(target);
     setOfferedSalary(existingOffer?.offeredSalary || target.item.base_salary);
@@ -480,12 +551,18 @@ export function Stage3CrewCastCards() {
       : item.stats.overall >= 83
       ? 'A'
       : 'B';
-    const ego = isActor ? (item as ActorItem).stats.ego : 72;
+    const ego = isActor
+      ? (item as ActorItem).stats.ego
+      : item.stats.overall >= 90
+      ? 86
+      : item.stats.overall >= 83
+      ? 78
+      : 68;
     const genreMasteryScore = isActor
       ? (item as ActorItem).genre_mastery[draft.primaryGenre] || 74
       : (item as CrewItem).best_genres.includes(draft.primaryGenre)
       ? 92
-      : 74;
+      : 68;
 
     const slot: OfferRoleSlot = isActor
       ? roleBillingSize === 'antagonist'
@@ -500,17 +577,22 @@ export function Stage3CrewCastCards() {
     const hasSyndicateMediation = Boolean(
       (syndicateMediationUnlocked || {})[item.id]
     );
+    const priorRejections = (talentRejectionCounts || {})[item.id] || 0;
+
+    // Inspect already-signed leads for S-Tier ego clashes
+    const signedOtherActors = liveActors.filter(
+      (a) => draft.leadActorIds.includes(a.id) && a.id !== item.id
+    );
+    const topSignedLead = signedOtherActors.sort(
+      (a, b) => b.stats.ego - a.stats.ego
+    )[0];
 
     const roleBillingLabel = getLocalizedRoleBilling(
       roleBillingSize,
       uiLanguage
     ).label;
-    const crewSlotLabel = getLocalizedSlotLabel(
-      isActor ? slot : (item as CrewItem).role,
-      uiLanguage
-    );
 
-    // 1. Run deep multi-factor baseline evaluation (with +25% boost if Syndicate Mediation is active)
+    // 1. Run strict multi-factor deep evaluation (with Syndicate Mediation relief when unlocked)
     const deepEval = evaluateTalentOfferDeep({
       talentName: displayTalentName,
       isActor,
@@ -534,38 +616,44 @@ export function Stage3CrewCastCards() {
         : reputation,
       directorOverall: selectedDirector?.stats.overall || null,
       directorName: displayDirectorName,
+      productionBudget:
+        draft.budgetAllocation.setsAndLocations +
+        draft.budgetAllocation.costumesAndMakeup +
+        draft.budgetAllocation.vfxAndStunts +
+        draft.budgetAllocation.extrasAndCrowds,
+      priorRejections: hasSyndicateMediation ? 0 : priorRejections,
+      existingLeadMaxEgo: topSignedLead?.stats.ego || 0,
+      existingLeadName: topSignedLead
+        ? localizeEntityName(topSignedLead.name, uiLanguage)
+        : null,
+      crewRole: isActor ? '' : (item as CrewItem).role,
+      format: draft.format,
+      studioName,
       currencyLabel,
       uiLanguage,
     });
 
+    const isHardGateRejection =
+      !deepEval.willAccept &&
+      (deepEval.rejectionCategory === 'role_too_small_for_star' ||
+        deepEval.rejectionCategory === 'weak_character_or_script' ||
+        deepEval.rejectionCategory === 'underfunded_production' ||
+        deepEval.rejectionCategory === 'ego_clash');
+
     let willAccept =
-      hasSyndicateMediation && offeredSalary >= item.base_salary * 0.85
+      hasSyndicateMediation &&
+      !isHardGateRejection &&
+      offeredSalary >= item.base_salary * 0.9
         ? true
         : deepEval.willAccept;
-    let reason = composeProceduralOfferReply({
-      worldMarket,
-      uiLanguage,
-      talentName: displayTalentName,
-      talentType: isActor ? 'actor' : 'crew',
-      roleLabel: isActor ? roleBillingLabel : crewSlotLabel,
-      projectTitle: draft.title,
-      directorName: displayDirectorName || undefined,
-      synopsis: draft.scriptSynopsis,
-      offeredSalary,
-      expectedSalary: deepEval.expectedMinimumSalary,
-      backendPoints,
-      vipDinner,
-      ego,
-      accepted: willAccept,
-      studioName,
-      seedSalt: gameDay,
-    });
+    // Always preserve the authentic factor-specific diagnostic reason (never overwrite with generic canned lines!)
+    let reason = deepEval.detailedReason;
     let waitDays = starTier === 'S' || ego >= 85 ? 3 : 2;
 
-    // Golden-Moments AI budget rule: Only invoke Groq for S-Tier Lead Actor offers;
-    // all other actors & crew use our 1,000+ variation procedural grammar engine (0 tokens!)
+    // Golden-Moments AI budget rule: Only invoke Groq for S-Tier Lead Actor offers
+    // when not already blocked by a hard creative/billing/script gate
     const isGoldenMomentSTierLead =
-      isActor && starTier === 'S' && slot === 'lead';
+      isActor && starTier === 'S' && slot === 'lead' && !isHardGateRejection;
 
     if (isGoldenMomentSTierLead) {
       try {
@@ -610,19 +698,24 @@ export function Stage3CrewCastCards() {
           }),
         });
         const data = await res.json();
-        if (typeof data?.accepted === 'boolean') {
+        // Keep strict engine decision authoritative on rejections so S-tier stars can't be cheesed easily
+        if (deepEval.willAccept && typeof data?.accepted === 'boolean') {
           willAccept = data.accepted;
-        } else if (typeof data?.willAccept === 'boolean') {
+        } else if (deepEval.willAccept && typeof data?.willAccept === 'boolean') {
           willAccept = data.willAccept;
         }
-        if (typeof data?.reason === 'string' && data.reason.trim()) {
+        if (
+          typeof data?.reason === 'string' &&
+          data.reason.trim().length >= 24 &&
+          (data.accepted === willAccept || data.willAccept === willAccept)
+        ) {
           reason = data.reason.trim();
         }
         if (data?.waitDays === 2 || data?.waitDays === 3) {
           waitDays = data.waitDays;
         }
       } catch {
-        // Fallback already populated by composeProceduralOfferReply
+        // Fallback already populated by deepEval.detailedReason
       } finally {
         setIsEvaluatingOffer(false);
       }
@@ -630,7 +723,11 @@ export function Stage3CrewCastCards() {
       setIsEvaluatingOffer(false);
     }
 
-    if (hasSyndicateMediation && offeredSalary >= item.base_salary * 0.85) {
+    if (
+      hasSyndicateMediation &&
+      !isHardGateRejection &&
+      offeredSalary >= item.base_salary * 0.9
+    ) {
       willAccept = true;
     }
 
@@ -1016,10 +1113,10 @@ export function Stage3CrewCastCards() {
                 <p className="text-[11px] font-bold text-emerald-400">
                   {tr(
                     uiLanguage,
-                    `Signed Directors (${approvedDirectorIds.length}/2): ${selectedDirectors
+                    `Signed Directors (${approvedDirectorIds.length}/${progression.maxDirectors}): ${selectedDirectors
                       .map((d) => localizeEntityName(d.name, uiLanguage))
                       .join(' & ')}`,
-                    `المخرجون المعتمدون (${approvedDirectorIds.length}/2): ${selectedDirectors
+                    `المخرجون المعتمدون (${approvedDirectorIds.length}/${progression.maxDirectors}): ${selectedDirectors
                       .map((d) => d.name)
                       .join(' و')}`
                   )}
@@ -1119,12 +1216,82 @@ export function Stage3CrewCastCards() {
         </div>
       )}
 
-      {/* FLOATING STICKY SEARCH & FILTER BAR FOR STEPS 1..5 */}
+      {/* COMPACT FLOATING STICKY SEARCH & FILTER BAR FOR STEPS 1..5 */}
       {wizardStep <= 5 && (
-        <div className="sticky top-14 z-30 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 p-3 shadow-lg backdrop-blur-md">
-          <div className="flex flex-col gap-2.5">
+        <div className="sticky top-12 z-30 rounded-xl border border-[#D4AF37]/80 bg-[#1A2530]/95 p-2 shadow-md backdrop-blur-sm">
+          <div className="flex flex-col gap-1.5">
+            {/* Compact Search Input */}
+            <div className="relative flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Search className="absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#1A2530]/45" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setVisibleActorCount(16);
+                  }}
+                  placeholder={
+                    wizardStep === 1
+                      ? tr(uiLanguage, 'Search directors...', 'ابحث عن مخرج...')
+                      : wizardStep === 2
+                      ? tr(uiLanguage, 'Search DOP...', 'ابحث عن مدير تصوير...')
+                      : wizardStep === 3
+                      ? tr(uiLanguage, 'Search composers...', 'ابحث عن موسيقى تصويرية...')
+                      : wizardStep === 4
+                      ? tr(uiLanguage, 'Search editors & VFX...', 'ابحث عن مونتاج و VFX...')
+                      : tr(
+                          uiLanguage,
+                          `Search ${activeActorsPool.length} stars...`,
+                          `ابحث في ${activeActorsPool.length} ممثل وممثلة...`
+                        )
+                  }
+                  className="h-9 w-full rounded-lg border border-[#D4AF37]/50 bg-[#F9F6F0] ps-8 pe-7 text-xs sm:text-sm font-bold text-[#1A2530] placeholder:text-[#1A2530]/45 focus:border-[#D4AF37] focus:bg-white focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setVisibleActorCount(16);
+                    }}
+                    className="absolute end-2 top-1/2 -translate-y-1/2 text-[#1A2530]/50 hover:text-[#1A2530]"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {wizardStep === 5 && (
+                <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white/10 p-0.5">
+                  {[
+                    { id: 'ALL', label: tr(uiLanguage, 'All', 'الكل') },
+                    { id: 'male', label: tr(uiLanguage, 'M', 'ذكور') },
+                    { id: 'female', label: tr(uiLanguage, 'F', 'إناث') },
+                  ].map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => {
+                        setGenderFilter(g.id as typeof genderFilter);
+                        setVisibleActorCount(16);
+                      }}
+                      className={`h-8 rounded-md px-2 text-[10px] font-black transition cursor-pointer ${
+                        genderFilter === g.id
+                          ? 'bg-[#D4AF37] text-[#1A2530]'
+                          : 'text-[#F9F6F0]/80 hover:bg-white/10'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {wizardStep === 5 && (
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {[
                   {
                     id: 'ALL',
@@ -1133,12 +1300,25 @@ export function Stage3CrewCastCards() {
                       `All (${activeActorsPool.length})`,
                       `الكل (${activeActorsPool.length})`
                     ),
+                    locked: false,
                   },
-                  { id: 'S', label: tr(uiLanguage, 'Tier S', 'فئة S') },
-                  { id: 'A', label: tr(uiLanguage, 'Tier A', 'فئة A') },
-                  { id: 'B', label: tr(uiLanguage, 'Tier B', 'فئة B') },
-                  { id: 'C', label: tr(uiLanguage, 'Tier C', 'فئة C') },
-                  { id: 'RISING', label: tr(uiLanguage, 'Rising ✨', 'مواهب صاعدة ✨') },
+                  {
+                    id: 'S',
+                    label: progression.canUseTierS
+                      ? tr(uiLanguage, 'Tier S', 'فئة S')
+                      : tr(uiLanguage, 'Tier S · Lv.3', 'فئة S · م3'),
+                    locked: !progression.canUseTierS,
+                  },
+                  {
+                    id: 'A',
+                    label: progression.canUseTierA
+                      ? tr(uiLanguage, 'Tier A', 'فئة A')
+                      : tr(uiLanguage, 'Tier A · Lv.2', 'فئة A · م2'),
+                    locked: !progression.canUseTierA,
+                  },
+                  { id: 'B', label: tr(uiLanguage, 'Tier B', 'فئة B'), locked: false },
+                  { id: 'C', label: tr(uiLanguage, 'Tier C', 'فئة C'), locked: false },
+                  { id: 'RISING', label: tr(uiLanguage, 'Rising ✨', 'صاعدين ✨'), locked: false },
                   {
                     id: 'OFFERS',
                     label: tr(
@@ -1146,70 +1326,30 @@ export function Stage3CrewCastCards() {
                       `Offers (${allOffersList.length})`,
                       `العروض (${allOffersList.length})`
                     ),
+                    locked: false,
                   },
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setSelectedTier(tab.id as typeof selectedTier)}
-                    className={`rounded-xl px-2.5 py-1.5 text-[11px] font-black transition whitespace-nowrap ${
+                    onClick={() => {
+                      setSelectedTier(tab.id as typeof selectedTier);
+                      setVisibleActorCount(16);
+                    }}
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-black transition whitespace-nowrap cursor-pointer ${
                       selectedTier === tab.id
-                        ? 'border border-[#D4AF37] bg-[#D91624] text-white shadow-sm'
+                        ? 'border border-[#D4AF37] bg-[#D91624] text-white shadow-xs'
+                        : tab.locked
+                        ? 'border border-amber-400/30 bg-white/5 text-[#FDE68A]/85 hover:bg-white/15'
                         : 'border border-white/15 bg-white/10 text-[#F9F6F0] hover:bg-white/20'
                     }`}
                   >
-                    {tab.label}
+                    {tab.locked && <Lock className="h-2.5 w-2.5 text-[#D4AF37]" />}
+                    <span>{tab.label}</span>
                   </button>
                 ))}
-
-                <div className="ms-auto flex items-center gap-1">
-                  {[
-                    { id: 'ALL', label: tr(uiLanguage, 'All', 'الكل') },
-                    { id: 'male', label: tr(uiLanguage, 'Actors', 'ممثلون') },
-                    { id: 'female', label: tr(uiLanguage, 'Actresses', 'ممثلات') },
-                  ].map((g) => (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => setGenderFilter(g.id as typeof genderFilter)}
-                      className={`rounded-lg px-2 py-1 text-[10px] font-black transition ${
-                        genderFilter === g.id
-                          ? 'bg-[#D4AF37] text-[#1A2530]'
-                          : 'bg-white/10 text-[#F9F6F0]/80 hover:bg-white/20'
-                      }`}
-                    >
-                      {g.label}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
-
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#1A2530]/45" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={
-                  wizardStep === 1
-                    ? tr(uiLanguage, 'Search directors by name or directing style...', 'ابحث عن مخرج بالاسم أو المدرسة الإخراجية...')
-                    : wizardStep === 2
-                    ? tr(uiLanguage, 'Search cinematographers (DOP)...', 'ابحث عن مدير تصوير (DOP)...')
-                    : wizardStep === 3
-                    ? tr(uiLanguage, 'Search film score composers...', 'ابحث عن مؤلف موسيقى تصويرية...')
-                    : wizardStep === 4
-                    ? tr(uiLanguage, 'Search editors & VFX supervisors...', 'ابحث عن مهندس مونتاج ومؤثرات بصرية...')
-                    : tr(
-                        uiLanguage,
-                        `Search ${activeActorsPool.length} actors by name or specialty...`,
-                        `ابحث في قائمة الـ ${activeActorsPool.length} ممثل وممثلة بالاسم أو اللون الفني...`
-                      )
-                }
-                className="w-full rounded-xl border border-[#D4AF37]/60 bg-[#F9F6F0] py-2.5 ps-9 pe-3 text-base font-bold text-[#1A2530] placeholder:text-[#1A2530]/45 focus:border-[#D4AF37] focus:bg-white focus:outline-none"
-              />
-            </div>
           </div>
         </div>
       )}
@@ -1225,6 +1365,7 @@ export function Stage3CrewCastCards() {
             transition={{ type: 'spring', stiffness: 380, damping: 30 }}
             className="grid grid-cols-1 gap-3"
           >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {crewForCurrentStep.map((crewMember) => {
               const isSigned =
                 (crewMember.role === 'director' &&
@@ -1250,19 +1391,19 @@ export function Stage3CrewCastCards() {
               return (
                 <div
                   key={crewMember.id}
-                  className={`rounded-3xl border-2 p-4 shadow-sm transition-all ${
+                  className={`rounded-2xl border p-3 shadow-xs transition-colors ${
                     isSigned
-                      ? 'border-[#15803D] bg-emerald-50/80 shadow-md'
+                      ? 'border-2 border-[#15803D] bg-emerald-50/80'
                       : isAwaitingChoice
-                      ? 'border-[#D4AF37] bg-[#FFF9E6] shadow-md'
+                      ? 'border-2 border-[#D4AF37] bg-[#FFF9E6]'
                       : isPending
-                      ? 'border-[#D4AF37] bg-[#FFF9E6]/70 shadow-md'
-                      : 'border-[#1A2530]/20 bg-white hover:border-[#D4AF37]'
+                      ? 'border-2 border-[#D4AF37] bg-[#FFF9E6]/70'
+                      : 'border-[#1A2530]/18 bg-white hover:border-[#D4AF37]'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37] bg-[#F9F6F0] shadow-xs">
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-[#D4AF37] bg-[#F9F6F0]">
                         <TalentPortrait
                           imageUrl={crewMember.image_url}
                           name={displayName}
@@ -1271,28 +1412,28 @@ export function Stage3CrewCastCards() {
                           age={45}
                         />
                       </div>
-                      <div>
-                        <h3 className="font-display text-sm font-black text-[#1A2530]">
+                      <div className="min-w-0">
+                        <h3 className="font-display text-sm font-black text-[#1A2530] truncate">
                           {displayName}
                         </h3>
-                        <p className="mt-0.5 text-xs font-bold text-[#1A2530]/75">
+                        <p className="text-[11px] font-bold text-[#1A2530]/70 truncate">
                           {displaySpecialty}
                         </p>
-                        <div className="mt-1 text-[11px] font-bold text-[#1A2530]/60">
+                        <div className="mt-0.5 text-[10px] font-bold text-[#1A2530]/60 truncate">
                           {masteryGenre ? (
                             <span className="text-[#15803D] font-black">
                               {tr(
                                 uiLanguage,
-                                `Top Specialist in ${primaryGenreInfo.name} ★`,
-                                `متخصص بارع في ${primaryGenreInfo.name} ★`
+                                `★ Specialist in ${primaryGenreInfo.name}`,
+                                `★ متخصص في ${primaryGenreInfo.name}`
                               )}
                             </span>
                           ) : (
                             <span>
                               {tr(
                                 uiLanguage,
-                                `Solid experience in ${primaryGenreInfo.name}`,
-                                `خبرة عامة في ${primaryGenreInfo.name}`
+                                `Experience in ${primaryGenreInfo.name}`,
+                                `خبرة في ${primaryGenreInfo.name}`
                               )}
                             </span>
                           )}
@@ -1300,39 +1441,39 @@ export function Stage3CrewCastCards() {
                       </div>
                     </div>
 
-                    <div className="shrink-0 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530] px-3 py-1.5 text-center">
-                      <div className="text-[10px] font-bold text-[#D4AF37]">
-                        {tr(uiLanguage, 'OVR', 'التقييم')}
+                    <div className="shrink-0 rounded-xl border border-[#D4AF37] bg-[#1A2530] px-2.5 py-1 text-center">
+                      <div className="text-[8px] font-bold text-[#D4AF37] leading-none">
+                        {tr(uiLanguage, 'OVR', 'تقييم')}
                       </div>
-                      <div className="font-mono text-sm font-black text-[#F9F6F0] tabular-nums">
+                      <div className="font-mono text-sm font-black text-[#F9F6F0] tabular-nums leading-tight">
                         {crewMember.stats.overall}
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-2">
-                      <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                        {tr(uiLanguage, 'Expected Fee', 'الأجر المتوقع')}
+                  <div className="mt-2.5 grid grid-cols-3 gap-1.5 text-center">
+                    <div className="rounded-xl border border-[#1A2530]/12 bg-[#F9F6F0] px-1.5 py-1.5">
+                      <span className="block text-[9px] font-bold text-[#1A2530]/60">
+                        {tr(uiLanguage, 'Fee', 'الأجر')}
                       </span>
-                      <span className="font-mono text-xs font-black text-[#15803D] tabular-nums" dir="ltr">
-                        {formatMoney(crewMember.base_salary)} {currencyLabel}
-                      </span>
-                    </div>
-                    <div className="rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-2">
-                      <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                        {tr(uiLanguage, 'Visual Vision', 'الرؤية البصرية')}
-                      </span>
-                      <span className="font-mono text-xs font-black text-[#1A2530] tabular-nums">
-                        {crewMember.stats.vision}/100
+                      <span className="font-mono text-[11px] font-black text-[#15803D] tabular-nums" dir="ltr">
+                        {formatMoney(crewMember.base_salary)}
                       </span>
                     </div>
-                    <div className="rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] p-2">
-                      <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                        {tr(uiLanguage, 'Pacing Control', 'ضبط الإيقاع')}
+                    <div className="rounded-xl border border-[#1A2530]/12 bg-[#F9F6F0] px-1.5 py-1.5">
+                      <span className="block text-[9px] font-bold text-[#1A2530]/60">
+                        {tr(uiLanguage, 'Vision', 'الرؤية')}
                       </span>
-                      <span className="font-mono text-xs font-black text-[#D91624] tabular-nums">
-                        {crewMember.stats.pacing}/100
+                      <span className="font-mono text-[11px] font-black text-[#1A2530] tabular-nums">
+                        {crewMember.stats.vision}
+                      </span>
+                    </div>
+                    <div className="rounded-xl border border-[#1A2530]/12 bg-[#F9F6F0] px-1.5 py-1.5">
+                      <span className="block text-[9px] font-bold text-[#1A2530]/60">
+                        {tr(uiLanguage, 'Pacing', 'الإيقاع')}
+                      </span>
+                      <span className="font-mono text-[11px] font-black text-[#D91624] tabular-nums">
+                        {crewMember.stats.pacing}
                       </span>
                     </div>
                   </div>
@@ -1340,25 +1481,25 @@ export function Stage3CrewCastCards() {
                   {/* Offer Status Banner */}
                   {renderOfferStatusBanner(offer, isSigned)}
 
-                  <div className="mt-3 flex items-center gap-2 border-t border-[#1A2530]/15 pt-2.5">
+                  <div className="mt-2.5 flex items-center gap-2 border-t border-[#1A2530]/10 pt-2">
                     {isSigned ? (
                       <button
                         type="button"
                         onClick={() => removeTalentFromDraft(crewMember.id)}
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-[#15803D] py-2.5 text-xs font-black text-white shadow-sm"
+                        className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#15803D] py-1.5 text-xs font-black text-white shadow-xs cursor-pointer"
                       >
-                        <Check className="h-4 w-4" />
+                        <Check className="h-3.5 w-3.5" />
                         <span>
                           {crewMember.role === 'director'
                             ? tr(
                                 uiLanguage,
-                                `Signed Director (${approvedDirectorIds.indexOf(crewMember.id) + 1}/${approvedDirectorIds.length}) · Release`,
-                                `معتمد في فريق الإخراج (${approvedDirectorIds.indexOf(crewMember.id) + 1}/${approvedDirectorIds.length}) · إلغاء التعاقد`
+                                `Signed (${approvedDirectorIds.indexOf(crewMember.id) + 1}/${progression.maxDirectors}) · Release`,
+                                `معتمد (${approvedDirectorIds.indexOf(crewMember.id) + 1}/${progression.maxDirectors}) · إلغاء`
                               )
                             : tr(
                                 uiLanguage,
-                                'Signed to Crew · Release Contract',
-                                'معتمد في الفريق · إلغاء التعاقد'
+                                'Signed · Release',
+                                'معتمد · إلغاء التعاقد'
                               )}
                         </span>
                       </button>
@@ -1371,42 +1512,52 @@ export function Stage3CrewCastCards() {
                             crewMember.id
                           )
                         }
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-[#D4AF37] bg-[#1A2530] py-2.5 text-xs font-black text-[#D4AF37] shadow-sm hover:brightness-110"
+                        className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4AF37] bg-[#1A2530] py-1.5 text-xs font-black text-[#D4AF37] hover:brightness-110 cursor-pointer"
                       >
-                        <Check className="h-4 w-4" />
+                        <Check className="h-3.5 w-3.5" />
                         <span>
-                          {tr(uiLanguage, 'Confirm in Final Crew', 'اعتماد في الفريق النهائي')}
+                          {tr(uiLanguage, 'Confirm in Crew', 'اعتماد في الفريق')}
                         </span>
                       </button>
                     ) : isPending ? (
                       <button
                         type="button"
                         onClick={() => removeTalentFromDraft(crewMember.id)}
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-[#1A2530] bg-[#FFF6B3] py-2.5 text-xs font-black text-[#1A2530]"
+                        className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#1A2530] bg-[#FFF6B3] py-1.5 text-xs font-black text-[#1A2530] cursor-pointer"
                       >
-                        <Clock className="h-4 w-4 text-[#D91624]" />
+                        <Clock className="h-3.5 w-3.5 text-[#D91624]" />
                         <span>
-                          {tr(uiLanguage, 'Awaiting Reply (Withdraw Offer)', 'بانتظار الرد الرسمي (سحب العرض)')}
+                          {tr(uiLanguage, 'Pending (Withdraw)', 'بانتظار الرد (سحب)')}
                         </span>
                       </button>
                     ) : isCurrentCrewSlotFullAndLocked ? (
                       <button
                         type="button"
                         disabled
-                        className="flex min-h-[44px] flex-1 cursor-not-allowed items-center justify-center gap-1.5 rounded-2xl border border-[#1A2530]/15 bg-[#F9F6F0] py-2.5 text-xs font-black text-[#1A2530]/40"
+                        className="flex min-h-[38px] flex-1 cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] py-1.5 text-[11px] font-black text-[#1A2530]/45"
                       >
-                        <Check className="h-4 w-4" />
+                        {crewMember.role === 'director' && progression.maxDirectors === 1 ? (
+                          <Lock className="h-3.5 w-3.5 text-[#D4AF37]" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5" />
+                        )}
                         <span>
                           {crewMember.role === 'director'
-                            ? tr(
-                                uiLanguage,
-                                'Directing Slots Full (2/2 Signed)',
-                                'اكتمل فريق الإخراج (تم اعتماد مخرجَين 2/2)'
-                              )
+                            ? progression.maxDirectors === 1
+                              ? tr(
+                                  uiLanguage,
+                                  '1/1 Director Signed · Lv.3 unlocks Co-Director',
+                                  'تم اعتماد مخرج (1/1) · المستوى 3 يفتح مخرجَين'
+                                )
+                              : tr(
+                                  uiLanguage,
+                                  'Directing Slots Full (2/2)',
+                                  'اكتمل فريق الإخراج (2/2)'
+                                )
                             : tr(
                                 uiLanguage,
                                 `${roleBadge} Signed (1/1)`,
-                                `تم اعتماد ${roleBadge} للعمل (1/1)`
+                                `تم اعتماد ${roleBadge} (1/1)`
                               )}
                         </span>
                       </button>
@@ -1420,14 +1571,14 @@ export function Stage3CrewCastCards() {
                             crewMember.name
                           )
                         }
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3 py-2.5 text-xs font-black text-[#1A2530] border-2 border-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
+                        className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3 py-1.5 text-xs font-black text-[#1A2530] border border-[#1A2530] shadow-xs hover:brightness-105 cursor-pointer"
                       >
-                        <Film className="h-4 w-4 shrink-0" />
+                        <Film className="h-3.5 w-3.5 shrink-0" />
                         <span>
                           {tr(
                             uiLanguage,
-                            'Cinema Guild Mediation (Watch Ad)',
-                            'وساطة نقابة المهن التمثيلية (إعلان)'
+                            'Guild Mediation (Ad)',
+                            'وساطة النقابة (إعلان)'
                           )}
                         </span>
                       </button>
@@ -1435,26 +1586,26 @@ export function Stage3CrewCastCards() {
                       <button
                         type="button"
                         onClick={() => openNegotiation({ kind: 'crew', item: crewMember })}
-                        className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-[#D4AF37] bg-[#D91624] py-2.5 text-xs font-black text-white shadow-md hover:brightness-110"
+                        className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4AF37] bg-[#D91624] py-1.5 text-xs font-black text-white shadow-xs hover:brightness-110 cursor-pointer"
                       >
                         <MessageSquare className="h-3.5 w-3.5 text-[#D4AF37]" />
                         <span>
                           {(syndicateMediationUnlocked || {})[crewMember.id]
                             ? tr(
                                 uiLanguage,
-                                'Final Chance Round (Guild Mediation Active ★)',
-                                'جولة الفرصة الأخيرة (وساطة النقابة مفعلة ★)'
+                                'Final Round (Mediation ★)',
+                                'الفرصة الأخيرة (وساطة ★)'
                               )
                             : offer?.status === 'rejected'
                             ? tr(
                                 uiLanguage,
-                                'Revise Terms & Resend Offer',
-                                'تعديل الشروط وإرسال عرض جديد'
+                                'Revise & Resend',
+                                'تعديل وإعادة العرض'
                               )
                             : tr(
                                 uiLanguage,
-                                'Negotiate & Send Offer',
-                                'تفاوض وإرسال عرض تعاقد'
+                                'Negotiate & Offer',
+                                'تفاوض وإرسال عرض'
                               )}
                         </span>
                       </button>
@@ -1463,6 +1614,7 @@ export function Stage3CrewCastCards() {
                 </div>
               );
             })}
+            </div>
           </motion.div>
         )}
 
@@ -1541,249 +1693,356 @@ export function Stage3CrewCastCards() {
               </div>
             )}
 
-            {/* VIP Star Forge Banner inside Actor Casting */}
-            <div className="rounded-2xl bg-gradient-to-r from-[#D91624] via-[#A90F1B] to-[#1A2530] p-4 text-[#F9F6F0] border-2 border-[#D4AF37] shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-typewriter font-black text-[#D4AF37]">
-                  {tr(uiLanguage, 'THE STAR FORGE · VIP CASTING', 'غرفة صناعة النجوم · كاستينج الـ VIP')}
+            {/* Compact VIP Star Forge Strip inside Actor Casting */}
+            <div className="rounded-2xl bg-gradient-to-r from-[#D91624] via-[#A90F1B] to-[#1A2530] px-3.5 py-2.5 text-[#F9F6F0] border border-[#D4AF37] shadow-sm flex items-center justify-between gap-2.5">
+              <div className="min-w-0">
+                <div className="text-[10px] font-typewriter font-black text-[#D4AF37]">
+                  {tr(uiLanguage, 'THE STAR FORGE · VIP', 'غرفة صناعة النجوم · VIP')}
                 </div>
-                <h3 className="font-display text-lg text-[#F9F6F0]">
+                <h3 className="font-display text-xs sm:text-sm text-[#F9F6F0] truncate">
                   {tr(
                     uiLanguage,
-                    'Looking for an exclusive studio icon? Forge your own Diamond Star (99 OVR)!',
-                    'هل تبحث عن أسطورة خاصة باستوديوك؟ اصنع نجمك بكارت ألماظ (99 OVR)!'
+                    'Forge your exclusive Diamond Star (99 OVR)',
+                    'اصنع نجمك الحصري بكارت ألماظ (99 OVR)'
                   )}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setStarForgeOpen(true)}
-                className="shrink-0 px-5 py-2.5 rounded-xl bg-[#D4AF37] text-[#1A2530] font-display text-sm hover:brightness-110 transition cursor-pointer flex items-center gap-2 shadow"
+                className="shrink-0 px-3 py-1.5 rounded-xl bg-[#D4AF37] text-[#1A2530] font-display text-xs font-black hover:brightness-110 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
-                <Lock className="w-4 h-4" />
-                <span>{tr(uiLanguage, 'Open Star Forge', 'فتح غرفة صناعة النجوم')}</span>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{tr(uiLanguage, 'Star Forge', 'صناعة نجم')}</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredActors.map((actor) => {
-                const isSigned = allSignedActorIds.includes(actor.id);
-                const offer = draft.talentOffers[actor.id];
-                const isPending = offer?.status === 'pending';
-                const masteryScore = actor.genre_mastery[draft.primaryGenre] || 74;
-                const awardsCount = actorAwardCounts[actor.id] || 0;
-                const displayName = localizeEntityName(actor.name, uiLanguage);
-                const displayBio = localizeTalentBio(actor.archetype, uiLanguage, 'actor');
+            {filteredActors.length === 0 ? (
+              <div className="rounded-2xl border border-[#1A2530]/15 bg-white p-6 text-center text-xs font-bold text-[#1A2530]/70">
+                {tr(
+                  uiLanguage,
+                  'No actors match your current filter. Try clearing the search box.',
+                  'لا يوجد ممثلون يطابقون البحث الحالي. جرّب مسح مربع البحث أو تغيير الفئة.'
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {visibleActors.map((actor) => {
+                    const isSigned = allSignedActorIds.includes(actor.id);
+                    const offer = draft.talentOffers[actor.id];
+                    const isPending = offer?.status === 'pending';
+                    const masteryScore = actor.genre_mastery[draft.primaryGenre] || 74;
+                    const awardsCount = actorAwardCounts[actor.id] || 0;
+                    const displayName = localizeEntityName(actor.name, uiLanguage);
+                    const displayBio = localizeTalentBio(actor.archetype, uiLanguage, 'actor');
 
-                const computedRadar: SixRadarStats = actor.radarStats || {
-                  charisma: actor.stats.charisma,
-                  acting: actor.stats.acting,
-                  action: actor.genre_mastery.action || Math.min(95, actor.stats.overall - 2),
-                  comedy: actor.genre_mastery.comedy || Math.min(92, actor.stats.charisma - 3),
-                  popularity: Math.min(99, Math.round((actor.stats.charisma + actor.stats.box_office_pull) / 2)),
-                  boxOffice: actor.stats.box_office_pull,
-                };
+                    const reqLevel = getActorTierRequiredLevel(
+                      actor.tier,
+                      actor.isCustomStar
+                    );
+                    const isLevelLocked = progression.level < reqLevel;
+                    const isBusyWithRival = Boolean(
+                      actor.busyUntilDay && actor.busyUntilDay > gameDay
+                    );
+                    const busyDaysLeft = isBusyWithRival
+                      ? Math.max(1, (actor.busyUntilDay || gameDay) - gameDay)
+                      : 0;
+                    const busyRivalName = actor.busyWithStudio
+                      ? localizeEntityName(actor.busyWithStudio, uiLanguage)
+                      : tr(uiLanguage, 'Rival Studio', 'استوديو منافس');
 
-                const cardTier = actor.isCustomStar ? 'DIAMOND' : actor.tier;
-                const isDarkCard = actor.isCustomStar;
+                    const cardTier = actor.isCustomStar ? 'DIAMOND' : actor.tier;
+                    const isDarkCard = Boolean(actor.isCustomStar);
 
-                return (
-                  <Fut3DTiltCard
-                    key={actor.id}
-                    tier={cardTier}
-                    className={`p-4 transition-all ${
-                      isSigned
-                        ? 'ring-4 ring-[#15803D]'
-                        : isPending
-                        ? 'ring-4 ring-[#D4AF37]'
-                        : ''
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border-2 border-[#D4AF37] shadow-md bg-[#F9F6F0]">
-                          <TalentPortrait
-                            imageUrl={actor.image_url}
-                            name={displayName}
-                            gender={actor.gender}
-                            role="actor"
-                            tier={actor.tier}
-                            age={actor.age}
-                            isRising={actor.isRisingDiscovery || actor.isAiGenerated}
-                            imgClassName={
-                              actor.isCustomStar
-                                ? 'h-full w-full object-cover sepia-[0.12] contrast-110'
-                                : 'h-full w-full object-cover'
-                            }
-                          />
-                        </div>
+                    return (
+                      <Fut3DTiltCard
+                        key={actor.id}
+                        tier={cardTier}
+                        isCustomStar={actor.isCustomStar}
+                        uiLanguage={uiLanguage}
+                        className={`p-3 flex flex-col justify-between ${
+                          isSigned
+                            ? 'ring-2 ring-[#15803D]'
+                            : isPending
+                            ? 'ring-2 ring-[#D4AF37]'
+                            : isLevelLocked
+                            ? 'opacity-85'
+                            : ''
+                        }`}
+                      >
                         <div>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {actor.isCustomStar ? (
-                              <span className="rounded-md bg-[#38BDF8] px-2 py-0.5 font-typewriter text-[10px] font-black text-[#1A2530]">
-                                {tr(uiLanguage, 'CUSTOM STAR · EXCLUSIVE', 'CUSTOM STAR · موهبة حصرية')}
+                          {/* Compact Header Row */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-[#D4AF37] bg-[#F9F6F0] shadow-xs">
+                                <TalentPortrait
+                                  imageUrl={actor.image_url}
+                                  name={displayName}
+                                  gender={actor.gender}
+                                  role="actor"
+                                  tier={actor.tier}
+                                  age={actor.age}
+                                  isRising={actor.isRisingDiscovery || actor.isAiGenerated}
+                                  imgClassName={
+                                    actor.isCustomStar
+                                      ? 'h-full w-full object-cover sepia-[0.12] contrast-110'
+                                      : 'h-full w-full object-cover'
+                                  }
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {actor.isCustomStar ? (
+                                    <span className="rounded bg-[#38BDF8] px-1.5 py-0.5 font-typewriter text-[9px] font-black text-[#1A2530]">
+                                      VIP 99
+                                    </span>
+                                  ) : (
+                                    <span className="rounded bg-[#1A2530] px-1.5 py-0.5 font-typewriter text-[9px] font-black text-[#D4AF37]">
+                                      {tr(uiLanguage, `TIER ${actor.tier}`, `فئة ${actor.tier}`)}
+                                    </span>
+                                  )}
+                                  {isLevelLocked && (
+                                    <span className="inline-flex items-center gap-0.5 rounded bg-amber-100 border border-amber-400/70 px-1.5 py-0.5 text-[9px] font-black text-amber-950">
+                                      <Lock className="h-2.5 w-2.5" />
+                                      <span>
+                                        {tr(uiLanguage, `Lv.${reqLevel}`, `م${reqLevel}`)}
+                                      </span>
+                                    </span>
+                                  )}
+                                  {awardsCount > 0 && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] font-black text-[#D91624]">
+                                      <Award className="h-3 w-3" />
+                                      {awardsCount}
+                                    </span>
+                                  )}
+                                </div>
+                                <h3
+                                  className={`font-display text-sm font-black mt-0.5 truncate ${
+                                    isDarkCard ? 'text-white' : 'text-[#1A2530]'
+                                  }`}
+                                >
+                                  {displayName}
+                                </h3>
+                                <p
+                                  className={`text-[10px] font-bold truncate ${
+                                    isDarkCard ? 'text-white/75' : 'text-[#1A2530]/65'
+                                  }`}
+                                >
+                                  {displayBio} ·{' '}
+                                  {tr(uiLanguage, `${actor.age}y`, `${actor.age} سنة`)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 rounded-xl border border-[#D4AF37] bg-[#1A2530] px-2 py-1 text-center">
+                              <div className="text-[8px] font-typewriter text-[#D4AF37] leading-none">
+                                OVR
+                              </div>
+                              <div className="font-typewriter text-sm font-black text-[#F9F6F0] tabular-nums leading-tight">
+                                {actor.stats.overall}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Rival Poaching Busy Notice */}
+                          {isBusyWithRival && !isSigned && (
+                            <div className="mt-2 flex items-center justify-between gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-black text-rose-900">
+                              <span className="flex items-center gap-1 truncate">
+                                <Clock className="h-3 w-3 shrink-0 text-rose-600" />
+                                <span className="truncate">
+                                  {tr(
+                                    uiLanguage,
+                                    `Filming with ${busyRivalName}`,
+                                    `يصوّر مع ${busyRivalName}`
+                                  )}
+                                </span>
                               </span>
-                            ) : (
-                              <span className="rounded-md bg-[#1A2530] px-2 py-0.5 font-typewriter text-[10px] font-black text-[#D4AF37]">
-                                FUT TIER {actor.tier}
+                              <span className="shrink-0 font-mono text-rose-700 tabular-nums">
+                                {tr(uiLanguage, `Free ${busyDaysLeft}d`, `بعد ${busyDaysLeft} يوم`)}
                               </span>
-                            )}
-                            {awardsCount > 0 && (
-                              <span className="inline-flex items-center gap-0.5 text-[11px] font-black text-[#D91624]">
-                                · <Award className="h-3.5 w-3.5" />{' '}
+                            </div>
+                          )}
+
+                          {/* Lightweight 2x2 Micro-Stats Strip (Zero inline SVG lag) */}
+                          <div
+                            className={`mt-2 grid grid-cols-2 gap-1.5 rounded-xl p-2 border text-[10px] ${
+                              isDarkCard
+                                ? 'bg-[#040B16]/75 border-[#38BDF8]/30 text-[#F8FAFC]'
+                                : 'bg-[#F9F6F0] border-[#1A2530]/12 text-[#1A2530]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={isDarkCard ? 'text-[#7DD3FC] font-bold' : 'text-[#1A2530]/60 font-bold'}>
+                                {tr(uiLanguage, 'Fee', 'الأجر')}
+                              </span>
+                              <span
+                                dir="ltr"
+                                className={`font-typewriter font-black tabular-nums ${
+                                  isDarkCard ? 'text-[#86EFAC]' : 'text-[#15803D]'
+                                }`}
+                              >
+                                {formatMoney(actor.base_salary)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={isDarkCard ? 'text-[#7DD3FC] font-bold' : 'text-[#1A2530]/60 font-bold'}>
+                                {tr(uiLanguage, 'Box Off.', 'الشباك')}
+                              </span>
+                              <span className="font-typewriter font-black tabular-nums">
+                                {actor.stats.box_office_pull}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={isDarkCard ? 'text-[#7DD3FC] font-bold' : 'text-[#1A2530]/60 font-bold'}>
+                                {tr(uiLanguage, 'Acting', 'التمثيل')}
+                              </span>
+                              <span className="font-typewriter font-black tabular-nums">
+                                {actor.stats.acting}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={isDarkCard ? 'text-[#7DD3FC] font-bold' : 'text-[#1A2530]/60 font-bold'}>
+                                {tr(uiLanguage, 'Fit', 'الإتقان')}
+                              </span>
+                              <span
+                                className={`font-typewriter font-black tabular-nums ${
+                                  masteryScore >= 85
+                                    ? isDarkCard
+                                      ? 'text-[#FDE68A]'
+                                      : 'text-[#D91624]'
+                                    : ''
+                                }`}
+                              >
+                                {masteryScore}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Offer Status Banner */}
+                          {renderOfferStatusBanner(offer)}
+                        </div>
+
+                        <div className="mt-2.5 flex items-center gap-2">
+                          {isSigned ? (
+                            <button
+                              type="button"
+                              onClick={() => removeTalentFromDraft(actor.id)}
+                              className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#15803D] py-1.5 text-xs font-black text-white shadow-xs cursor-pointer"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              <span>
+                                {tr(uiLanguage, 'Signed (Release)', 'تم التوقيع (إلغاء)')}
+                              </span>
+                            </button>
+                          ) : isPending ? (
+                            <button
+                              type="button"
+                              onClick={() => removeTalentFromDraft(actor.id)}
+                              className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#1A2530] bg-[#FFF6B3] py-1.5 text-xs font-black text-[#1A2530] cursor-pointer"
+                            >
+                              <Clock className="h-3.5 w-3.5 text-[#D91624]" />
+                              <span>
+                                {tr(uiLanguage, 'Awaiting Reply (Withdraw)', 'بانتظار الرد (سحب)')}
+                              </span>
+                            </button>
+                          ) : isLevelLocked ? (
+                            <button
+                              type="button"
+                              onClick={() => openNegotiation({ kind: 'actor', item: actor })}
+                              className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#D4AF37]/70 bg-[#1A2530]/90 px-2.5 py-1.5 text-[11px] font-black text-[#FDE68A] hover:brightness-110 cursor-pointer"
+                            >
+                              <Lock className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
+                              <span className="truncate">
+                                {reqLevel === 2
+                                  ? tr(uiLanguage, 'Unlock at Level 2 (2 Films)', 'يُفتح في المستوى 2 (عملين)')
+                                  : tr(uiLanguage, 'Unlock at Level 3 (250M + 1 Award)', 'يُفتح في المستوى 3 (250M + جائزة)')}
+                              </span>
+                            </button>
+                          ) : isBusyWithRival ? (
+                            <button
+                              type="button"
+                              onClick={() => openNegotiation({ kind: 'actor', item: actor })}
+                              className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-300 bg-rose-100/90 px-2.5 py-1.5 text-[11px] font-black text-rose-900 cursor-pointer"
+                            >
+                              <Clock className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                              <span className="truncate">
                                 {tr(
                                   uiLanguage,
-                                  `${awardsCount} ${awardsCount === 1 ? 'Award' : 'Awards'}`,
-                                  `${awardsCount} جوائز`
+                                  `Booked · Free in ${busyDaysLeft}d`,
+                                  `مشغول بالتصوير · بعد ${busyDaysLeft} يوم`
                                 )}
                               </span>
-                            )}
-                          </div>
-                          <h3
-                            className={`font-display text-lg mt-0.5 ${
-                              isDarkCard ? 'text-white' : 'text-[#1A2530]'
-                            }`}
-                          >
-                            {displayName}
-                          </h3>
-                          <p
-                            className={`text-xs font-bold ${
-                              isDarkCard ? 'text-white/80' : 'text-[#1A2530]/75'
-                            }`}
-                          >
-                            {displayBio} ·{' '}
-                            {tr(uiLanguage, `Age ${actor.age}`, `${actor.age} سنة`)} ·{' '}
-                            {tr(
-                              uiLanguage,
-                              `${primaryGenreInfo.name} Fit:`,
-                              `إتقان ${primaryGenreInfo.name}:`
-                            )}{' '}
-                            <span className="font-typewriter font-black">{masteryScore}%</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 rounded-xl border-2 border-[#D4AF37] bg-[#1A2530] px-3 py-1.5 text-center shadow">
-                        <div className="text-[9px] font-typewriter text-[#D4AF37]">OVR</div>
-                        <div className="font-typewriter text-lg font-black text-[#F9F6F0] tabular-nums">
-                          {actor.stats.overall}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Hexagonal Radar Chart + Typewriter Salary & Autograph */}
-                    <div className="mt-3 grid grid-cols-12 gap-2 items-center rounded-2xl bg-[#F9F6F0]/95 p-2.5 border border-[#1A2530]/15 text-[#1A2530]">
-                      <div className="col-span-7 flex justify-center">
-                        <HexagonalRadarChartSvg
-                          stats={computedRadar}
-                          size={145}
-                          isDiamond={actor.isCustomStar}
-                        />
-                      </div>
-                      <div className="col-span-5 flex flex-col justify-between space-y-2 ps-2 border-s border-[#1A2530]/15">
-                        <div>
-                          <span className="block text-[10px] font-extrabold text-[#1A2530]/65">
-                            {tr(uiLanguage, 'Base Fee:', 'الأجر الأساسي:')}
-                          </span>
-                          <span className="font-typewriter text-xs font-black text-[#15803D]" dir="ltr">
-                            {formatMoney(actor.base_salary)} {currencyLabel}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[10px] font-extrabold text-[#1A2530]/65">
-                            {tr(uiLanguage, 'Box Office:', 'شباك التذاكر:')}
-                          </span>
-                          <span className="font-typewriter text-xs font-black text-[#1A2530]">
-                            {computedRadar.boxOffice}/99
-                          </span>
-                        </div>
-                        <div className="pt-1 border-t border-dashed border-[#1A2530]/20">
-                          <span className="block text-[9px] font-bold text-[#1A2530]/55">
-                            {tr(uiLanguage, 'Autograph:', 'توقيع النجم:')}
-                          </span>
-                          <span className="font-ruqaa text-base text-[#D91624] block -rotate-2">
-                            {localizeEntityName(
-                              actor.autographSignature || actor.name,
-                              uiLanguage
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Offer Status Banner */}
-                    {renderOfferStatusBanner(offer)}
-
-                    <div className="mt-3 flex items-center gap-2 pt-2">
-                      {isSigned ? (
-                        <button
-                          type="button"
-                          onClick={() => removeTalentFromDraft(actor.id)}
-                          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#15803D] py-2 text-xs font-black text-white shadow cursor-pointer"
-                        >
-                          <Check className="h-4 w-4" />
-                          <span>
-                            {tr(uiLanguage, 'Signed (Release Contract)', 'تم التوقيع (إلغاء التعاقد)')}
-                          </span>
-                        </button>
-                      ) : isPending ? (
-                        <button
-                          type="button"
-                          onClick={() => removeTalentFromDraft(actor.id)}
-                          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-[#FFF6B3] py-2 text-xs font-black text-[#1A2530] cursor-pointer"
-                        >
-                          <Clock className="h-4 w-4 text-[#D91624]" />
-                          <span>
-                            {tr(uiLanguage, 'Awaiting Reply (Withdraw)', 'بانتظار الرد الرسمي (سحب العرض)')}
-                          </span>
-                        </button>
-                      ) : ((talentRejectionCounts || {})[actor.id] || 0) >= 2 &&
-                        !(syndicateMediationUnlocked || {})[actor.id] ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleSyndicateMediationAd(actor.id, actor.name)
-                          }
-                          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3 py-2 text-xs font-black text-[#1A2530] border-2 border-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
-                        >
-                          <Film className="h-4 w-4 shrink-0" />
-                          <span>
-                            {tr(
-                              uiLanguage,
-                              'Actors Guild Mediation (Watch Ad)',
-                              'وساطة نقابة المهن التمثيلية (إعلان)'
-                            )}
-                          </span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => openNegotiation({ kind: 'actor', item: actor })}
-                          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#D91624] hover:brightness-110 py-2 text-xs font-black text-white border border-[#D4AF37] shadow-md cursor-pointer"
-                        >
-                          <MessageSquare className="h-3.5 w-3.5 text-[#D4AF37]" />
-                          <span>
-                            {(syndicateMediationUnlocked || {})[actor.id]
-                              ? tr(
+                            </button>
+                          ) : ((talentRejectionCounts || {})[actor.id] || 0) >= 2 &&
+                            !(syndicateMediationUnlocked || {})[actor.id] ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSyndicateMediationAd(actor.id, actor.name)
+                              }
+                              className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-2.5 py-1.5 text-xs font-black text-[#1A2530] border border-[#1A2530] shadow-xs hover:brightness-105 cursor-pointer"
+                            >
+                              <Film className="h-3.5 w-3.5 shrink-0" />
+                              <span>
+                                {tr(
                                   uiLanguage,
-                                  'Final Chance Round (Guild Mediation Active ★)',
-                                  'جولة الفرصة الأخيرة (وساطة النقابة مفعلة ★)'
-                                )
-                              : offer?.status === 'rejected'
-                              ? tr(
-                                  uiLanguage,
-                                  'Revise Terms & Resend Offer',
-                                  'تعديل الشروط وإرسال عرض جديد'
-                                )
-                              : tr(uiLanguage, 'Pitch Role & Negotiate', 'عرض دور وتفاوض')}
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                  </Fut3DTiltCard>
-                );
-              })}
-            </div>
+                                  'Guild Mediation (Ad)',
+                                  'وساطة النقابة (إعلان)'
+                                )}
+                              </span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openNegotiation({ kind: 'actor', item: actor })}
+                              className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#D91624] hover:brightness-110 py-1.5 text-xs font-black text-white border border-[#D4AF37] shadow-xs cursor-pointer"
+                            >
+                              <MessageSquare className="h-3.5 w-3.5 text-[#D4AF37]" />
+                              <span>
+                                {(syndicateMediationUnlocked || {})[actor.id]
+                                  ? tr(
+                                      uiLanguage,
+                                      'Final Round (Mediation ★)',
+                                      'الفرصة الأخيرة (وساطة ★)'
+                                    )
+                                  : offer?.status === 'rejected'
+                                  ? tr(
+                                      uiLanguage,
+                                      'Revise & Resend',
+                                      'تعديل وإعادة العرض'
+                                    )
+                                  : tr(uiLanguage, 'Pitch & Negotiate', 'عرض دور وتفاوض')}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      </Fut3DTiltCard>
+                    );
+                  })}
+                </div>
+
+                {/* Progressive Pagination Load More Button */}
+                {filteredActors.length > visibleActorCount && (
+                  <div className="flex justify-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleActorCount((c) => c + 16)}
+                      className="inline-flex min-h-[42px] items-center gap-2 rounded-xl border-2 border-[#D4AF37] bg-[#1A2530] px-5 py-2 text-xs font-black text-[#F9F6F0] shadow-sm hover:brightness-110 cursor-pointer"
+                    >
+                      <Users className="h-4 w-4 text-[#D4AF37]" />
+                      <span>
+                        {tr(
+                          uiLanguage,
+                          `Load More Stars (${visibleActors.length} of ${filteredActors.length})`,
+                          `عرض المزيد من النجوم (${visibleActors.length} من ${filteredActors.length})`
+                        )}
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </motion.div>
         )}
 
@@ -2051,7 +2310,7 @@ export function Stage3CrewCastCards() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F171E]/80 p-4 backdrop-blur-md overscroll-contain touch-none select-none"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F171E]/80 p-4 backdrop-blur-md overscroll-contain select-none"
             dir={uiDir}
           >
             <motion.div
@@ -2110,6 +2369,65 @@ export function Stage3CrewCastCards() {
                   <X className="h-4 w-4" />
                 </button>
               </div>
+
+              {/* Actor Radar Profile inside Negotiation Modal (Only rendered for 1 active star -> zero list lag!) */}
+              {negotiatingTarget.kind === 'actor' && (() => {
+                const act = negotiatingTarget.item;
+                const modalRadar: SixRadarStats = act.radarStats || {
+                  charisma: act.stats.charisma,
+                  acting: act.stats.acting,
+                  action: act.genre_mastery.action || Math.min(95, act.stats.overall - 2),
+                  comedy: act.genre_mastery.comedy || Math.min(92, act.stats.charisma - 3),
+                  popularity: Math.min(
+                    99,
+                    Math.round((act.stats.charisma + act.stats.box_office_pull) / 2)
+                  ),
+                  boxOffice: act.stats.box_office_pull,
+                };
+                return (
+                  <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#1A2530]/15 bg-white p-2.5">
+                    <div className="shrink-0">
+                      <HexagonalRadarChartSvg
+                        stats={modalRadar}
+                        size={136}
+                        compact
+                        isDiamond={act.isCustomStar}
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[#1A2530]/65">
+                          {tr(uiLanguage, 'Overall Rating', 'التقييم العام')}
+                        </span>
+                        <span className="font-typewriter font-black text-[#1A2530]">
+                          {act.stats.overall}/99
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[#1A2530]/65">
+                          {tr(uiLanguage, `${primaryGenreInfo.name} Fit`, `إتقان ${primaryGenreInfo.name}`)}
+                        </span>
+                        <span className="font-typewriter font-black text-[#D91624]">
+                          {act.genre_mastery[draft.primaryGenre] || 74}%
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[#1A2530]/65">
+                          {tr(uiLanguage, 'Star Ego', 'كبرياء النجومية')}
+                        </span>
+                        <span className="font-typewriter font-black text-[#1A2530]">
+                          {act.stats.ego}/100
+                        </span>
+                      </div>
+                      <div className="pt-1 border-t border-dashed border-[#1A2530]/15">
+                        <span className="font-ruqaa text-base text-[#D91624] block -rotate-1">
+                          {localizeEntityName(act.autographSignature || act.name, uiLanguage)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Actor Role Billing Size Selection */}
               {negotiatingTarget.kind === 'actor' && (

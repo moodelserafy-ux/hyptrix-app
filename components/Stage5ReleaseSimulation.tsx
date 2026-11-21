@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   useGameStore,
   ReleasedProjectRecord,
@@ -13,6 +13,10 @@ import {
   generateRivalReleases,
   formatMoney,
 } from '@/lib/game-engine';
+import {
+  computeStudioProgression,
+  getMarketRegionRequiredLevel,
+} from '@/lib/progression';
 import { getOrCreateStudioInstanceId } from '@/lib/supabase';
 import {
   getCurrencyLabel,
@@ -28,7 +32,6 @@ import {
   localizeEntityName,
   tr,
 } from '@/lib/i18n';
-import { AnimatedCinemaPremiereGraphic } from '@/components/CinematicGraphicsScene';
 import {
   Megaphone,
   Tv,
@@ -43,6 +46,10 @@ import {
   Bot,
   Trophy,
   Activity,
+  Home,
+  Star,
+  MessageSquare,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -115,6 +122,7 @@ export function Stage5ReleaseSimulation() {
     updateDraft,
     setActiveScreen,
     cash,
+    marketValue,
     currentYear,
     gameDay,
     studioName,
@@ -127,6 +135,9 @@ export function Stage5ReleaseSimulation() {
     releasedProjects,
     lastReleasedProject,
     completeProjectRelease,
+    resetDraftForNewProject,
+    releaseViewInitialStep,
+    consumeReleaseViewInitialStep,
     triggerElectronicTrollsCampaign,
     claimInternationalDistributionAdBonus,
     customDbPatch,
@@ -142,6 +153,16 @@ export function Stage5ReleaseSimulation() {
     worldMarket,
     uiLanguage,
   } = useGameStore();
+
+  const progression = useMemo(
+    () =>
+      computeStudioProgression({
+        marketValue,
+        releasedProjects,
+        uiLanguage,
+      }),
+    [marketValue, releasedProjects, uiLanguage]
+  );
 
   const isEn = isEnglishLang(uiLanguage);
   const uiDir = getUiDir(uiLanguage);
@@ -174,7 +195,12 @@ export function Stage5ReleaseSimulation() {
     [db.actors, aiGeneratedActors, actorDynamicState, currentYear, gameDay]
   );
 
-  const [wizardStep, setWizardStep] = useState<1 | 2>(1);
+  const [wizardStep, setWizardStep] = useState<1 | 2>(() =>
+    releaseViewInitialStep === 2 && lastReleasedProject ? 2 : 1
+  );
+  const [resultsTab, setResultsTab] = useState<'box_office' | 'critics'>(
+    'box_office'
+  );
   const [isSimulating, setIsSimulating] = useState(false);
   const [simInsights, setSimInsights] = useState<{
     synergyLabel: string;
@@ -182,6 +208,12 @@ export function Stage5ReleaseSimulation() {
     twists: string[];
     viewershipMillions?: number;
   } | null>(null);
+
+  useEffect(() => {
+    if (releaseViewInitialStep === 2) {
+      consumeReleaseViewInitialStep();
+    }
+  }, [releaseViewInitialStep, consumeReleaseViewInitialStep]);
 
   const isSeries =
     wizardStep === 2 && lastReleasedProject
@@ -1269,6 +1301,8 @@ export function Stage5ReleaseSimulation() {
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {marketConfigs.map((m) => {
                   const isUnlocked = unlockedRegions.includes(m.id);
+                  const reqLevel = getMarketRegionRequiredLevel(m.id, primaryRegion);
+                  const isLevelLocked = !isUnlocked && progression.level < reqLevel;
                   const isSelected = (
                     draft.selectedDistributionMarkets || [primaryRegion]
                   ).includes(m.id);
@@ -1278,12 +1312,15 @@ export function Stage5ReleaseSimulation() {
                       className={`rounded-xl border-2 p-3 ${
                         isSelected
                           ? 'border-[#15803D] bg-emerald-50/70'
+                          : isLevelLocked
+                          ? 'border-[#1A2530]/15 bg-[#F9F6F0]/75 opacity-85'
                           : 'border-[#1A2530]/15 bg-[#F9F6F0]'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-black text-[#1A2530]">
-                          {m.name}
+                        <span className="inline-flex items-center gap-1 text-xs font-black text-[#1A2530]">
+                          {isLevelLocked && <Lock className="h-3 w-3 text-[#9A7209]" />}
+                          <span>{m.name}</span>
                         </span>
                         <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-900">
                           {m.id === primaryRegion
@@ -1303,7 +1340,7 @@ export function Stage5ReleaseSimulation() {
                           <button
                             type="button"
                             onClick={() => toggleDraftDistributionMarket(m.id)}
-                            className={`w-full rounded-lg py-1.5 text-[11px] font-black ${
+                            className={`w-full rounded-lg py-1.5 text-[11px] font-black cursor-pointer ${
                               isSelected
                                 ? 'bg-[#15803D] text-white'
                                 : 'bg-[#1A2530]/10 text-[#1A2530]'
@@ -1321,6 +1358,19 @@ export function Stage5ReleaseSimulation() {
                                   'تفعيل التوزيع'
                                 )}
                           </button>
+                        ) : isLevelLocked ? (
+                          <button
+                            type="button"
+                            onClick={() => unlockMarketRegionWithCash(m.id)}
+                            className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-[#D4AF37]/80 bg-[#1A2530] py-1.5 text-[11px] font-black text-[#FDE68A] cursor-pointer"
+                          >
+                            <Lock className="h-3 w-3 text-[#D4AF37]" />
+                            <span>
+                              {reqLevel === 3
+                                ? tr(uiLanguage, 'Unlocks at Level 3 (250M + 1 Award)', 'يُفتح مستوى 3 (250M + جائزة)')
+                                : tr(uiLanguage, 'Unlocks at Level 4 (550M + 3 Awards)', 'يُفتح مستوى 4 (550M + 3 جوائز)')}
+                            </span>
+                          </button>
                         ) : (
                           <button
                             type="button"
@@ -1335,7 +1385,7 @@ export function Stage5ReleaseSimulation() {
                                 );
                               }
                             }}
-                            className="w-full rounded-lg border border-[#D4AF37] bg-[#1A2530] py-1.5 text-[11px] font-black text-[#D4AF37] hover:brightness-110"
+                            className="w-full rounded-lg border border-[#D4AF37] bg-[#1A2530] py-1.5 text-[11px] font-black text-[#D4AF37] hover:brightness-110 cursor-pointer"
                           >
                             {isEn
                               ? `Unlock Market License (${formatMoney(m.earlyLicenseCost)} ${currencyLabel})`
@@ -1351,686 +1401,683 @@ export function Stage5ReleaseSimulation() {
           </motion.div>
         )}
 
-        {/* STEP 2: LIVE RELEASE RESULTS (FILM BOX OFFICE VS SERIES VIEWERSHIP) */}
+        {/* STEP 2: LIVE RELEASE RESULTS (MOBILE-FIRST 2-TAB SPLIT: BOX OFFICE VS CRITICS & AUDIENCE) */}
         {wizardStep === 2 && lastReleasedProject && (
           <motion.div
             key="step2"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="space-y-4"
+            className="space-y-3.5"
           >
-            {/* LIVE BOX OFFICE STOCK TICKER & SPINNING ODOMETER */}
-            <div className="rounded-3xl bg-[#1A2530] text-[#F9F6F0] p-5 border-4 border-[#D4AF37] shadow-2xl space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#D4AF37]/30 pb-3">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#D91624] text-white text-[10px] font-typewriter font-black mb-1">
-                    <Activity className="w-3.5 h-3.5 animate-pulse" />
-                    <span>
-                      {tr(
-                        uiLanguage,
-                        'LIVE BOX OFFICE INDEX · REVENUE EXCHANGE BOARD',
-                        'مؤشر شباك التذاكر المباشر · شاشة بورصة الإيرادات'
-                      )}
+            {/* COMPACT MOBILE-FIRST HERO HEADER + SEGMENTED TAB SWITCHER */}
+            <div className="rounded-3xl bg-[#1A2530] text-[#F9F6F0] p-4 border-2 border-[#D4AF37] shadow-xl space-y-3">
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-1.5 text-[10px] font-typewriter font-black text-[#D4AF37] uppercase tracking-wider">
+                    <Activity className="w-3.5 h-3.5 text-[#D91624] animate-pulse shrink-0" />
+                    <span className="truncate">
+                      {isSeries
+                        ? tr(uiLanguage, 'LIVE BROADCAST RUN', 'بث المسلسل المباشر')
+                        : tr(uiLanguage, 'LIVE BOX OFFICE RUN', 'شباك التذاكر المباشر')}
+                    </span>
+                    <span className="text-white/50">·</span>
+                    <span className="text-[#4ADE80]">
+                      #{lastReleasedProject.boxOfficeRank}
                     </span>
                   </div>
-                  <h3 className="font-display text-xl sm:text-2xl text-[#F9F6F0]">
-                    {isEn
-                      ? `"${lastReleasedProject.title}" Live Revenue Odometer`
-                      : `عداد إيرادات «${lastReleasedProject.title}» المباشر`}
+                  <h3 className="font-display text-lg sm:text-xl text-[#F9F6F0] truncate mt-0.5">
+                    {lastReleasedProject.title}
                   </h3>
                 </div>
 
-                <div className="flex flex-col items-end">
-                  <span className="text-[11px] font-bold text-[#D4AF37] mb-1">
-                    {tr(
-                      uiLanguage,
-                      'Total Box Office & Streaming Gross (Cha-Ching Odometer):',
-                      'إجمالي شباك التذاكر والبث (Cha-Ching Odometer):'
-                    )}
+                <div className="shrink-0 text-end">
+                  <span className="block text-[9px] font-bold text-[#D4AF37]">
+                    {isSeries
+                      ? tr(uiLanguage, 'Total Revenue', 'إجمالي العوائد')
+                      : tr(uiLanguage, 'Box Office Gross', 'إيرادات الشباك')}
                   </span>
-                  <SpinningOdometerRevenue
-                    targetValue={lastReleasedProject.totalGrossRevenue}
-                  />
-                </div>
-              </div>
-
-              {/* Dynamic Real-Data Stock Chart SVG (Player vs Top Rival Day-by-Day) */}
-              {(() => {
-                const activeRivals = lastReleasedProject.rivalReleases.filter(
-                  (r) => r.status !== 'delayed'
-                );
-                const topRivalNow =
-                  activeRivals.length > 0
-                    ? Math.max(...activeRivals.map((r) => r.boxOfficeRevenue))
-                    : 0;
-                const history =
-                  Array.isArray(lastReleasedProject.revenueHistory) &&
-                  lastReleasedProject.revenueHistory.length > 0
-                    ? lastReleasedProject.revenueHistory
-                    : [
-                        {
-                          day: 1,
-                          playerTotal: lastReleasedProject.totalGrossRevenue,
-                          topRivalTotal: topRivalNow,
-                        },
-                      ];
-                const pointsData =
-                  history.length === 1
-                    ? [
-                        { day: 0, playerTotal: 0, topRivalTotal: 0 },
-                        history[0],
-                      ]
-                    : history;
-                const maxRevVal = Math.max(
-                  10_000_000,
-                  ...pointsData.flatMap((p) => [p.playerTotal, p.topRivalTotal])
-                );
-                const toPoints = (getter: (p: typeof pointsData[number]) => number) =>
-                  pointsData
-                    .map((pt, i) => {
-                      const x = 14 + (i / Math.max(1, pointsData.length - 1)) * 472;
-                      const y = 94 - (getter(pt) / maxRevVal) * 78;
-                      return `${x.toFixed(1)},${y.toFixed(1)}`;
-                    })
-                    .join(' ');
-
-                return (
-                  <div className="relative h-36 w-full rounded-2xl bg-[#0F171E] border border-[#D4AF37]/40 p-3 overflow-hidden">
-                    <svg viewBox="0 0 500 110" className="w-full h-full overflow-visible">
-                      {[20, 50, 80].map((y) => (
-                        <line
-                          key={y}
-                          x1={0}
-                          y1={y}
-                          x2={500}
-                          y2={y}
-                          stroke="rgba(212,175,55,0.16)"
-                          strokeDasharray="4 4"
-                        />
-                      ))}
-
-                      <motion.polyline
-                        key={`rival_line_${pointsData.length}`}
-                        fill="none"
-                        stroke="#D91624"
-                        strokeWidth="2.5"
-                        strokeDasharray="5 4"
-                        points={toPoints((p) => p.topRivalTotal)}
-                        initial={{ pathLength: 0 }}
-                        animate={{ pathLength: 1 }}
-                        transition={{ duration: 0.9 }}
-                      />
-
-                      <motion.polyline
-                        key={`player_line_${pointsData.length}`}
-                        fill="none"
-                        stroke="#4ADE80"
-                        strokeWidth="4"
-                        points={toPoints((p) => p.playerTotal)}
-                        initial={{ pathLength: 0 }}
-                        animate={{ pathLength: 1 }}
-                        transition={{ duration: 1.0 }}
-                      />
-                    </svg>
-
-                    <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[10px] font-typewriter font-bold">
-                      <span className="text-[#4ADE80]">
-                        {isEn
-                          ? `● Your Release: Rank #${lastReleasedProject.boxOfficeRank} (${formatMoney(lastReleasedProject.totalGrossRevenue)})`
-                          : `● عملك: المركز #${lastReleasedProject.boxOfficeRank} (${formatMoney(lastReleasedProject.totalGrossRevenue)})`}
-                      </span>
-                      <span className="text-[#D91624]">
-                        {isEn
-                          ? `● Leading Rival (${formatMoney(topRivalNow)})`
-                          : `● متصدر المنافسين (${formatMoney(topRivalNow)})`}
-                      </span>
-                    </div>
+                  <div className="mt-0.5">
+                    <SpinningOdometerRevenue
+                      targetValue={lastReleasedProject.totalGrossRevenue}
+                    />
                   </div>
-                );
-              })()}
-            </div>
-
-            {/* Animated Premiere Graphic */}
-            <AnimatedCinemaPremiereGraphic
-              title={lastReleasedProject.title}
-              isSeries={isSeries}
-              currentStep={lastReleasedProject.daysTracked || 1}
-              maxSteps={isSeries ? lastReleasedProject.episodes || 15 : 10}
-              liveRevenueFormatted={formatMoney(lastReleasedProject.totalGrossRevenue)}
-              currencyLabel={currencyLabel}
-              rank={lastReleasedProject.boxOfficeRank}
-              criticScore={lastReleasedProject.criticScore}
-            />
-
-            {/* Key Metrics Grid */}
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 text-center">
-              <div className="rounded-2xl border-2 border-[#1A2530] bg-white p-3">
-                <span className="block text-[10px] font-bold text-[#1A2530]/70">
-                  {isSeries
-                    ? tr(
-                        uiLanguage,
-                        'Total Streaming & Ad Revenue',
-                        'إجمالي عوائد البث والإعلانات'
-                      )
-                    : tr(uiLanguage, 'Total Gross Revenue', 'إجمالي الإيرادات')}
-                </span>
-                <span className="font-typewriter text-sm font-black text-[#15803D]" dir="ltr">
-                  {formatMoney(lastReleasedProject.totalGrossRevenue)} {currencyLabel}
-                </span>
+                </div>
               </div>
 
-              {isSeries &&
-              (lastReleasedProject.viewershipMillions ||
-                simInsights?.viewershipMillions) ? (
-                <div className="rounded-2xl border-2 border-[#D4AF37] bg-[#FFF9E6] p-3">
-                  <span className="block text-[10px] font-bold text-[#1A2530]/75">
-                    {tr(uiLanguage, 'Total Viewership', 'المشاهدات المليونية')}
+              {/* Clean 2-Tab Segmented Switcher: Box Office vs Critics & Audience */}
+              <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-[#0F171E] p-1 border border-[#D4AF37]/30">
+                <button
+                  type="button"
+                  onClick={() => setResultsTab('box_office')}
+                  className={`min-h-[42px] rounded-xl px-3 py-2 text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    resultsTab === 'box_office'
+                      ? 'bg-[#D4AF37] text-[#1A2530] shadow'
+                      : 'text-[#F9F6F0]/75 hover:text-white'
+                  }`}
+                >
+                  <TrendingUp className="w-4 h-4 shrink-0" />
+                  <span>
+                    {tr(uiLanguage, 'Box Office & Run', 'الإيرادات والشباك')}
                   </span>
-                  <span className="flex items-center justify-center gap-1 font-mono text-sm font-black text-[#1A2530]">
-                    <Eye className="h-3.5 w-3.5 text-[#D91624]" />
-                    {lastReleasedProject.viewershipMillions ||
-                      simInsights?.viewershipMillions}
-                    M {tr(uiLanguage, 'views', 'مشاهدة')}
-                  </span>
-                </div>
-              ) : (
-                <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
-                  <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                    {tr(uiLanguage, 'Net Profit / Loss', 'صافي الربح / الخسارة')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResultsTab('critics')}
+                  className={`min-h-[42px] rounded-xl px-3 py-2 text-xs font-black flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    resultsTab === 'critics'
+                      ? 'bg-[#D91624] text-white shadow'
+                      : 'text-[#F9F6F0]/75 hover:text-white'
+                  }`}
+                >
+                  <Star className="w-4 h-4 shrink-0" />
+                  <span>
+                    {tr(uiLanguage, 'Critics & Audience', 'النقاد والجمهور')}
                   </span>
                   <span
-                    dir="ltr"
-                    className={`font-mono text-sm font-black ${
-                      lastReleasedProject.netProfit >= 0
-                        ? 'text-[#15803D]'
-                        : 'text-[#D91624]'
+                    className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] font-black tabular-nums ${
+                      resultsTab === 'critics'
+                        ? 'bg-black/25 text-[#FDE68A]'
+                        : 'bg-white/10 text-[#D4AF37]'
                     }`}
                   >
-                    {formatMoney(lastReleasedProject.netProfit)} {currencyLabel}
+                    {lastReleasedProject.criticScore}
                   </span>
-                </div>
-              )}
-
-              <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
-                <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                  {tr(uiLanguage, 'Critics Score', 'تقييم النقاد')}
-                </span>
-                <span className="font-mono text-sm font-black text-[#B8860B]">
-                  {lastReleasedProject.criticScore}/10
-                </span>
-              </div>
-
-              <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-3">
-                <span className="block text-[10px] font-bold text-[#1A2530]/65">
-                  {tr(uiLanguage, 'Audience Score', 'تقييم الجمهور')}
-                </span>
-                <span className="font-mono text-sm font-black text-[#D91624]">
-                  {lastReleasedProject.audienceScore}/10
-                </span>
+                </button>
               </div>
             </div>
 
-            {Boolean(lastReleasedProject.backendPointsTotalPercent) && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#D4AF37] bg-[#FFF9E6] px-3.5 py-2 text-xs font-bold text-[#1A2530]">
-                <span>
-                  {isEn
-                    ? `Contracted talent backend points (${lastReleasedProject.backendPointsTotalPercent}% of gross)`
-                    : `حصة نسب أرباح النجوم المتعاقد عليها (${lastReleasedProject.backendPointsTotalPercent}% من الإيرادات)`}
-                </span>
-                <span className="font-mono font-black text-[#D91624]" dir="ltr">
-                  -{formatMoney(lastReleasedProject.backendRoyaltiesPaid || 0)} {currencyLabel}
-                </span>
-              </div>
-            )}
-
-            {/* Automatic Live Release Progression & Strategic Boosts */}
-            {(() => {
-              const totalSteps = isSeries
-                ? lastReleasedProject.episodes || 15
-                : 10;
-              const currentStep = Math.min(
-                totalSteps,
-                lastReleasedProject.daysTracked || 1
-              );
-              const isRunComplete = currentStep >= totalSteps;
-              const progressPct = Math.min(
-                100,
-                Math.round((currentStep / totalSteps) * 100)
-              );
-              const visualMarkers = isSeries
-                ? Math.min(10, totalSteps)
-                : totalSteps;
-
-              return (
-                <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-3.5 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2.5">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-[#1A2530]">
-                          <TrendingUp className="h-4 w-4 text-[#D91624]" />
-                          {isSeries
-                            ? isEn
-                              ? `Live Episode Broadcast: Episode ${currentStep} of ${totalSteps}`
-                              : `البث المباشر للحلقات: الحلقة ${currentStep} من ${totalSteps}`
-                            : isEn
-                            ? `Live Box Office Run: Day ${currentStep} of ${totalSteps}`
-                            : `موسم شباك التذاكر الحي: اليوم ${currentStep} من ${totalSteps}`}
-                        </span>
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-black ${
-                            isRunComplete
-                              ? 'bg-[#15803D] text-white'
-                              : 'bg-[#1A2530] text-[#D4AF37] border border-[#D4AF37]/60'
-                          }`}
-                        >
-                          {isRunComplete ? (
-                            <>
-                              <Check className="h-3 w-3" />
-                              <span>
-                                {tr(uiLanguage, 'Run Complete ✓', 'اكتمل الموسم ✓')}
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="h-3 w-3 animate-pulse" />
-                              <span>
-                                {tr(
-                                  uiLanguage,
-                                  'Days advance automatically with the studio clock',
-                                  'الأيام تمر تلقائياً مع ساعة اللعبة'
-                                )}
-                              </span>
-                            </>
-                          )}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[11px] font-bold text-[#15803D]">
-                        {isRunComplete
-                          ? tr(
-                              uiLanguage,
-                              'Final revenues and season rank have been settled and credited to your studio treasury.',
-                              'تم رصد كامل الإيرادات النهائية وترتيب الموسم وإضافتها لخزينة الاستوديو.'
-                            )
-                          : tr(
-                              uiLanguage,
-                              'Revenues, viewership, and chart rankings update dynamically every calendar day against rival studios.',
-                              'تتزايد الإيرادات والمشاهدات ويتحرك ترتيبك أمام المنافسين تلقائياً مع كل يوم جديد في التقويم.'
-                            )}
-                      </p>
-                    </div>
-
-                    {typeof lastReleasedProject.lastDailyRevenueDelta ===
-                      'number' &&
-                      lastReleasedProject.lastDailyRevenueDelta > 0 && (
-                        <div className="rounded-xl border border-[#15803D]/30 bg-[#15803D]/10 px-3 py-1.5 text-end shrink-0">
-                          <span className="block text-[9px] font-bold text-[#15803D]">
-                            {tr(uiLanguage, 'Latest Daily Gross', 'إيراد آخر يوم مرّ')}
-                          </span>
-                          <span
-                            dir="ltr"
-                            className="font-typewriter text-xs font-black text-[#15803D]"
-                          >
-                            +{formatMoney(lastReleasedProject.lastDailyRevenueDelta)} {currencyLabel}
-                          </span>
-                        </div>
-                      )}
+            {/* TAB 1: BOX OFFICE, REVENUE CHART, RUN TRACKER & RIVAL STANDINGS */}
+            {resultsTab === 'box_office' && (
+              <div className="space-y-3.5">
+                {/* Compact 3-Metric Financial Strip */}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-2.5">
+                    <span className="block text-[10px] font-bold text-[#1A2530]/65">
+                      {isSeries &&
+                      (lastReleasedProject.viewershipMillions ||
+                        simInsights?.viewershipMillions)
+                        ? tr(uiLanguage, 'Viewership', 'المشاهدات')
+                        : tr(uiLanguage, 'Net Profit', 'صافي الربح')}
+                    </span>
+                    {isSeries &&
+                    (lastReleasedProject.viewershipMillions ||
+                      simInsights?.viewershipMillions) ? (
+                      <span className="inline-flex items-center justify-center gap-1 font-mono text-xs sm:text-sm font-black text-[#1A2530] tabular-nums">
+                        <Eye className="h-3.5 w-3.5 text-[#D91624]" />
+                        {lastReleasedProject.viewershipMillions ||
+                          simInsights?.viewershipMillions}
+                        M
+                      </span>
+                    ) : (
+                      <span
+                        dir="ltr"
+                        className={`font-mono text-xs sm:text-sm font-black tabular-nums ${
+                          lastReleasedProject.netProfit >= 0
+                            ? 'text-[#15803D]'
+                            : 'text-[#D91624]'
+                        }`}
+                      >
+                        {formatMoney(lastReleasedProject.netProfit)} {currencyLabel}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Visual Day-by-Day Calendar Strip */}
-                  <div className="space-y-2">
-                    <div
-                      className="grid gap-1.5"
-                      style={{
-                        gridTemplateColumns: `repeat(${visualMarkers}, minmax(0, 1fr))`,
-                      }}
+                  <div className="rounded-2xl border-2 border-[#1A2530]/20 bg-white p-2.5">
+                    <span className="block text-[10px] font-bold text-[#1A2530]/65">
+                      {tr(uiLanguage, 'Total Budget', 'التكلفة الإجمالية')}
+                    </span>
+                    <span
+                      dir="ltr"
+                      className="font-mono text-xs sm:text-sm font-black text-[#1A2530] tabular-nums"
                     >
-                      {Array.from({ length: visualMarkers }).map((_, idx) => {
-                        const stepVal = isSeries
-                          ? Math.round(((idx + 1) / visualMarkers) * totalSteps)
-                          : idx + 1;
-                        const prevVal = isSeries
-                          ? Math.round((idx / visualMarkers) * totalSteps)
-                          : idx;
-                        const isPassed = currentStep > stepVal;
-                        const isCurrent =
-                          currentStep <= stepVal && currentStep > prevVal;
+                      {formatMoney(lastReleasedProject.totalBudget)} {currencyLabel}
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl border-2 border-[#D4AF37] bg-[#FFF9E6] p-2.5">
+                    <span className="block text-[10px] font-bold text-[#1A2530]/70">
+                      {tr(uiLanguage, 'Chart Rank', 'ترتيب الموسم')}
+                    </span>
+                    <span className="font-mono text-xs sm:text-sm font-black text-[#1A2530] tabular-nums">
+                      #{lastReleasedProject.boxOfficeRank}
+                    </span>
+                  </div>
+                </div>
+
+                {Boolean(lastReleasedProject.backendPointsTotalPercent) && (
+                  <div className="flex items-center justify-between gap-2 rounded-2xl border border-[#D4AF37] bg-[#FFF9E6] px-3 py-2 text-[11px] font-bold text-[#1A2530]">
+                    <span className="truncate">
+                      {isEn
+                        ? `Talent backend points (${lastReleasedProject.backendPointsTotalPercent}%)`
+                        : `حصة نسب أرباح النجوم (${lastReleasedProject.backendPointsTotalPercent}%)`}
+                    </span>
+                    <span className="font-mono font-black text-[#D91624] shrink-0 tabular-nums" dir="ltr">
+                      -{formatMoney(lastReleasedProject.backendRoyaltiesPaid || 0)} {currencyLabel}
+                    </span>
+                  </div>
+                )}
+
+                {/* Compact Live Revenue Curve vs Top Rival */}
+                {(() => {
+                  const activeRivals = lastReleasedProject.rivalReleases.filter(
+                    (r) => r.status !== 'delayed'
+                  );
+                  const topRivalNow =
+                    activeRivals.length > 0
+                      ? Math.max(...activeRivals.map((r) => r.boxOfficeRevenue))
+                      : 0;
+                  const history =
+                    Array.isArray(lastReleasedProject.revenueHistory) &&
+                    lastReleasedProject.revenueHistory.length > 0
+                      ? lastReleasedProject.revenueHistory
+                      : [
+                          {
+                            day: 1,
+                            playerTotal: lastReleasedProject.totalGrossRevenue,
+                            topRivalTotal: topRivalNow,
+                          },
+                        ];
+                  const pointsData =
+                    history.length === 1
+                      ? [
+                          { day: 0, playerTotal: 0, topRivalTotal: 0 },
+                          history[0],
+                        ]
+                      : history;
+                  const maxRevVal = Math.max(
+                    10_000_000,
+                    ...pointsData.flatMap((p) => [p.playerTotal, p.topRivalTotal])
+                  );
+                  const toPoints = (getter: (p: typeof pointsData[number]) => number) =>
+                    pointsData
+                      .map((pt, i) => {
+                        const x = 14 + (i / Math.max(1, pointsData.length - 1)) * 472;
+                        const y = 92 - (getter(pt) / maxRevVal) * 76;
+                        return `${x.toFixed(1)},${y.toFixed(1)}`;
+                      })
+                      .join(' ');
+
+                  return (
+                    <div className="relative h-28 w-full rounded-2xl bg-[#0F171E] border-2 border-[#D4AF37]/45 p-2.5 overflow-hidden">
+                      <svg viewBox="0 0 500 105" className="w-full h-full overflow-visible">
+                        {[22, 52, 82].map((y) => (
+                          <line
+                            key={y}
+                            x1={0}
+                            y1={y}
+                            x2={500}
+                            y2={y}
+                            stroke="rgba(212,175,55,0.16)"
+                            strokeDasharray="4 4"
+                          />
+                        ))}
+                        <motion.polyline
+                          key={`rival_line_${pointsData.length}`}
+                          fill="none"
+                          stroke="#D91624"
+                          strokeWidth="2.5"
+                          strokeDasharray="5 4"
+                          points={toPoints((p) => p.topRivalTotal)}
+                          initial={{ pathLength: 0 }}
+                          animate={{ pathLength: 1 }}
+                          transition={{ duration: 0.7 }}
+                        />
+                        <motion.polyline
+                          key={`player_line_${pointsData.length}`}
+                          fill="none"
+                          stroke="#4ADE80"
+                          strokeWidth="3.5"
+                          points={toPoints((p) => p.playerTotal)}
+                          initial={{ pathLength: 0 }}
+                          animate={{ pathLength: 1 }}
+                          transition={{ duration: 0.8 }}
+                        />
+                      </svg>
+                      <div className="absolute bottom-1.5 inset-x-3 flex items-center justify-between text-[10px] font-typewriter font-bold">
+                        <span className="text-[#4ADE80]">
+                          ● {tr(uiLanguage, 'Yours', 'عملك')} ({formatMoney(lastReleasedProject.totalGrossRevenue)})
+                        </span>
+                        <span className="text-[#F87171]">
+                          ● {tr(uiLanguage, 'Top Rival', 'أعلى منافس')} ({formatMoney(topRivalNow)})
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Live Run Day/Episode Progress & Strategic Boosts */}
+                {(() => {
+                  const totalSteps = isSeries
+                    ? lastReleasedProject.episodes || 15
+                    : 10;
+                  const currentStep = Math.min(
+                    totalSteps,
+                    lastReleasedProject.daysTracked || 1
+                  );
+                  const isRunComplete = currentStep >= totalSteps;
+                  const progressPct = Math.min(
+                    100,
+                    Math.round((currentStep / totalSteps) * 100)
+                  );
+                  const visualMarkers = isSeries
+                    ? Math.min(10, totalSteps)
+                    : totalSteps;
+
+                  return (
+                    <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-3.5 space-y-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                            {isRunComplete ? (
+                              <Check className="h-4 w-4 text-[#15803D] shrink-0" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-[#D91624] animate-pulse shrink-0" />
+                            )}
+                            <span className="truncate">
+                              {isSeries
+                                ? isEn
+                                  ? `Episode ${currentStep} / ${totalSteps}`
+                                  : `الحلقة ${currentStep} / ${totalSteps}`
+                                : isEn
+                                ? `Box Office Day ${currentStep} / ${totalSteps}`
+                                : `شباك التذاكر: اليوم ${currentStep} / ${totalSteps}`}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-[#1A2530]/60">
+                            {isRunComplete
+                              ? tr(uiLanguage, 'Run finished — settled in treasury', 'اكتمل العرض وأُضيفت الإيرادات للخزينة')
+                              : tr(uiLanguage, 'Updates automatically with studio clock', 'يتحدث تلقائياً مع ساعة اللعبة')}
+                          </span>
+                        </div>
+
+                        {typeof lastReleasedProject.lastDailyRevenueDelta ===
+                          'number' &&
+                          lastReleasedProject.lastDailyRevenueDelta > 0 && (
+                            <div className="rounded-xl border border-[#15803D]/30 bg-[#15803D]/10 px-2.5 py-1 text-end shrink-0">
+                              <span className="block text-[9px] font-bold text-[#15803D]">
+                                {tr(uiLanguage, 'Latest Day', 'آخر يوم')}
+                              </span>
+                              <span
+                                dir="ltr"
+                                className="font-typewriter text-xs font-black text-[#15803D] tabular-nums"
+                              >
+                                +{formatMoney(lastReleasedProject.lastDailyRevenueDelta)}
+                              </span>
+                            </div>
+                          )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div
+                          className="grid gap-1"
+                          style={{
+                            gridTemplateColumns: `repeat(${visualMarkers}, minmax(0, 1fr))`,
+                          }}
+                        >
+                          {Array.from({ length: visualMarkers }).map((_, idx) => {
+                            const stepVal = isSeries
+                              ? Math.round(((idx + 1) / visualMarkers) * totalSteps)
+                              : idx + 1;
+                            const prevVal = isSeries
+                              ? Math.round((idx / visualMarkers) * totalSteps)
+                              : idx;
+                            const isPassed = currentStep > stepVal;
+                            const isCurrent =
+                              currentStep <= stepVal && currentStep > prevVal;
+                            return (
+                              <div
+                                key={idx}
+                                className={`flex flex-col items-center justify-center rounded-lg py-1 border ${
+                                  isCurrent
+                                    ? 'bg-[#1A2530] text-[#D4AF37] border-[#D4AF37]'
+                                    : isPassed
+                                    ? 'bg-[#15803D]/15 text-[#15803D] border-[#15803D]/35'
+                                    : 'bg-[#F9F6F0] text-[#1A2530]/40 border-[#1A2530]/10'
+                                }`}
+                              >
+                                <span className="font-typewriter text-[9px] font-black leading-none">
+                                  {isEn
+                                    ? isSeries
+                                      ? `E${stepVal}`
+                                      : `D${stepVal}`
+                                    : isSeries
+                                    ? `ح${stepVal}`
+                                    : `ي${stepVal}`}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#1A2530]/10">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-[#15803D] via-[#D4AF37] to-[#D91624] transition-all duration-500"
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Compact Strategic Boosts */}
+                      {(!lastReleasedProject.trollsCampaigned ||
+                        !lastReleasedProject.intlDistributionAdUsed) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {!lastReleasedProject.trollsCampaigned && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                triggerElectronicTrollsCampaign(
+                                  lastReleasedProject.id
+                                );
+                              }}
+                              className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#D91624] bg-[#D91624] px-3 py-2 text-xs font-black text-white hover:brightness-110 cursor-pointer"
+                            >
+                              <Bot className="h-3.5 w-3.5 text-[#D4AF37] shrink-0" />
+                              <span className="truncate">
+                                {isEn
+                                  ? `Viral Push (2M ${currencyLabel} · +15%)`
+                                  : `حملة تريند (2M ${currencyLabel} · +15%)`}
+                              </span>
+                            </button>
+                          )}
+
+                          {!lastReleasedProject.intlDistributionAdUsed && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const adResult =
+                                  await showRewardedAd('intl_distribution');
+                                if (adResult.completed) {
+                                  claimInternationalDistributionAdBonus(
+                                    lastReleasedProject.id
+                                  );
+                                } else {
+                                  const errMsg = getRewardedAdErrorMessage(
+                                    adResult.reason,
+                                    'لتفعيل مكافأة التوزيع الدولي',
+                                    uiLanguage,
+                                    'to activate the international distribution bonus'
+                                  );
+                                  if (errMsg) showToast(errMsg, 'warning');
+                                }
+                              }}
+                              className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3 py-2 text-xs font-black text-[#1A2530] shadow-xs hover:brightness-105 cursor-pointer"
+                            >
+                              <Film className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">
+                                {isEn
+                                  ? `Intl. Bonus +25% (+${formatMoney(
+                                      Math.round(
+                                        lastReleasedProject.totalGrossRevenue * 0.25
+                                      )
+                                    )}) · Ad`
+                                  : `توزيع دولي +25% (+${formatMoney(
+                                      Math.round(
+                                        lastReleasedProject.totalGrossRevenue * 0.25
+                                      )
+                                    )}) · إعلان`}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Season Box Office Leaderboard vs Rivals */}
+                <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-3.5 space-y-2 shadow-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                      <Trophy className="h-4 w-4 text-[#D4AF37]" />
+                      {tr(
+                        uiLanguage,
+                        'Season Box Office Standings',
+                        'جدول منافسة شباك التذاكر'
+                      )}
+                    </h3>
+                    <span className="text-[10px] font-bold text-[#1A2530]/60">
+                      {tr(uiLanguage, 'Ranked by gross', 'الترتيب بالإيرادات')}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {[
+                      {
+                        title: lastReleasedProject.title,
+                        studioName,
+                        leadStarName:
+                          lastReleasedProject.leadNames[0] ||
+                          tr(uiLanguage, 'Lead Star', 'بطل العمل'),
+                        boxOfficeRevenue: lastReleasedProject.totalGrossRevenue,
+                        criticScore: lastReleasedProject.criticScore,
+                        audienceScore: lastReleasedProject.audienceScore,
+                        previousRank: lastReleasedProject.previousBoxOfficeRank,
+                        lastDailyDelta: lastReleasedProject.lastDailyRevenueDelta,
+                        isPlayer: true,
+                      },
+                      ...lastReleasedProject.rivalReleases
+                        .filter((r) => r.status !== 'delayed')
+                        .map((r) => ({
+                          ...r,
+                          studioName: localizeEntityName(r.studioName, uiLanguage),
+                          leadStarName: localizeEntityName(r.leadStarName, uiLanguage),
+                          isPlayer: false,
+                        })),
+                    ]
+                      .sort((a, b) => b.boxOfficeRevenue - a.boxOfficeRevenue)
+                      .map((entry, idx) => {
+                        const currentRank = idx + 1;
+                        const rankDelta =
+                          typeof entry.previousRank === 'number' &&
+                          (lastReleasedProject.daysTracked || 1) > 1
+                            ? entry.previousRank - currentRank
+                            : 0;
                         return (
                           <div
-                            key={idx}
-                            className={`flex flex-col items-center justify-center rounded-xl py-1.5 border transition-all ${
-                              isCurrent
-                                ? 'bg-[#1A2530] text-[#D4AF37] border-[#D4AF37] shadow-md scale-[1.03]'
-                                : isPassed
-                                ? 'bg-[#15803D]/15 text-[#15803D] border-[#15803D]/40'
-                                : 'bg-[#F9F6F0] text-[#1A2530]/45 border-[#1A2530]/10'
+                            key={`${entry.title}_${entry.studioName}`}
+                            className={`flex items-center justify-between gap-2 rounded-xl border p-2 ${
+                              entry.isPlayer
+                                ? 'border-[#D4AF37] bg-[#FFF9E6] font-black'
+                                : 'border-[#1A2530]/12 bg-[#F9F6F0]'
                             }`}
                           >
-                            <span className="font-typewriter text-[10px] font-black leading-none">
-                              {isEn
-                                ? isSeries
-                                  ? `Ep${stepVal}`
-                                  : `D${stepVal}`
-                                : isSeries
-                                ? `ح${stepVal}`
-                                : `ي${stepVal}`}
-                            </span>
-                            <span
-                              className={`mt-1 h-1.5 w-1.5 rounded-full ${
-                                isCurrent
-                                  ? 'bg-[#D91624] animate-ping'
-                                  : isPassed
-                                  ? 'bg-[#15803D]'
-                                  : 'bg-[#1A2530]/20'
-                              }`}
-                            />
+                            <div className="flex min-w-0 items-center gap-2">
+                              <div className="flex flex-col items-center shrink-0">
+                                <span
+                                  className={`flex h-7 w-7 items-center justify-center rounded-lg font-mono text-xs font-black ${
+                                    currentRank === 1
+                                      ? 'bg-[#D4AF37] text-[#1A2530]'
+                                      : 'bg-[#1A2530] text-[#D4AF37]'
+                                  }`}
+                                >
+                                  #{currentRank}
+                                </span>
+                                {rankDelta !== 0 && (
+                                  <span
+                                    className={`font-mono text-[9px] font-black ${
+                                      rankDelta > 0 ? 'text-[#15803D]' : 'text-[#D91624]'
+                                    }`}
+                                  >
+                                    {rankDelta > 0 ? `▲${rankDelta}` : `▼${Math.abs(rankDelta)}`}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                                  <span className="truncate">{entry.title}</span>
+                                  {entry.isPlayer && (
+                                    <span className="rounded bg-[#D91624] px-1.5 py-0.5 text-[9px] text-white shrink-0">
+                                      {tr(uiLanguage, 'Yours', 'عملك')}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="truncate text-[10px] font-bold text-[#1A2530]/60">
+                                  {entry.studioName} · {entry.leadStarName}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-end">
+                              <div className="font-mono text-xs font-black text-[#15803D] tabular-nums" dir="ltr">
+                                {formatMoney(entry.boxOfficeRevenue)} {currencyLabel}
+                              </div>
+                              {typeof entry.lastDailyDelta === 'number' &&
+                                entry.lastDailyDelta > 0 &&
+                                (lastReleasedProject.daysTracked || 1) > 1 && (
+                                  <div className="font-mono text-[9px] font-bold text-[#15803D]/80 tabular-nums">
+                                    +{formatMoney(entry.lastDailyDelta)}
+                                  </div>
+                                )}
+                            </div>
                           </div>
                         );
                       })}
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#1A2530]/10">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#15803D] via-[#D4AF37] to-[#D91624] transition-all duration-500"
-                        style={{ width: `${progressPct}%` }}
-                      />
-                    </div>
                   </div>
-
-                  {/* Strategic Boost Buttons (Trend Campaign & International Ad Bonus) */}
-                  {(!lastReleasedProject.trollsCampaigned ||
-                    !lastReleasedProject.intlDistributionAdUsed) && (
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      {!lastReleasedProject.trollsCampaigned && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            triggerElectronicTrollsCampaign(
-                              lastReleasedProject.id
-                            );
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#D91624] bg-[#D91624] px-3.5 py-2 text-xs font-black text-white hover:brightness-110 cursor-pointer"
-                        >
-                          <Bot className="h-3.5 w-3.5 text-[#D4AF37]" />
-                          <span>
-                            {isEn
-                              ? `Launch Viral Social Push (2M ${currencyLabel} · +15% gross)`
-                              : `إطلاق حملة تريند إلكترونية (بتكلفة 2M ${currencyLabel} · +15% عوائد)`}
-                          </span>
-                        </button>
-                      )}
-
-                      {!lastReleasedProject.intlDistributionAdUsed && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const adResult =
-                              await showRewardedAd('intl_distribution');
-                            if (adResult.completed) {
-                              claimInternationalDistributionAdBonus(
-                                lastReleasedProject.id
-                              );
-                            } else {
-                              const errMsg = getRewardedAdErrorMessage(
-                                adResult.reason,
-                                'لتفعيل مكافأة التوزيع الدولي',
-                                uiLanguage,
-                                'to activate the international distribution bonus'
-                              );
-                              if (errMsg) showToast(errMsg, 'warning');
-                            }
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] px-3.5 py-2 text-xs font-black text-[#1A2530] shadow-md hover:brightness-105 cursor-pointer"
-                        >
-                          <Film className="h-3.5 w-3.5 shrink-0" />
-                          <span>
-                            {isEn
-                              ? `Bonus Intl. Distribution (+25% Gross · +${formatMoney(
-                                  Math.round(
-                                    lastReleasedProject.totalGrossRevenue * 0.25
-                                  )
-                                )} ${currencyLabel}) — Watch Ad`
-                              : `توزيع دولي إضافي (+25% أرباح · +${formatMoney(
-                                  Math.round(
-                                    lastReleasedProject.totalGrossRevenue * 0.25
-                                  )
-                                )} ${currencyLabel}) — إعلان`}
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Daily Box Office / Broadcast News Feed */}
-                  {Array.isArray(lastReleasedProject.dailyNews) &&
-                    lastReleasedProject.dailyNews.length > 0 && (
-                      <div className="space-y-1.5 pt-1">
-                        {lastReleasedProject.dailyNews.slice(0, 3).map((n) => (
-                          <div
-                            key={n.id}
-                            className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] px-3 py-2 text-start"
-                          >
-                            <div className="text-[11px] font-black text-[#1A2530]">
-                              {n.headline}
-                            </div>
-                            <div className="text-[10px] font-bold text-[#1A2530]/70">
-                              {n.detail}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                 </div>
-              );
-            })()}
-
-            {/* Season Box Office / Viewership Leaderboard vs Rivals (Dynamic Daily Rank Shifts!) */}
-            <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
-                  <Trophy className="h-4 w-4 text-[#D4AF37]" />
-                  {tr(
-                    uiLanguage,
-                    'Season Box Office Standings vs Rival Studios (Updates Daily)',
-                    'جدول منافسة الموسم أمام شركات الإنتاج المنافسة (يتغير يومياً)'
-                  )}
-                </h3>
-                <span className="text-[10px] font-bold text-[#1A2530]/60">
-                  {isEn
-                    ? `Day ${lastReleasedProject.daysTracked || 1} · Ranked by gross revenue, not critics alone`
-                    : `اليوم ${lastReleasedProject.daysTracked || 1} · الترتيب بالإيرادات وليس بالتقييم النقدي فقط`}
-                </span>
               </div>
-              <div className="space-y-2">
-                {[
-                  {
-                    title: lastReleasedProject.title,
-                    studioName,
-                    leadStarName:
-                      lastReleasedProject.leadNames[0] ||
-                      tr(uiLanguage, 'Lead Star', 'بطل العمل'),
-                    boxOfficeRevenue: lastReleasedProject.totalGrossRevenue,
-                    criticScore: lastReleasedProject.criticScore,
-                    audienceScore: lastReleasedProject.audienceScore,
-                    previousRank: lastReleasedProject.previousBoxOfficeRank,
-                    lastDailyDelta: lastReleasedProject.lastDailyRevenueDelta,
-                    isPlayer: true,
-                  },
-                  ...lastReleasedProject.rivalReleases
-                    .filter((r) => r.status !== 'delayed')
-                    .map((r) => ({
-                      ...r,
-                      studioName: localizeEntityName(r.studioName, uiLanguage),
-                      leadStarName: localizeEntityName(r.leadStarName, uiLanguage),
-                      isPlayer: false,
-                    })),
-                ]
-                  .sort((a, b) => b.boxOfficeRevenue - a.boxOfficeRevenue)
-                  .map((entry, idx) => {
-                    const currentRank = idx + 1;
-                    const rankDelta =
-                      typeof entry.previousRank === 'number' &&
-                      (lastReleasedProject.daysTracked || 1) > 1
-                        ? entry.previousRank - currentRank
-                        : 0;
-                    return (
+            )}
+
+            {/* TAB 2: CRITICS, AUDIENCE SCORES, REVIEWS & SOCIAL PULSE */}
+            {resultsTab === 'critics' && (
+              <div className="space-y-3.5">
+                {/* Dual Critics vs Audience Scoreboard */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="rounded-3xl border-2 border-[#D4AF37] bg-[#1A2530] p-4 text-center text-[#F9F6F0] shadow">
+                    <span className="text-[10px] font-extrabold text-[#D4AF37] uppercase tracking-wider">
+                      {tr(uiLanguage, 'Critics Consensus', 'تقييم النقاد')}
+                    </span>
+                    <div className="mt-1 font-typewriter text-3xl font-black text-[#FDE68A] tabular-nums">
+                      {lastReleasedProject.criticScore}
+                      <span className="text-sm text-[#F9F6F0]/60">/10</span>
+                    </div>
+                    <span className="mt-1 inline-block text-[10px] font-bold text-[#F9F6F0]/75">
+                      {lastReleasedProject.criticScore >= 8.2
+                        ? tr(uiLanguage, 'Awards Contender', 'مرشح قوي للجوائز')
+                        : lastReleasedProject.criticScore >= 7.0
+                        ? tr(uiLanguage, 'Favorable Reviews', 'إشادة نقدية جيدة')
+                        : tr(uiLanguage, 'Mixed / Harsh Critics', 'نقد متباين وقاسٍ')}
+                    </span>
+                  </div>
+
+                  <div className="rounded-3xl border-2 border-[#D91624]/50 bg-white p-4 text-center shadow">
+                    <span className="text-[10px] font-extrabold text-[#D91624] uppercase tracking-wider">
+                      {tr(uiLanguage, 'Audience Pulse', 'تقييم الجمهور')}
+                    </span>
+                    <div className="mt-1 font-typewriter text-3xl font-black text-[#1A2530] tabular-nums">
+                      {lastReleasedProject.audienceScore}
+                      <span className="text-sm text-[#1A2530]/45">/10</span>
+                    </div>
+                    <span className="mt-1 inline-block text-[10px] font-bold text-[#1A2530]/70">
+                      {lastReleasedProject.audienceScore >= 8.2
+                        ? tr(uiLanguage, 'Crowd Favorite', 'معشوق الجمهور')
+                        : lastReleasedProject.audienceScore >= 7.0
+                        ? tr(uiLanguage, 'Solid Word of Mouth', 'أصداء جماهيرية طيبة')
+                        : tr(uiLanguage, 'Divided Crowds', 'تفاعل جماهيري متواضع')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Daily Press Headlines */}
+                {Array.isArray(lastReleasedProject.dailyNews) &&
+                  lastReleasedProject.dailyNews.length > 0 && (
+                    <div className="rounded-3xl border-2 border-[#1A2530]/15 bg-white p-3.5 space-y-2 shadow-sm">
+                      <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                        <Megaphone className="h-4 w-4 text-[#D91624]" />
+                        {tr(uiLanguage, 'Press & Trade Headlines', 'عناوين الصحافة الفنية')}
+                      </h3>
+                      {lastReleasedProject.dailyNews.slice(0, 3).map((n) => (
+                        <div
+                          key={n.id}
+                          className="rounded-xl border border-[#1A2530]/12 bg-[#F9F6F0] px-3 py-2 text-start"
+                        >
+                          <div className="text-[11px] font-black text-[#1A2530]">
+                            {n.headline}
+                          </div>
+                          <div className="text-[10px] font-bold text-[#1A2530]/70">
+                            {n.detail}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                {/* Critic Reviews & Social Reactions */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-3.5 space-y-2 shadow-sm">
+                    <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                      <Star className="h-4 w-4 text-[#D4AF37]" />
+                      {tr(uiLanguage, 'Critic Reviews', 'مراجعات النقاد')}
+                    </h3>
+                    {lastReleasedProject.reviews.map((rev, i) => (
                       <div
-                        key={`${entry.title}_${entry.studioName}`}
-                        className={`flex items-center justify-between gap-2 rounded-xl border p-2.5 transition-all ${
-                          entry.isPlayer
-                            ? 'border-[#D4AF37] bg-[#FFF9E6] font-black shadow-xs'
-                            : 'border-[#1A2530]/15 bg-[#F9F6F0]'
-                        }`}
+                        key={i}
+                        className="rounded-xl border border-[#1A2530]/12 bg-[#F9F6F0] p-2.5 space-y-1"
                       >
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <div className="flex flex-col items-center shrink-0">
-                            <span
-                              className={`flex h-7 w-7 items-center justify-center rounded-lg font-mono text-xs font-black ${
-                                currentRank === 1
-                                  ? 'bg-[#D4AF37] text-[#1A2530]'
-                                  : 'bg-[#1A2530] text-[#D4AF37]'
-                              }`}
-                            >
-                              #{currentRank}
-                            </span>
-                            {rankDelta !== 0 && (
-                              <span
-                                className={`mt-0.5 font-mono text-[9px] font-black ${
-                                  rankDelta > 0 ? 'text-[#15803D]' : 'text-[#D91624]'
-                                }`}
-                              >
-                                {rankDelta > 0 ? `▲${rankDelta}` : `▼${Math.abs(rankDelta)}`}
-                              </span>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 text-xs font-black text-[#1A2530]">
-                              <span className="truncate">{entry.title}</span>
-                              {entry.isPlayer && (
-                                <span className="rounded bg-[#D91624] px-1.5 py-0.5 text-[9px] text-white shrink-0">
-                                  {tr(uiLanguage, 'Yours', 'عملك')}
-                                </span>
-                              )}
-                            </div>
-                            <div className="truncate text-[10px] font-bold text-[#1A2530]/65">
-                              {entry.studioName} ·{' '}
-                              {tr(uiLanguage, 'Starring:', 'بطولة:')}{' '}
-                              {entry.leadStarName}
-                            </div>
-                          </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-black text-[#1A2530] truncate">
+                            {rev.criticName} ·{' '}
+                            <span className="text-[#D91624]">{rev.publication}</span>
+                          </span>
+                          <span className="rounded border border-[#D4AF37]/60 bg-[#FFF9E6] px-1.5 py-0.5 font-mono text-[10px] font-black text-[#1A2530] shrink-0 tabular-nums">
+                            {rev.score}/10
+                          </span>
                         </div>
-                        <div className="shrink-0 text-end">
-                          <div className="font-mono text-xs font-black text-[#15803D]" dir="ltr">
-                            {formatMoney(entry.boxOfficeRevenue)} {currencyLabel}
-                          </div>
-                          {typeof entry.lastDailyDelta === 'number' &&
-                            entry.lastDailyDelta > 0 &&
-                            (lastReleasedProject.daysTracked || 1) > 1 && (
-                              <div className="font-mono text-[9px] font-bold text-[#15803D]/80">
-                                +{formatMoney(entry.lastDailyDelta)}{' '}
-                                {tr(uiLanguage, 'today', 'اليوم')}
-                              </div>
-                            )}
-                          <div className="text-[10px] font-bold text-[#1A2530]/75">
-                            <span className="text-[#B8860B]">
-                              {tr(uiLanguage, 'Critics', 'نقاد')} {entry.criticScore}
-                            </span>
-                            {typeof entry.audienceScore === 'number' && (
-                              <>
-                                {' · '}
-                                <span className="text-[#D91624]">
-                                  {tr(uiLanguage, 'Audience', 'جمهور')}{' '}
-                                  {entry.audienceScore}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
+                        <p className="text-[11px] font-bold leading-relaxed text-[#1A2530]/75">
+                          &ldquo;{rev.quote}&rdquo;
+                        </p>
                       </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            {/* Critic Reviews & Social Reactions */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
-                <h3 className="text-xs font-black text-[#1A2530]">
-                  {tr(
-                    uiLanguage,
-                    'Critic Reviews & Trade Press',
-                    'مراجعات النقاد والصحافة الفنية'
-                  )}
-                </h3>
-                {lastReleasedProject.reviews.map((rev, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 space-y-1"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-black text-[#1A2530]">
-                        {rev.criticName} ·{' '}
-                        <span className="text-[#D91624]">{rev.publication}</span>
-                      </span>
-                      <span className="rounded border border-[#D4AF37]/60 bg-[#FFF9E6] px-1.5 py-0.5 font-mono text-[10px] font-black text-[#1A2530] shrink-0">
-                        {rev.score}/10
-                      </span>
-                    </div>
-                    <p className="text-[11px] font-bold leading-relaxed text-[#1A2530]/75">
-                      &ldquo;{rev.quote}&rdquo;
-                    </p>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              <div className="rounded-3xl border-2 border-[#1A2530]/20 border-b-4 border-b-[#1A2530]/35 bg-white p-4 space-y-2.5 shadow-sm">
-                <h3 className="text-xs font-black text-[#1A2530]">
-                  {tr(
-                    uiLanguage,
-                    'Audience Buzz & Social Media Pulse',
-                    'نبض الجمهور والسوشيال ميديا'
-                  )}
-                </h3>
-                {lastReleasedProject.socialPosts.map((post, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border border-[#1A2530]/15 bg-[#F9F6F0] p-3 space-y-1"
-                  >
-                    <div className="flex items-center justify-between text-[10px] font-black text-[#D91624]">
-                      <span dir="ltr">{post.handle}</span>
-                      <span>♥ {post.likes}</span>
-                    </div>
-                    <p className="text-[11px] font-bold text-[#1A2530]/80">
-                      {post.content}
-                    </p>
+                  <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-3.5 space-y-2 shadow-sm">
+                    <h3 className="flex items-center gap-1.5 text-xs font-black text-[#1A2530]">
+                      <MessageSquare className="h-4 w-4 text-[#D91624]" />
+                      {tr(uiLanguage, 'Audience Social Pulse', 'نبض الجمهور والسوشيال')}
+                    </h3>
+                    {lastReleasedProject.socialPosts.map((post, i) => (
+                      <div
+                        key={i}
+                        className="rounded-xl border border-[#1A2530]/12 bg-[#F9F6F0] p-2.5 space-y-1"
+                      >
+                        <div className="flex items-center justify-between text-[10px] font-black text-[#D91624]">
+                          <span dir="ltr">{post.handle}</span>
+                          <span className="tabular-nums">♥ {post.likes}</span>
+                        </div>
+                        <p className="text-[11px] font-bold text-[#1A2530]/80">
+                          {post.content}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* FLOATING STICKY BOTTOM NAVIGATION BOX — Royal Cinema Theme */}
+      {/* FLOATING STICKY BOTTOM NAVIGATION BOX — Royal Cinema Theme (Awards button removed; Year-End Gala is automatic!) */}
       <div className="pointer-events-none fixed right-0 bottom-3 left-0 z-40 px-3">
-        <div className="pointer-events-auto mx-auto flex max-w-xl items-center justify-between gap-2 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 px-4 py-3 shadow-2xl backdrop-blur-md">
+        <div className="pointer-events-auto mx-auto flex max-w-xl items-center justify-between gap-2 rounded-2xl border-2 border-[#D4AF37] bg-[#1A2530]/95 px-3.5 py-2.5 shadow-2xl backdrop-blur-md">
           {wizardStep === 1 ? (
             <button
               type="button"
               onClick={() => setActiveScreen('PRODUCTION_CRISES')}
-              className="rounded-xl border border-white/20 bg-white/10 px-5 py-2 text-xs font-black text-[#F9F6F0] transition hover:bg-white/20"
+              className="min-h-[42px] rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-black text-[#F9F6F0] transition hover:bg-white/20 cursor-pointer"
             >
               {tr(uiLanguage, 'Back', 'السابق')}
             </button>
           ) : (
-            <span className="text-xs font-black text-emerald-400">
-              {tr(
-                uiLanguage,
-                'Logged in Studio Archive ✓',
-                'تم تسجيل العمل في أرشيف الاستوديو ✓'
-              )}
-            </span>
+            <div className="min-w-0">
+              <span className="block text-[11px] font-black text-[#4ADE80] truncate">
+                {tr(uiLanguage, 'Tracked Live in Studio HQ ✓', 'قيد المتابعة من مكتبك الرئيسي ✓')}
+              </span>
+              <span className="block text-[9px] font-bold text-[#F9F6F0]/65 truncate">
+                {tr(
+                  uiLanguage,
+                  'Awards Gala triggers automatically at Year-End',
+                  'حفل الجوائز ينطلق تلقائياً في نهاية العام'
+                )}
+              </span>
+            </div>
           )}
 
           <button
@@ -2039,13 +2086,15 @@ export function Stage5ReleaseSimulation() {
               if (wizardStep === 1) {
                 handleLaunchRelease();
               } else {
-                setActiveScreen('FESTIVALS_AWARDS');
+                resetDraftForNewProject('STUDIO_HUB');
               }
             }}
             disabled={isSimulating || (wizardStep === 1 && isOverTotalLiquidity)}
-            className={`inline-flex items-center gap-1.5 rounded-xl border-2 px-5 py-2 text-xs font-black text-white shadow-md transition disabled:opacity-50 ${
+            className={`min-h-[44px] shrink-0 inline-flex items-center gap-1.5 rounded-xl border-2 px-4 sm:px-5 py-2 text-xs font-black text-white shadow-md transition disabled:opacity-50 cursor-pointer ${
               wizardStep === 1 && isOverTotalLiquidity
                 ? 'border-amber-400 bg-slate-700 cursor-not-allowed'
+                : wizardStep === 2
+                ? 'border-[#D4AF37] bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-[#1A2530] hover:brightness-105'
                 : 'border-[#D4AF37] bg-[#D91624] hover:brightness-110'
             }`}
           >
@@ -2055,8 +2104,8 @@ export function Stage5ReleaseSimulation() {
                 <span>
                   {tr(
                     uiLanguage,
-                    'Evaluating release & calculating box office...',
-                    'جاري تقييم العمل وحساب النتائج...'
+                    'Simulating box office...',
+                    'جاري حساب الإيرادات...'
                   )}
                 </span>
               </>
@@ -2064,8 +2113,8 @@ export function Stage5ReleaseSimulation() {
               isOverTotalLiquidity ? (
                 <span>
                   {isEn
-                    ? `Cash deficit ${formatMoney(liquidityDeficit)} ${currencyLabel} — trim budget`
-                    : `عجز سيولة ${formatMoney(liquidityDeficit)} ${currencyLabel} — خفّض الميزانية`}
+                    ? `Deficit ${formatMoney(liquidityDeficit)} ${currencyLabel}`
+                    : `عجز ${formatMoney(liquidityDeficit)} ${currencyLabel}`}
                 </span>
               ) : (
                 <>
@@ -2074,25 +2123,28 @@ export function Stage5ReleaseSimulation() {
                     {isSeries
                       ? tr(
                           uiLanguage,
-                          'Premiere Series & Track Viewership',
-                          'بدء بث المسلسل ورصد المشاهدات'
+                          'Premiere Series Now',
+                          'بدء بث المسلسل الآن'
                         )
                       : tr(
                           uiLanguage,
-                          'Release Film in Cinemas Now',
-                          'طرح الفيلم في السينمات الآن'
+                          'Release Film Now',
+                          'طرح الفيلم في السينمات'
                         )}
                   </span>
                 </>
               )
             ) : (
-              <span>
-                {tr(
-                  uiLanguage,
-                  'Proceed to Festivals & Awards',
-                  'الانتقال للمهرجانات والجوائز'
-                )}
-              </span>
+              <>
+                <Home className="h-4 w-4 shrink-0" />
+                <span>
+                  {tr(
+                    uiLanguage,
+                    'Return to Studio HQ',
+                    'العودة لمكتب الاستوديو'
+                  )}
+                </span>
+              </>
             )}
           </button>
         </div>

@@ -402,7 +402,7 @@ export default async function RootLayout({
           async
         />
       </head>
-      <body className="min-h-dvh w-full overflow-x-hidden bg-[#F9F6F0] text-[#1A2530] antialiased selection:bg-[#D91624] selection:text-white">
+      <body className="min-h-dvh w-full overflow-x-clip bg-[#F9F6F0] text-[#1A2530] antialiased selection:bg-[#D91624] selection:text-white">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -433,7 +433,7 @@ export default async function RootLayout({
           </nav>
         </aside>
 
-        <div className="relative min-h-dvh w-full overflow-x-hidden bg-[#F9F6F0] text-[#1A2530]">
+        <div className="relative min-h-dvh w-full overflow-x-clip bg-[#F9F6F0] text-[#1A2530]">
           {children}
         </div>
       </body>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { motion } from 'motion/react';
 import { useGameStore } from '@/lib/store';
 
@@ -132,11 +132,13 @@ export function HexagonalRadarChartSvg({
   size = 180,
   isDiamond = false,
   compact = false,
+  darkSurface = false,
 }: {
   stats: SixRadarStats;
   size?: number;
   isDiamond?: boolean;
   compact?: boolean;
+  darkSurface?: boolean;
 }) {
   const uiLanguage = useGameStore((s) => s.uiLanguage);
   const isAr = uiLanguage === 'ar';
@@ -157,10 +159,17 @@ export function HexagonalRadarChartSvg({
   const dataPoints = RADAR_AXES.map((ax) => getPoint(ax.angleDeg, stats[ax.key]));
   const polygonPointsStr = dataPoints.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
-  const strokeColor = isDiamond ? '#0284C7' : '#D4AF37';
-  const fillColor = isDiamond
+  const strokeColor = darkSurface ? '#38BDF8' : isDiamond ? '#0284C7' : '#D4AF37';
+  const fillColor = darkSurface
+    ? 'rgba(56, 189, 248, 0.32)'
+    : isDiamond
     ? 'rgba(56, 189, 248, 0.28)'
     : 'rgba(212, 175, 55, 0.32)';
+  const ringStroke = darkSurface ? 'rgba(186, 230, 253, 0.26)' : 'rgba(26, 37, 48, 0.18)';
+  const ringOuterFill = darkSurface ? 'rgba(15, 37, 68, 0.45)' : 'rgba(26, 37, 48, 0.04)';
+  const spokeStroke = darkSurface ? 'rgba(186, 230, 253, 0.22)' : 'rgba(26, 37, 48, 0.16)';
+  const dotStroke = darkSurface ? '#071324' : '#1A2530';
+  const labelFillClass = darkSurface ? 'fill-[#F8FAFC] font-extrabold' : 'fill-[#1A2530] font-bold';
 
   return (
     <svg
@@ -188,8 +197,8 @@ export function HexagonalRadarChartSvg({
           <polygon
             key={rIdx}
             points={ringPts}
-            fill={rIdx === rings.length - 1 ? 'rgba(26, 37, 48, 0.04)' : 'none'}
-            stroke="rgba(26, 37, 48, 0.18)"
+            fill={rIdx === rings.length - 1 ? ringOuterFill : 'none'}
+            stroke={ringStroke}
             strokeWidth="1"
             strokeDasharray={rIdx < rings.length - 1 ? '2 2' : undefined}
           />
@@ -206,7 +215,7 @@ export function HexagonalRadarChartSvg({
             y1={center}
             x2={outer.x}
             y2={outer.y}
-            stroke="rgba(26, 37, 48, 0.16)"
+            stroke={spokeStroke}
             strokeWidth="1"
           />
         );
@@ -234,8 +243,8 @@ export function HexagonalRadarChartSvg({
               cx={pt.x}
               cy={pt.y}
               r={compact ? 3 : 4}
-              fill={strokeColor}
-              stroke="#1A2530"
+              fill={darkSurface ? '#FDE68A' : strokeColor}
+              stroke={dotStroke}
               strokeWidth="1.2"
             />
             <text
@@ -243,7 +252,7 @@ export function HexagonalRadarChartSvg({
               y={labelPt.y}
               textAnchor="middle"
               dominantBaseline="middle"
-              className="fill-[#1A2530] font-bold"
+              className={labelFillClass}
               style={{ fontSize: compact ? '8.5px' : '10px' }}
             >
               {isAr ? ax.labelAr : ax.labelEn} ({val})
@@ -256,75 +265,52 @@ export function HexagonalRadarChartSvg({
 }
 
 /**
- * 5. FIFA Ultimate Team (FUT) 3D Tiltable Card Wrapper
+ * 5. Lightweight Pure-CSS FUT Card Wrapper (Zero per-card state or spring overhead)
  */
 export function Fut3DTiltCard({
   children,
   tier,
   isCustomStar,
+  uiLanguage,
   className = '',
 }: {
   children: React.ReactNode;
   tier?: 'S' | 'A' | 'B' | 'C' | 'DIAMOND';
   isCustomStar?: boolean;
+  uiLanguage?: string;
   className?: string;
 }) {
-  const uiLanguage = useGameStore((s) => s.uiLanguage);
   const isAr = uiLanguage === 'ar';
-  const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0 });
   const isDiamond = Boolean(isCustomStar || tier === 'DIAMOND');
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rotateX = ((y - centerY) / centerY) * -6;
-    const rotateY = ((x - centerX) / centerX) * 6;
-    setTilt({ rotateX, rotateY });
-  };
-
-  const handleMouseLeave = () => {
-    setTilt({ rotateX: 0, rotateY: 0 });
-  };
 
   const tierSurfaceClass = isDiamond
     ? 'fut-diamond-card'
     : tier === 'S'
     ? 'fut-gold-card'
-    : 'bg-[#FDFBF7] border-2 border-[#D4AF37]/50 shadow-md';
+    : 'bg-[#FDFBF7] border border-[#D4AF37]/50 shadow-sm hover:border-[#D4AF37]';
 
   return (
-    <motion.div
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      animate={{
-        rotateX: tilt.rotateX,
-        rotateY: tilt.rotateY,
-      }}
-      transition={{ type: 'spring', stiffness: 320, damping: 24 }}
-      style={{ transformStyle: 'preserve-3d', perspective: 900 }}
-      className={`relative overflow-hidden rounded-3xl transition-shadow ${tierSurfaceClass} ${className}`}
+    <div
+      className={`relative overflow-hidden rounded-2xl transition-colors duration-150 ${tierSurfaceClass} ${className}`}
     >
       {/* Top FUT Shield Header Ribbon */}
       {isDiamond && (
-        <div className="flex items-center justify-between bg-gradient-to-r from-sky-900 via-indigo-950 to-sky-900 px-3.5 py-1 text-[10px] font-black tracking-wider text-cyan-200 mb-2 rounded-xl">
-          <span>
-            {isAr ? '💎 CUSTOM STAR · موهبة حصرية' : '💎 CUSTOM STAR · EXCLUSIVE TALENT'}
+        <div className="flex items-center justify-between bg-[#040B16]/85 border border-[#38BDF8]/40 px-2.5 py-1 text-[9px] font-black tracking-wider text-[#BAE6FD] mb-2 rounded-lg">
+          <span className="truncate">
+            {isAr ? 'موهبة حصرية · كارت ألماظ' : 'EXCLUSIVE · DIAMOND ICON'}
           </span>
-          <span className="font-typewriter text-amber-300">DIAMOND 99</span>
+          <span className="font-typewriter text-[#FDE68A] shrink-0">DIAMOND</span>
         </div>
       )}
       {!isDiamond && tier === 'S' && (
-        <div className="flex items-center justify-between bg-gradient-to-r from-[#1A2530] via-[#2C3E50] to-[#1A2530] px-3.5 py-1 text-[10px] font-black text-[#D4AF37] mb-2 rounded-xl">
-          <span>
-            {isAr ? '★ نجم شباك أسطوري · فئة S' : '★ LEGENDARY BOX-OFFICE ICON · S-TIER'}
+        <div className="flex items-center justify-between bg-[#1A2530] px-2.5 py-1 text-[9px] font-black text-[#D4AF37] mb-2 rounded-lg">
+          <span className="truncate">
+            {isAr ? '★ نجم شباك أسطوري · فئة S' : '★ LEGENDARY ICON · S-TIER'}
           </span>
-          <span className="font-typewriter">GOLD ICON</span>
+          <span className="font-typewriter shrink-0">GOLD</span>
         </div>
       )}
       {children}
-    </motion.div>
+    </div>
   );
 }

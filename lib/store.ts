@@ -18,6 +18,7 @@ import {
   generateRivalReleases,
   RoleBillingSize,
   VIP_DINNER_COST,
+  evaluateScriptCraftScore,
 } from './game-engine';
 import {
   GenreId,
@@ -31,8 +32,16 @@ import {
   verifyAndRecordServerTransaction,
   fetchAuthoritativeStudioWallet,
   getOrCreateStudioInstanceId,
+  syncAndFetchRealPlayersLeaderboard,
   LedgerVerificationRequest,
 } from './supabase';
+import {
+  computeStudioProgression,
+  getMarketRegionRequiredLevel,
+  STARTING_INDIE_CASH,
+  STARTING_INDIE_REPUTATION,
+  STARTING_INDIE_MARKET_VALUE,
+} from './progression';
 import {
   WorldMarketId,
   UiLanguageId,
@@ -544,6 +553,8 @@ export interface FestivalAwardWinnerItem {
   winningProjectTitle: string;
   winningStudioName: string;
   isPlayerWinner: boolean;
+  playerNominated?: boolean;
+  marginNote?: string;
 }
 
 export interface AutomaticFestivalCeremonyItem {
@@ -1269,8 +1280,18 @@ export function buildAnnualAwardsGalaForYear(params: {
       : undefined,
   });
 
+  // Deterministic year-based variance so rival strength feels alive and unpredictable every season
+  const yearSeed = ((year * 37 + (playerProjectsInYear.length + 1) * 19) % 100) / 100;
+  const rivalLiftA = Number((0.25 + (yearSeed * 0.45)).toFixed(2));
+  const rivalLiftB = Number((0.15 + (((yearSeed * 7) % 1) * 0.4)).toFixed(2));
+
   const topRivalFilm1: RivalRelease = rivalFilms[0]
-    ? normalizeRival(rivalFilms[0])
+    ? {
+        ...normalizeRival(rivalFilms[0]),
+        criticScore: Math.min(9.4, Math.max(8.2, rivalFilms[0].criticScore + 0.25)),
+        audienceScore: Math.min(9.5, Math.max(8.3, (rivalFilms[0].audienceScore ?? rivalFilms[0].criticScore) + 0.2)),
+        boxOfficeRevenue: Math.max(98_000_000, rivalFilms[0].boxOfficeRevenue),
+      }
     : {
         id: `annual_rf1_${year}`,
         title: isEn ? enFilmTitles[0] : marketProfile.rivalFilmTitles[0] || 'شفرة العقرب',
@@ -1287,14 +1308,19 @@ export function buildAnnualAwardsGalaForYear(params: {
         directorName: fallbackDir1,
         format: 'film',
         genre: 'action',
-        criticScore: 8.1,
-        audienceScore: 8.5,
-        boxOfficeRevenue: 92_000_000,
+        criticScore: Number((8.35 + rivalLiftA).toFixed(1)),
+        audienceScore: Number((8.5 + rivalLiftB).toFixed(1)),
+        boxOfficeRevenue: Math.round(108_000_000 + yearSeed * 46_000_000),
         status: 'released',
       };
 
   const topRivalFilm2: RivalRelease = rivalFilms[1]
-    ? normalizeRival(rivalFilms[1])
+    ? {
+        ...normalizeRival(rivalFilms[1]),
+        criticScore: Math.min(9.2, Math.max(8.0, rivalFilms[1].criticScore + 0.15)),
+        audienceScore: Math.min(9.3, Math.max(8.1, (rivalFilms[1].audienceScore ?? rivalFilms[1].criticScore) + 0.15)),
+        boxOfficeRevenue: Math.max(84_000_000, rivalFilms[1].boxOfficeRevenue),
+      }
     : {
         id: `annual_rf2_${year}`,
         title: isEn ? enFilmTitles[1] : marketProfile.rivalFilmTitles[1] || 'فرسان الشاشة',
@@ -1315,14 +1341,19 @@ export function buildAnnualAwardsGalaForYear(params: {
         directorName: fallbackDir2,
         format: 'film',
         genre: 'historical',
-        criticScore: 7.8,
-        audienceScore: 8.0,
-        boxOfficeRevenue: 74_000_000,
+        criticScore: Number((8.15 + rivalLiftB).toFixed(1)),
+        audienceScore: Number((8.25 + rivalLiftA * 0.8).toFixed(1)),
+        boxOfficeRevenue: Math.round(88_000_000 + yearSeed * 32_000_000),
         status: 'released',
       };
 
   const topRivalSeries1: RivalRelease = rivalSeries[0]
-    ? normalizeRival(rivalSeries[0])
+    ? {
+        ...normalizeRival(rivalSeries[0]),
+        criticScore: Math.min(9.4, Math.max(8.2, rivalSeries[0].criticScore + 0.2)),
+        audienceScore: Math.min(9.5, Math.max(8.3, (rivalSeries[0].audienceScore ?? rivalSeries[0].criticScore) + 0.2)),
+        boxOfficeRevenue: Math.max(76_000_000, rivalSeries[0].boxOfficeRevenue),
+      }
     : {
         id: `annual_rs1_${year}`,
         title: isEn ? enSeriesTitles[0] : marketProfile.rivalSeriesTitles[0] || 'ملف الغموض',
@@ -1343,14 +1374,19 @@ export function buildAnnualAwardsGalaForYear(params: {
         directorName: fallbackDir3,
         format: 'series',
         genre: 'crime_mystery',
-        criticScore: 8.2,
-        audienceScore: 8.4,
-        boxOfficeRevenue: 64_000_000,
+        criticScore: Number((8.4 + rivalLiftB).toFixed(1)),
+        audienceScore: Number((8.55 + rivalLiftA * 0.7).toFixed(1)),
+        boxOfficeRevenue: Math.round(78_000_000 + yearSeed * 28_000_000),
         status: 'released',
       };
 
   const topRivalSeries2: RivalRelease = rivalSeries[1]
-    ? normalizeRival(rivalSeries[1])
+    ? {
+        ...normalizeRival(rivalSeries[1]),
+        criticScore: Math.min(9.1, Math.max(7.9, rivalSeries[1].criticScore + 0.1)),
+        audienceScore: Math.min(9.2, Math.max(8.0, (rivalSeries[1].audienceScore ?? rivalSeries[1].criticScore) + 0.15)),
+        boxOfficeRevenue: Math.max(62_000_000, rivalSeries[1].boxOfficeRevenue),
+      }
     : {
         id: `annual_rs2_${year}`,
         title: isEn ? enSeriesTitles[1] : marketProfile.rivalSeriesTitles[1] || 'ليالي الدراما',
@@ -1371,20 +1407,79 @@ export function buildAnnualAwardsGalaForYear(params: {
         directorName: locName(dirList[3]?.name, fallbackDir1, fallbackDir1),
         format: 'series',
         genre: 'popular_drama',
-        criticScore: 7.6,
-        audienceScore: 7.9,
-        boxOfficeRevenue: 52_000_000,
+        criticScore: Number((8.05 + rivalLiftA * 0.6).toFixed(1)),
+        audienceScore: Number((8.2 + rivalLiftB * 0.7).toFixed(1)),
+        boxOfficeRevenue: Math.round(64_000_000 + yearSeed * 24_000_000),
         status: 'released',
       };
 
+  // Helper to compute real merit indices for any player project
+  const getProjectScriptEval = (proj: ReleasedProjectRecord | null) =>
+    proj ? evaluateScriptCraftScore(proj.synopsis) : null;
+
+  const getProjectDirectorOverall = (proj: ReleasedProjectRecord | null) => {
+    if (!proj) return 75;
+    const found = (db.crew || []).find(
+      (c) =>
+        c.role === 'director' &&
+        (c.name === proj.directorName ||
+          localizeEntityName(c.name, 'en') === proj.directorName ||
+          localizeEntityName(c.name, 'ar') === proj.directorName)
+    );
+    return found?.stats.overall ?? 79;
+  };
+
+  const getProjectLeadActingScore = (proj: ReleasedProjectRecord | null) => {
+    if (!proj) return 75;
+    const leadId = proj.actorIdsInCast?.[0];
+    const found = leadId
+      ? (db.actors || []).find((a) => a.id === leadId)
+      : (db.actors || []).find(
+          (a) =>
+            a.name === proj.leadNames?.[0] ||
+            localizeEntityName(a.name, uiLang) === proj.leadNames?.[0]
+        );
+    if (!found) return 80;
+    return Math.round(found.stats.acting * 0.6 + found.stats.overall * 0.4);
+  };
+
+  const computeJuryIndex = (
+    proj: ReleasedProjectRecord,
+    mode: 'prestige' | 'popular'
+  ): number => {
+    const sEval = evaluateScriptCraftScore(proj.synopsis);
+    const scriptNorm = sEval.isSpam ? 4.0 : Math.min(9.8, sEval.score / 10);
+    const roiRatio = proj.totalGrossRevenue / Math.max(1, proj.totalBudget);
+    const commercialNorm = Math.min(9.6, Math.max(5.5, 6.2 + roiRatio * 1.15));
+    const flopPenalty = roiRatio < 0.75 ? -0.45 : 0;
+    if (mode === 'prestige') {
+      return Number(
+        (
+          proj.criticScore * 0.62 +
+          scriptNorm * 0.22 +
+          proj.audienceScore * 0.16 +
+          flopPenalty
+        ).toFixed(2)
+      );
+    }
+    return Number(
+      (
+        proj.audienceScore * 0.46 +
+        proj.criticScore * 0.34 +
+        commercialNorm * 0.2 +
+        flopPenalty
+      ).toFixed(2)
+    );
+  };
+
   const playerFilms = [...playerProjectsInYear]
     .filter((p) => p.format === 'film')
-    .sort((a, b) => b.criticScore - a.criticScore);
+    .sort((a, b) => computeJuryIndex(b, 'prestige') - computeJuryIndex(a, 'prestige'));
   const playerSeries = [...playerProjectsInYear]
     .filter((p) => p.format === 'series')
-    .sort((a, b) => b.criticScore - a.criticScore);
+    .sort((a, b) => computeJuryIndex(b, 'prestige') - computeJuryIndex(a, 'prestige'));
   const allPlayerSorted = [...playerProjectsInYear].sort(
-    (a, b) => b.criticScore - a.criticScore
+    (a, b) => computeJuryIndex(b, 'prestige') - computeJuryIndex(a, 'prestige')
   );
   const playerTopBoxOffice = [...playerProjectsInYear].sort(
     (a, b) => b.totalGrossRevenue - a.totalGrossRevenue
@@ -1399,57 +1494,148 @@ export function buildAnnualAwardsGalaForYear(params: {
   const rivalAwardsCountByStudio: Record<string, number> = {};
   const ceremonies: AutomaticFestivalCeremonyItem[] = [];
 
-  // Use the top 2 major annual festivals so the annual ceremony is grand, focused, and never repetitive
+  // Use the top 2 major annual festivals: Fest #1 = Artistic Prestige Jury, Fest #2 = Grand Industry & Audience Gala
   const annualFestivals = db.festivals.slice(0, 2);
 
   annualFestivals.forEach((fest, fIdx) => {
-    const strictnessOffset = fIdx === 0 ? 0.1 : -0.15;
+    const juryMode: 'prestige' | 'popular' = fIdx === 0 ? 'prestige' : 'popular';
     const festDisplayName = localizeEntityName(fest.name, uiLang);
 
-    // 1. Best Film of the Year
-    const rivalFilmTargetScore = (fIdx === 0 ? topRivalFilm1.criticScore : topRivalFilm2.criticScore) + strictnessOffset;
-    const playerWinsBestFilm =
-      Boolean(bestPlayerFilm) &&
-      bestPlayerFilm.criticScore >= rivalFilmTargetScore;
+    // 1. Best Film of the Year (Strict Jury Index vs formidable rival films)
     const winningRivalFilm = fIdx === 0 ? topRivalFilm1 : topRivalFilm2;
+    const rivalFilmAudience = winningRivalFilm.audienceScore ?? winningRivalFilm.criticScore;
+    const rivalFilmIndex = Number(
+      (
+        juryMode === 'prestige'
+          ? winningRivalFilm.criticScore * 0.72 + rivalFilmAudience * 0.28 + 0.15
+          : rivalFilmAudience * 0.55 + winningRivalFilm.criticScore * 0.45 + 0.1
+      ).toFixed(2)
+    );
+    const playerFilmIndex = bestPlayerFilm
+      ? computeJuryIndex(bestPlayerFilm, juryMode)
+      : 0;
+    const playerNominatedFilm = Boolean(
+      bestPlayerFilm &&
+        bestPlayerFilm.criticScore >= 7.0 &&
+        playerFilmIndex >= rivalFilmIndex - 0.85
+    );
+    const playerWinsBestFilm = Boolean(
+      bestPlayerFilm &&
+        bestPlayerFilm.criticScore >= (juryMode === 'prestige' ? 7.9 : 7.5) &&
+        playerFilmIndex >= rivalFilmIndex
+    );
 
     // 2. Best Series of the Year
-    const rivalSeriesTargetScore = (fIdx === 0 ? topRivalSeries1.criticScore : topRivalSeries2.criticScore) + strictnessOffset;
-    const playerWinsBestSeries =
-      Boolean(bestPlayerSeries) &&
-      bestPlayerSeries.criticScore >= rivalSeriesTargetScore;
     const winningRivalSeries = fIdx === 0 ? topRivalSeries1 : topRivalSeries2;
-
-    // 3. Best Director of the Year
-    const rivalDirectorTarget = Math.max(topRivalFilm1.criticScore, topRivalSeries1.criticScore) - 0.1 + strictnessOffset;
-    const playerWinsDirector =
-      Boolean(bestPlayerOverall) &&
-      bestPlayerOverall.criticScore >= rivalDirectorTarget;
-
-    // 4. Best Lead Actor / Actress of the Year
-    const playerWinsActor =
-      Boolean(bestPlayerOverall) &&
-      bestPlayerOverall.criticScore >= 7.5 + strictnessOffset &&
-      bestPlayerOverall.audienceScore >= 7.6;
-
-    // 5. Best Screenplay of the Year
-    const bestPlayerScriptWords = bestPlayerOverall
-      ? bestPlayerOverall.synopsis.trim().split(/\s+/).length
-      : 0;
-    const playerWinsScript =
-      Boolean(bestPlayerOverall) &&
-      bestPlayerScriptWords >= 15 &&
-      bestPlayerOverall.criticScore >= 7.6 + strictnessOffset;
-
-    // 6. Golden Box Office Crown (Highest Grossing Work of the Year)
-    const highestRivalGross = Math.max(
-      topRivalFilm1.boxOfficeRevenue,
-      topRivalFilm2.boxOfficeRevenue,
-      topRivalSeries1.boxOfficeRevenue
+    const rivalSeriesAudience = winningRivalSeries.audienceScore ?? winningRivalSeries.criticScore;
+    const rivalSeriesIndex = Number(
+      (
+        juryMode === 'prestige'
+          ? winningRivalSeries.criticScore * 0.72 + rivalSeriesAudience * 0.28 + 0.15
+          : rivalSeriesAudience * 0.55 + winningRivalSeries.criticScore * 0.45 + 0.1
+      ).toFixed(2)
     );
-    const playerWinsBoxOffice =
-      Boolean(playerTopBoxOffice) &&
-      playerTopBoxOffice.totalGrossRevenue >= highestRivalGross;
+    const playerSeriesIndex = bestPlayerSeries
+      ? computeJuryIndex(bestPlayerSeries, juryMode)
+      : 0;
+    const playerNominatedSeries = Boolean(
+      bestPlayerSeries &&
+        bestPlayerSeries.criticScore >= 7.0 &&
+        playerSeriesIndex >= rivalSeriesIndex - 0.85
+    );
+    const playerWinsBestSeries = Boolean(
+      bestPlayerSeries &&
+        bestPlayerSeries.criticScore >= (juryMode === 'prestige' ? 7.9 : 7.5) &&
+        playerSeriesIndex >= rivalSeriesIndex
+    );
+
+    // 3. Best Director of the Year (Requires real Director OVR + high critic craft)
+    const dirOvr = getProjectDirectorOverall(bestPlayerOverall);
+    const playerDirectorIndex = bestPlayerOverall
+      ? Number((bestPlayerOverall.criticScore * 0.65 + (dirOvr / 10) * 0.35).toFixed(2))
+      : 0;
+    const rivalDirectorBenchmark = Number(
+      (
+        Math.max(topRivalFilm1.criticScore, topRivalSeries1.criticScore) * 0.65 +
+        (fIdx === 0 ? 8.85 : 8.55) * 0.35
+      ).toFixed(2)
+    );
+    const playerNominatedDirector = Boolean(
+      bestPlayerOverall && playerDirectorIndex >= rivalDirectorBenchmark - 0.75
+    );
+    const playerWinsDirector = Boolean(
+      bestPlayerOverall &&
+        bestPlayerOverall.criticScore >= 8.0 &&
+        dirOvr >= 80 &&
+        playerDirectorIndex >= rivalDirectorBenchmark
+    );
+
+    // 4. Best Lead Performance (Requires real Lead Actor acting/OVR + critic & audience acclaim)
+    const leadActingNorm = getProjectLeadActingScore(bestPlayerOverall) / 10;
+    const playerActorIndex = bestPlayerOverall
+      ? Number(
+          (
+            leadActingNorm * 0.4 +
+            bestPlayerOverall.criticScore * 0.35 +
+            bestPlayerOverall.audienceScore * 0.25
+          ).toFixed(2)
+        )
+      : 0;
+    const rivalActorBenchmark = Number(
+      (
+        (fIdx === 0 ? 8.7 : 8.55) * 0.4 +
+        topRivalFilm1.criticScore * 0.35 +
+        (topRivalFilm1.audienceScore ?? topRivalFilm1.criticScore) * 0.25
+      ).toFixed(2)
+    );
+    const playerNominatedActor = Boolean(
+      bestPlayerOverall && playerActorIndex >= rivalActorBenchmark - 0.7
+    );
+    const playerWinsActor = Boolean(
+      bestPlayerOverall &&
+        bestPlayerOverall.criticScore >= 7.8 &&
+        bestPlayerOverall.audienceScore >= 7.8 &&
+        playerActorIndex >= rivalActorBenchmark
+    );
+
+    // 5. Best Screenplay (Strict script craft check + zero spam tolerance + critic score >= 8.0)
+    const bestScriptEval = getProjectScriptEval(bestPlayerOverall);
+    const playerScriptIndex =
+      bestPlayerOverall && bestScriptEval && !bestScriptEval.isSpam
+        ? Number(
+            ((bestScriptEval.score / 10) * 0.55 + bestPlayerOverall.criticScore * 0.45).toFixed(2)
+          )
+        : 0;
+    const rivalScriptBenchmark = Number((fIdx === 0 ? 8.55 : 8.25).toFixed(2));
+    const playerNominatedScript = Boolean(
+      bestPlayerOverall &&
+        bestScriptEval &&
+        !bestScriptEval.isSpam &&
+        bestScriptEval.score >= 66 &&
+        playerScriptIndex >= rivalScriptBenchmark - 0.75
+    );
+    const playerWinsScript = Boolean(
+      bestPlayerOverall &&
+        bestScriptEval &&
+        !bestScriptEval.isSpam &&
+        bestScriptEval.score >= 76 &&
+        bestPlayerOverall.criticScore >= 8.0 &&
+        playerScriptIndex >= rivalScriptBenchmark
+    );
+
+    // 6. Golden Box Office Crown (Pure hard revenue showdown vs highest-grossing rival)
+    const topGrossingRival = [topRivalFilm1, topRivalFilm2, topRivalSeries1].sort(
+      (a, b) => b.boxOfficeRevenue - a.boxOfficeRevenue
+    )[0];
+    const highestRivalGross = topGrossingRival.boxOfficeRevenue;
+    const playerNominatedBoxOffice = Boolean(
+      playerTopBoxOffice &&
+        playerTopBoxOffice.totalGrossRevenue >= highestRivalGross * 0.7
+    );
+    const playerWinsBoxOffice = Boolean(
+      playerTopBoxOffice &&
+        playerTopBoxOffice.totalGrossRevenue > highestRivalGross
+    );
 
     const bestPlayerDirectorLoc = bestPlayerOverall
       ? localizeEntityName(bestPlayerOverall.directorName, uiLang)
@@ -1463,28 +1649,66 @@ export function buildAnnualAwardsGalaForYear(params: {
     const scriptLabel = (title: string) =>
       isEn ? `Screenplay: "${title}"` : `سيناريو «${title}»`;
 
+    const buildMarginNote = (
+      won: boolean,
+      nominated: boolean,
+      pScore: number,
+      rScore: number,
+      hasEntry: boolean
+    ): string => {
+      if (!hasEntry) {
+        return isEn ? 'No eligible studio entry this year' : 'لا يوجد عمل مؤهل من استوديوك هذا العام';
+      }
+      if (won) {
+        return isEn
+          ? `Jury Index ${pScore.toFixed(1)} vs ${rScore.toFixed(1)} — Clear Victory`
+          : `مؤشر التحكيم ${pScore.toFixed(1)} مقابل ${rScore.toFixed(1)} — فوز مستحق`;
+      }
+      if (nominated) {
+        return isEn
+          ? `Shortlisted (${pScore.toFixed(1)}) — Edged out by ${rScore.toFixed(1)}`
+          : `ترشّحت للقائمة القصيرة (${pScore.toFixed(1)}) — حسمها المنافس بـ ${rScore.toFixed(1)}`;
+      }
+      return isEn
+        ? `Missed shortlist (${pScore.toFixed(1)} vs ${rScore.toFixed(1)} cutoff)`
+        : `خارج الترشح (${pScore.toFixed(1)} مقابل حد المنافسة ${rScore.toFixed(1)})`;
+    };
+
     const awards: FestivalAwardWinnerItem[] = [
       {
-        category: isEn
-          ? 'Best Motion Picture of the Year'
-          : 'جائزة أفضل فيلم سينمائي للعام',
-        nominees: bestPlayerFilm
-          ? [bestPlayerFilm.title, topRivalFilm1.title, topRivalFilm2.title]
-          : [topRivalFilm1.title, topRivalFilm2.title, fallbackFilmTitle3],
-        winner: playerWinsBestFilm && bestPlayerFilm ? bestPlayerFilm.title : winningRivalFilm.title,
+        category: isEn ? 'Best Motion Picture' : 'أفضل فيلم سينمائي',
+        nominees:
+          bestPlayerFilm && playerNominatedFilm
+            ? [bestPlayerFilm.title, topRivalFilm1.title, topRivalFilm2.title]
+            : [topRivalFilm1.title, topRivalFilm2.title, fallbackFilmTitle3],
+        winner:
+          playerWinsBestFilm && bestPlayerFilm
+            ? bestPlayerFilm.title
+            : winningRivalFilm.title,
         winningProjectTitle:
-          playerWinsBestFilm && bestPlayerFilm ? bestPlayerFilm.title : winningRivalFilm.title,
+          playerWinsBestFilm && bestPlayerFilm
+            ? bestPlayerFilm.title
+            : winningRivalFilm.title,
         winningStudioName:
-          playerWinsBestFilm && bestPlayerFilm ? studioName : winningRivalFilm.studioName,
+          playerWinsBestFilm && bestPlayerFilm
+            ? studioName
+            : winningRivalFilm.studioName,
         isPlayerWinner: Boolean(playerWinsBestFilm && bestPlayerFilm),
+        playerNominated: playerNominatedFilm,
+        marginNote: buildMarginNote(
+          playerWinsBestFilm,
+          playerNominatedFilm,
+          playerFilmIndex,
+          rivalFilmIndex,
+          Boolean(bestPlayerFilm)
+        ),
       },
       {
-        category: isEn
-          ? 'Best Drama Series of the Year'
-          : 'جائزة أفضل مسلسل درامي للعام',
-        nominees: bestPlayerSeries
-          ? [bestPlayerSeries.title, topRivalSeries1.title, topRivalSeries2.title]
-          : [topRivalSeries1.title, topRivalSeries2.title, fallbackSeriesTitle3],
+        category: isEn ? 'Best Drama Series' : 'أفضل مسلسل درامي',
+        nominees:
+          bestPlayerSeries && playerNominatedSeries
+            ? [bestPlayerSeries.title, topRivalSeries1.title, topRivalSeries2.title]
+            : [topRivalSeries1.title, topRivalSeries2.title, fallbackSeriesTitle3],
         winner:
           playerWinsBestSeries && bestPlayerSeries
             ? bestPlayerSeries.title
@@ -1498,22 +1722,29 @@ export function buildAnnualAwardsGalaForYear(params: {
             ? studioName
             : winningRivalSeries.studioName,
         isPlayerWinner: Boolean(playerWinsBestSeries && bestPlayerSeries),
+        playerNominated: playerNominatedSeries,
+        marginNote: buildMarginNote(
+          playerWinsBestSeries,
+          playerNominatedSeries,
+          playerSeriesIndex,
+          rivalSeriesIndex,
+          Boolean(bestPlayerSeries)
+        ),
       },
       {
-        category: isEn
-          ? 'Best Director of the Year'
-          : 'جائزة أفضل إخراج في العام',
-        nominees: bestPlayerOverall
-          ? [
-              bestPlayerDirectorLoc,
-              topRivalFilm1.directorName || fallbackDir1,
-              topRivalSeries1.directorName || fallbackDir2,
-            ]
-          : [
-              topRivalFilm1.directorName || fallbackDir1,
-              topRivalFilm2.directorName || fallbackDir2,
-              topRivalSeries1.directorName || fallbackDir3,
-            ],
+        category: isEn ? 'Best Director' : 'أفضل إخراج',
+        nominees:
+          bestPlayerOverall && playerNominatedDirector
+            ? [
+                bestPlayerDirectorLoc,
+                topRivalFilm1.directorName || fallbackDir1,
+                topRivalSeries1.directorName || fallbackDir2,
+              ]
+            : [
+                topRivalFilm1.directorName || fallbackDir1,
+                topRivalFilm2.directorName || fallbackDir2,
+                topRivalSeries1.directorName || fallbackDir3,
+              ],
         winner:
           playerWinsDirector && bestPlayerOverall
             ? bestPlayerDirectorLoc
@@ -1527,18 +1758,25 @@ export function buildAnnualAwardsGalaForYear(params: {
             ? studioName
             : topRivalFilm1.studioName,
         isPlayerWinner: Boolean(playerWinsDirector && bestPlayerOverall),
+        playerNominated: playerNominatedDirector,
+        marginNote: buildMarginNote(
+          playerWinsDirector,
+          playerNominatedDirector,
+          playerDirectorIndex,
+          rivalDirectorBenchmark,
+          Boolean(bestPlayerOverall)
+        ),
       },
       {
-        category: isEn
-          ? 'Best Lead Performance'
-          : 'جائزة أفضل تمثيل (دور أول)',
-        nominees: bestPlayerOverall
-          ? [
-              bestPlayerLeadLoc,
-              topRivalFilm1.leadStarName,
-              topRivalSeries1.leadStarName,
-            ]
-          : [topRivalFilm1.leadStarName, topRivalSeries1.leadStarName, topRivalFilm2.leadStarName],
+        category: isEn ? 'Best Lead Performance' : 'أفضل تمثيل (دور أول)',
+        nominees:
+          bestPlayerOverall && playerNominatedActor
+            ? [
+                bestPlayerLeadLoc,
+                topRivalFilm1.leadStarName,
+                topRivalSeries1.leadStarName,
+              ]
+            : [topRivalFilm1.leadStarName, topRivalSeries1.leadStarName, topRivalFilm2.leadStarName],
         winner:
           playerWinsActor && bestPlayerOverall
             ? bestPlayerLeadLoc
@@ -1558,14 +1796,21 @@ export function buildAnnualAwardsGalaForYear(params: {
             ? topRivalFilm1.studioName
             : topRivalSeries1.studioName,
         isPlayerWinner: Boolean(playerWinsActor && bestPlayerOverall),
+        playerNominated: playerNominatedActor,
+        marginNote: buildMarginNote(
+          playerWinsActor,
+          playerNominatedActor,
+          playerActorIndex,
+          rivalActorBenchmark,
+          Boolean(bestPlayerOverall)
+        ),
       },
       {
-        category: isEn
-          ? 'Best Screenplay & Dramatic Writing'
-          : 'جائزة أفضل سيناريو وحبكة درامية',
-        nominees: bestPlayerOverall
-          ? [scriptLabel(bestPlayerOverall.title), scriptLabel(topRivalSeries1.title)]
-          : [scriptLabel(topRivalSeries1.title), scriptLabel(topRivalFilm2.title)],
+        category: isEn ? 'Best Screenplay' : 'أفضل سيناريو وحبكة',
+        nominees:
+          bestPlayerOverall && playerNominatedScript
+            ? [scriptLabel(bestPlayerOverall.title), scriptLabel(topRivalSeries1.title)]
+            : [scriptLabel(topRivalSeries1.title), scriptLabel(topRivalFilm2.title)],
         winner:
           playerWinsScript && bestPlayerOverall
             ? scriptLabel(bestPlayerOverall.title)
@@ -1579,27 +1824,46 @@ export function buildAnnualAwardsGalaForYear(params: {
             ? studioName
             : topRivalSeries1.studioName,
         isPlayerWinner: Boolean(playerWinsScript && bestPlayerOverall),
+        playerNominated: playerNominatedScript,
+        marginNote: buildMarginNote(
+          playerWinsScript,
+          playerNominatedScript,
+          playerScriptIndex,
+          rivalScriptBenchmark,
+          Boolean(bestPlayerOverall)
+        ),
       },
       {
-        category: isEn
-          ? 'Golden Box Office Crown (Highest Annual Gross)'
-          : 'جائزة قمة شباك التذاكر الذهبية (أعلى إيراد سنوي)',
-        nominees: playerTopBoxOffice
-          ? [playerTopBoxOffice.title, topRivalFilm1.title, topRivalFilm2.title]
-          : [topRivalFilm1.title, topRivalFilm2.title],
+        category: isEn ? 'Golden Box Office Crown' : 'تاج شباك التذاكر الذهبي',
+        nominees:
+          playerTopBoxOffice && playerNominatedBoxOffice
+            ? [playerTopBoxOffice.title, topGrossingRival.title, topRivalFilm2.title]
+            : [topGrossingRival.title, topRivalFilm2.title],
         winner:
           playerWinsBoxOffice && playerTopBoxOffice
             ? `${playerTopBoxOffice.title} (${formatMoney(playerTopBoxOffice.totalGrossRevenue)} ${curLabel})`
-            : `${topRivalFilm1.title} (${formatMoney(topRivalFilm1.boxOfficeRevenue)} ${curLabel})`,
+            : `${topGrossingRival.title} (${formatMoney(topGrossingRival.boxOfficeRevenue)} ${curLabel})`,
         winningProjectTitle:
           playerWinsBoxOffice && playerTopBoxOffice
             ? playerTopBoxOffice.title
-            : topRivalFilm1.title,
+            : topGrossingRival.title,
         winningStudioName:
           playerWinsBoxOffice && playerTopBoxOffice
             ? studioName
-            : topRivalFilm1.studioName,
+            : topGrossingRival.studioName,
         isPlayerWinner: Boolean(playerWinsBoxOffice && playerTopBoxOffice),
+        playerNominated: playerNominatedBoxOffice,
+        marginNote: !playerTopBoxOffice
+          ? isEn
+            ? 'No studio releases in theaters this year'
+            : 'لا توجد إيرادات للاستوديو هذا العام'
+          : playerWinsBoxOffice
+          ? isEn
+            ? `Beat #1 rival (${formatMoney(highestRivalGross)} ${curLabel})`
+            : `تفوقت على أعلى منافس (${formatMoney(highestRivalGross)} ${curLabel})`
+          : isEn
+          ? `Your best: ${formatMoney(playerTopBoxOffice.totalGrossRevenue)} vs ${formatMoney(highestRivalGross)} ${curLabel}`
+          : `أعلى إيراد لك ${formatMoney(playerTopBoxOffice.totalGrossRevenue)} مقابل ${formatMoney(highestRivalGross)} ${curLabel}`,
       },
     ];
 
@@ -1626,6 +1890,7 @@ export function buildAnnualAwardsGalaForYear(params: {
     }
 
     const playerWonCount = awards.filter((a) => a.isPlayerWinner).length;
+    const playerNomCount = awards.filter((a) => a.playerNominated).length;
     const playerTitlesSummary =
       playerProjectsInYear.length > 0
         ? playerProjectsInYear
@@ -1639,8 +1904,8 @@ export function buildAnnualAwardsGalaForYear(params: {
       id: `annual_gala_${year}_${fest.id}`,
       festivalId: fest.id,
       festivalName: isEn
-        ? `${festDisplayName} — ${year} Annual Gala`
-        : `${fest.name} — الحفل السنوي لعام ${year}`,
+        ? `${festDisplayName} · ${year}`
+        : `${fest.name} · ${year}`,
       prestige: fest.prestige,
       year,
       playerProjectTitle:
@@ -1648,22 +1913,30 @@ export function buildAnnualAwardsGalaForYear(params: {
         (isEn ? `${year} Cinema Season` : 'موسم العام السينمائي'),
       juryStatement: isEn
         ? playerProjectsInYear.length === 0
-          ? `${festDisplayName} (${year}) concluded with ${topRivalFilm1.studioName} and ${topRivalSeries1.studioName} sweeping the top prizes in the absence of releases from ${studioName} this year.`
+          ? `${topRivalFilm1.studioName} and ${topRivalSeries1.studioName} swept the ${year} trophies in ${studioName}’s absence.`
           : playerWonCount >= 3
-          ? `A historic night for ${studioName} at ${festDisplayName} (${year})! The jury praised ${playerTitlesSummary} and awarded you ${playerWonCount} major honors after a fierce showdown with ${topRivalFilm1.studioName}.`
+          ? `Historic triumph! ${studioName} (${playerTitlesSummary}) conquered the strict jury with ${playerWonCount} major honors.`
           : playerWonCount >= 1
-          ? `Fierce competition at ${festDisplayName} (${year}): ${studioName} (${playerTitlesSummary}) claimed ${playerWonCount} well-earned award(s), while ${topRivalFilm1.studioName} and ${topRivalSeries1.studioName} split the remaining honors.`
-          : `An intense race at ${festDisplayName} (${year}): despite shortlist nominations for ${playerTitlesSummary}, releases from ${topRivalFilm1.studioName} and ${topRivalSeries1.studioName} edged ahead on critics’ scores.`
+          ? `Hard-fought gala: ${studioName} earned ${playerWonCount} trophy (${playerNomCount} shortlisted) against fierce rivals.`
+          : playerNomCount > 0
+          ? `Tough night for ${studioName}: ${playerNomCount} shortlist nominations for ${playerTitlesSummary}, but rivals edged ahead on jury craft.`
+          : `Zero nominations this year—the jury demanded higher critic craft, script depth, and elite talent.`
         : playerProjectsInYear.length === 0
-        ? `اختتمت فعاليات ${fest.name} لعام ${year}، وحسمت أعمال «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» جوائز العام الكبرى في غياب مشاركات من استوديو «${studioName}» هذا العام.`
+        ? `حسمت «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» جوائز ${year} في غياب أعمال لاستوديوك.`
         : playerWonCount >= 3
-        ? `ليلة تاريخية لاستوديو «${studioName}» في الحفل السنوي لـ ${fest.name} (${year})! أشادت لجنة التحكيم بأعمالكم ${playerTitlesSummary} ومنحتكم ${playerWonCount} جوائز كبرى بعد منافسة شرسة مع «${topRivalFilm1.studioName}».`
+        ? `ليلة تاريخية! انتزع «${studioName}» (${playerTitlesSummary}) ${playerWonCount} جوائز كبرى من لجنة تحكيم صارمة.`
         : playerWonCount >= 1
-        ? `منافسة قوية في الحفل السنوي لـ ${fest.name} (${year})؛ حصدت أعمال «${studioName}» (${playerTitlesSummary}) ${playerWonCount} جائزة مستحقة، بينما انتزعت «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» باقي جوائز العام.`
-        : `شهد الحفل السنوي لـ ${fest.name} (${year}) منافسة نارية؛ ورغم ترشح ${playerTitlesSummary} في القائمة القصيرة، تفوقت أفلام ومسلسلات «${topRivalFilm1.studioName}» و«${topRivalSeries1.studioName}» بفارق التقييمات النقدية.`,
+        ? `منافسة شرسة: حصد «${studioName}» ${playerWonCount} جائزة مستحقة (من أصل ${playerNomCount} ترشيحات) وسط تفوق المنافسين.`
+        : playerNomCount > 0
+        ? `ليلة صعبة على «${studioName}»: ${playerNomCount} ترشيحات لـ${playerTitlesSummary}، لكن المنافسين حسموا الجوائز بفارق التقييم.`
+        : `دون ترشيحات هذا العام — لجنة التحكيم الصارمة اشترطت جودة نقدية وورقاً ونجوماً أقوى.`,
       festivalBuzz: isEn
-        ? `Year-End Awards Gala (${year}) — red carpet packed with top stars, filmmakers, and industry press.`
-        : `حفل توزيع جوائز نهاية العام (${year}) وسط حضور كافة نجوم وصناع السينما والدراما على السجادة الحمراء.`,
+        ? juryMode === 'prestige'
+          ? 'Critics & Craft Jury Gala'
+          : 'Grand Audience & Box Office Gala'
+        : juryMode === 'prestige'
+        ? 'لجنة تحكيم النقاد والصنعة الفنية'
+        : 'حفل الجمهور وشباك التذاكر الكبرى',
       awards,
       playerWonCount,
     });
@@ -1761,11 +2034,14 @@ export interface NeelyoGameState {
   isBankruptLiquidated: boolean;
   lastEmergencyBailoutDay: number | null;
   onboardingTourStatus: OnboardingTourStatus;
+  releaseViewInitialStep: 1 | 2;
 
   // Actions
   setChildModalOpen: (open: boolean) => void;
   setPrWarRoomOpen: (open: boolean) => void;
   setStarForgeOpen: (open: boolean) => void;
+  openLiveReleaseDashboard: (projectId?: string) => void;
+  consumeReleaseViewInitialStep: () => void;
   setOnboardingTourStatus: (status: OnboardingTourStatus) => void;
   unlockNextStarForgeLockWithAd: () => void;
   watchRewardedAdForVipCoins: () => void;
@@ -1863,10 +2139,10 @@ export interface NeelyoGameState {
 
 const DEFAULT_DRAFT: ActiveDraftProject = {
   format: 'film',
-  episodes: 15,
+  episodes: 7,
   seriesSeason: 'ramadan',
   filmSeason: 'eid_adha',
-  primaryGenre: 'action',
+  primaryGenre: 'comedy',
   secondaryGenre: 'popular_drama',
   ageRating: '+12',
   title: '',
@@ -1885,19 +2161,19 @@ const DEFAULT_DRAFT: ActiveDraftProject = {
   negotiatedDiscounts: {},
   talentOffers: {},
   budgetAllocation: {
-    setsAndLocations: 8_000_000,
-    costumesAndMakeup: 4_000_000,
-    vfxAndStunts: 10_000_000,
-    extrasAndCrowds: 3_000_000,
+    setsAndLocations: 2_500_000,
+    costumesAndMakeup: 1_500_000,
+    vfxAndStunts: 2_000_000,
+    extrasAndCrowds: 1_000_000,
   },
-  marketingBudget: 15_000_000,
-  screensCount: 140,
+  marketingBudget: 3_000_000,
+  screensCount: 65,
   selectedDistributionMarkets: ['egypt'],
   selectedPlatformId: 'plat_1',
-  platformDealAmount: 28_000_000,
+  platformDealAmount: 14_000_000,
   selectedTvChannelId: 'tv_1',
-  tvChannelDealAmount: 22_000_000,
-  hypeScore: 30,
+  tvChannelDealAmount: 12_000_000,
+  hypeScore: 24,
   qualityModifier: 0,
   crises: [],
   juryBribed: false,
@@ -1945,10 +2221,10 @@ export const useGameStore = create<NeelyoGameState>()(
       founderPerk: 'visionary_director',
       currentRegion: 'egypt',
       unlockedRegions: ['egypt'],
-      cash: 75_000_000,
-      marketValue: 110_000_000,
+      cash: STARTING_INDIE_CASH,
+      marketValue: STARTING_INDIE_MARKET_VALUE,
       marketValueModifier: 0,
-      reputation: 62,
+      reputation: STARTING_INDIE_REPUTATION,
       currentYear: 2026,
       gameDay: 1,
       lastAwardsGalaYear: 2025,
@@ -1997,10 +2273,23 @@ export const useGameStore = create<NeelyoGameState>()(
       isBankruptLiquidated: false,
       lastEmergencyBailoutDay: null,
       onboardingTourStatus: 'pending_choice',
+      releaseViewInitialStep: 1,
 
       setChildModalOpen: (open) => set({ isChildModalOpen: open }),
       setPrWarRoomOpen: (open) => set({ isPrWarRoomOpen: open }),
       setStarForgeOpen: (open) => set({ isStarForgeOpen: open }),
+      openLiveReleaseDashboard: (projectId) =>
+        set((state) => {
+          const matched = projectId
+            ? state.releasedProjects.find((p) => p.id === projectId)
+            : null;
+          return {
+            ...(matched ? { lastReleasedProject: matched } : {}),
+            releaseViewInitialStep: 2,
+            activeScreen: 'RELEASE_SIMULATION',
+          };
+        }),
+      consumeReleaseViewInitialStep: () => set({ releaseViewInitialStep: 1 }),
       setOnboardingTourStatus: (status) => set({ onboardingTourStatus: status }),
 
       unlockNextStarForgeLockWithAd: () =>
@@ -2334,10 +2623,10 @@ export const useGameStore = create<NeelyoGameState>()(
             activeScreen: 'STUDIO_CREATION',
             currentRegion: primaryReg,
             unlockedRegions: [primaryReg],
-            cash: 75_000_000,
-            marketValue: 110_000_000,
+            cash: STARTING_INDIE_CASH,
+            marketValue: STARTING_INDIE_MARKET_VALUE,
             marketValueModifier: 0,
-            reputation: 60,
+            reputation: STARTING_INDIE_REPUTATION,
             ownedStudioAssets: [],
             releasedProjects: [],
             lastReleasedProject: null,
@@ -2377,8 +2666,8 @@ export const useGameStore = create<NeelyoGameState>()(
         enqueueServerLedgerSync(get, set, {
           transactionType: 'INIT_STUDIO',
           amountDelta: 0,
-          previousCash: 75_000_000,
-          expectedNewCash: 75_000_000,
+          previousCash: STARTING_INDIE_CASH,
+          expectedNewCash: STARTING_INDIE_CASH,
           itemLabel: 'تصفية وتأسيس استوديو جديد',
         });
       },
@@ -3394,9 +3683,10 @@ export const useGameStore = create<NeelyoGameState>()(
             founderPerk,
             currentRegion: primaryReg,
             unlockedRegions: [primaryReg],
-            cash: 75_000_000,
-            marketValue: 110_000_000,
+            cash: STARTING_INDIE_CASH,
+            marketValue: STARTING_INDIE_MARKET_VALUE,
             marketValueModifier: 0,
+            reputation: STARTING_INDIE_REPUTATION,
             currentYear: isContinuingSameWorld ? state.currentYear : 2026,
             gameDay: isContinuingSameWorld ? state.gameDay : 1,
             lastAwardsGalaYear: isContinuingSameWorld ? state.lastAwardsGalaYear : 2025,
@@ -3421,8 +3711,8 @@ export const useGameStore = create<NeelyoGameState>()(
                   {
                     year: state.currentYear,
                     eventText: isEn
-                      ? `Dramatic comeback: founded "${cleanStudio}" led by ${cleanCeo} with 75M ${curLabel} in the ${state.currentYear} cinema market.`
-                      : `عودة مدوية للسوق: تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} بسيولة 75M ${curLabel} في نفس العالم السينمائي لعام ${state.currentYear}.`,
+                      ? `Dramatic comeback: founded "${cleanStudio}" led by ${cleanCeo} with 25M ${curLabel} in the ${state.currentYear} cinema market.`
+                      : `عودة مدوية للسوق: تأسيس مكتب «${cleanStudio}» المستقل بقيادة ${cleanCeo} بسيولة 25M ${curLabel} في نفس العالم السينمائي لعام ${state.currentYear}.`,
                     category: 'milestone',
                   },
                   ...state.worldHistory,
@@ -3431,30 +3721,30 @@ export const useGameStore = create<NeelyoGameState>()(
                   {
                     year: 2026,
                     eventText: isEn
-                      ? `Founded "${cleanStudio}" led by ${cleanCeo} in ${marketCountryEn} with 75M ${curLabel} cash and 110M ${curLabel} valuation.`
-                      : `تأسيس شركة "${cleanStudio}" بقيادة ${cleanCeo} في سوق ${profile.countryNameAr} بسيولة خزينة 75M ${curLabel} وقيمة سوقية 110M ${curLabel}.`,
+                      ? `Founded independent production office "${cleanStudio}" led by ${cleanCeo} in ${marketCountryEn} with 25M ${curLabel} cash and 30% reputation.`
+                      : `تأسيس مكتب الإنتاج المستقل «${cleanStudio}» بقيادة ${cleanCeo} في سوق ${profile.countryNameAr} برأس مال 25M ${curLabel} وسمعة 30%.`,
                     category: 'milestone',
                   },
                 ],
             aiMemoryLog: isContinuingSameWorld
               ? [
                   isEn
-                    ? `Producer ${cleanCeo} founded "${cleanStudio}" with 75M ${curLabel} in ${state.currentYear} after selling their previous studio.`
-                    : `أسس المنتج ${cleanCeo} شركة جديدة باسم "${cleanStudio}" بسيولة 75M ${curLabel} في عام ${state.currentYear} بعد بيع شركته السابقة للمستثمرين.`,
+                    ? `Producer ${cleanCeo} founded "${cleanStudio}" with 25M ${curLabel} in ${state.currentYear} after selling their previous studio.`
+                    : `أسس المنتج ${cleanCeo} مكتباً إنتاجياً جديداً باسم "${cleanStudio}" بسيولة 25M ${curLabel} في عام ${state.currentYear}.`,
                   ...(state.aiMemoryLog || []),
                 ].slice(0, 25)
               : [
                   isEn
-                    ? `Producer ${cleanCeo} launched "${cleanStudio}" in the ${marketCountryEn} cinema market with 75M ${curLabel} treasury and 110M ${curLabel} valuation.`
-                    : `أسس المنتج ${cleanCeo} شركة "${cleanStudio}" في عالم ${profile.marketHeadline} بسيولة خزينة 75M ${curLabel} وقيمة سوقية ابتدائية 110M ${curLabel}.`,
+                    ? `Producer ${cleanCeo} launched independent office "${cleanStudio}" in the ${marketCountryEn} cinema market with 25M ${curLabel} treasury.`
+                    : `أسس المنتج ${cleanCeo} مكتب الإنتاج المستقل "${cleanStudio}" في عالم ${profile.marketHeadline} بسيولة 25M ${curLabel}.`,
                 ],
           };
         });
         enqueueServerLedgerSync(get, set, {
           transactionType: 'INIT_STUDIO',
           amountDelta: 0,
-          previousCash: 75_000_000,
-          expectedNewCash: 75_000_000,
+          previousCash: STARTING_INDIE_CASH,
+          expectedNewCash: STARTING_INDIE_CASH,
           itemLabel: get().uiLanguage === 'en' ? 'New Studio Founded' : 'تأسيس استوديو جديد',
         });
       },
@@ -3493,6 +3783,15 @@ export const useGameStore = create<NeelyoGameState>()(
         const isEn = state.uiLanguage === 'en';
         const cfg = marketConfigs.find((c) => c.id === region) || MARKET_CONFIGS.find((c) => c.id === region);
         if (!cfg) return false;
+        const prog = computeStudioProgression({
+          marketValue: state.marketValue,
+          releasedProjects: state.releasedProjects,
+          uiLanguage: state.uiLanguage,
+        });
+        const reqLevel = getMarketRegionRequiredLevel(region, primaryReg);
+        if (prog.level < reqLevel) {
+          return false;
+        }
         const regionLabel = isEn
           ? region === 'egypt'
             ? 'Egyptian Market'
@@ -3806,7 +4105,15 @@ export const useGameStore = create<NeelyoGameState>()(
                   offer.roleSlot === 'cinematographer' ||
                   offer.roleSlot === 'composer' ||
                   offer.roleSlot === 'editor_vfx';
-                const maxForSlot = SLOT_MAX_CAPACITY[offer.roleSlot] || 1;
+                const dirCapForLevel = computeStudioProgression({
+                  marketValue: state.marketValue,
+                  releasedProjects: state.releasedProjects,
+                  uiLanguage: state.uiLanguage,
+                }).maxDirectors;
+                const maxForSlot =
+                  offer.roleSlot === 'director'
+                    ? dirCapForLevel
+                    : SLOT_MAX_CAPACITY[offer.roleSlot] || 1;
                 const exceedsCrewCapacity =
                   isCrewSlot &&
                   !currentSlotIds.includes(offer.talentId) &&
@@ -4162,12 +4469,124 @@ export const useGameStore = create<NeelyoGameState>()(
             });
           }
 
+          // 5B. MONTHLY OPERATING EXPENSES (Real Cash Burn every 10 game days = 1 calendar month!)
+          const prevMonthIdx = Math.floor(state.gameDay / 10);
+          const nextMonthIdx = Math.floor(newGameDay / 10);
+          const progBefore = computeStudioProgression({
+            marketValue: state.marketValue,
+            releasedProjects: state.releasedProjects,
+            uiLanguage: state.uiLanguage,
+          });
+          if (state.studioCreated && nextMonthIdx > prevMonthIdx) {
+            const monthsPassed = nextMonthIdx - prevMonthIdx;
+            const totalOverhead = progBefore.monthlyOverhead * monthsPassed;
+            nextCash = nextCash - totalOverhead;
+            nextHistory.unshift({
+              year: newYear,
+              eventText: isEn
+                ? `Monthly studio overhead & staff payroll deducted: -${formatMoney(totalOverhead)} ${curLabel} (Lv.${progBefore.level}).`
+                : `خصم مصاريف التشغيل الشهرية (إيجار المكتب ورواتب الموظفين): -${formatMoney(totalOverhead)} ${curLabel} (المستوى ${progBefore.level}).`,
+              category: 'milestone',
+            });
+            nextActiveToast = {
+              id: `overhead_${newGameDay}`,
+              message: isEn
+                ? `Monthly overhead deducted (-${formatMoney(totalOverhead)} ${curLabel})`
+                : `خصم مصاريف التشغيل الشهرية (-${formatMoney(totalOverhead)} ${curLabel})`,
+              type: nextCash <= 5_000_000 ? 'warning' : 'info',
+            };
+          }
+
+          // 5C. RIVAL TALENT POACHING (Rivals lock A/S-Tier stars for 15-25 shooting days!)
+          if (
+            state.studioCreated &&
+            (newGameDay === 2 || newGameDay % 6 === 0)
+          ) {
+            const allCompetitors = [...db.competitor_studios, ...nextEmergingStudios];
+            const draftProtectedIds = new Set<string>([
+              ...updatedDraft.leadActorIds,
+              ...(updatedDraft.antagonistId ? [updatedDraft.antagonistId] : []),
+              ...updatedDraft.supportingActorIds,
+              ...updatedDraft.cameoActorIds,
+              ...Object.keys(updatedOffers),
+            ]);
+
+            const currentlyBusyCount = liveActors.filter(
+              (a) =>
+                (a.tier === 'S' || a.tier === 'A') &&
+                a.busyUntilDay &&
+                a.busyUntilDay > newGameDay
+            ).length;
+
+            // Keep 5-8 top stars actively shooting for rival studios at any given time
+            const targetBusyCount = 7;
+            const neededBookings = Math.max(0, targetBusyCount - currentlyBusyCount);
+            if (neededBookings > 0 && allCompetitors.length > 0) {
+              const poachCandidates = liveActors.filter(
+                (a) =>
+                  a.status === 'active' &&
+                  !a.isCustomStar &&
+                  (a.tier === 'S' || a.tier === 'A') &&
+                  !draftProtectedIds.has(a.id) &&
+                  (!a.busyUntilDay || a.busyUntilDay <= newGameDay)
+              );
+              const picks = Math.min(neededBookings, 3, poachCandidates.length);
+              for (let i = 0; i < picks; i++) {
+                const idx = (newGameDay * 13 + i * 7 + state.currentYear) % poachCandidates.length;
+                const targetActor = poachCandidates.splice(idx, 1)[0];
+                if (!targetActor) break;
+                const rivalStudio =
+                  allCompetitors[(newGameDay + i * 3) % allCompetitors.length];
+                const shootDays = 15 + ((newGameDay + i * 5) % 11); // 15–25 days
+                const prevDyn = nextActorDynamic[targetActor.id] || {
+                  overallDelta: 0,
+                  actingDelta: 0,
+                  charismaDelta: 0,
+                  pullDelta: 0,
+                  salaryMultiplier: 1,
+                };
+                nextActorDynamic[targetActor.id] = {
+                  ...prevDyn,
+                  busyUntilDay: newGameDay + shootDays,
+                  busyWithStudio: rivalStudio.name,
+                };
+              }
+            }
+          }
+
           const nextMarketValue = calculateStudioMarketValue({
             cash: nextCash,
             reputation: nextRep,
             releasedProjects: nextReleasedProjects,
             marketValueModifier: nextMarketValMod,
           });
+
+          // 5D. Check if Awards Gala or Revenue triggered a Studio Level Promotion!
+          const progAfterDay = computeStudioProgression({
+            marketValue: nextMarketValue,
+            releasedProjects: nextReleasedProjects,
+            uiLanguage: state.uiLanguage,
+          });
+          if (state.studioCreated && progAfterDay.level > progBefore.level) {
+            newNewsItems.push({
+              id: `promo_lv_${progAfterDay.level}_${newGameDay}`,
+              day: newGameDay,
+              year: newYear,
+              category: 'production_news',
+              badgeLabel: isEn
+                ? `Studio Promoted · Level ${progAfterDay.level} Unlocked!`
+                : `ترقية الاستوديو · فتح المستوى ${progAfterDay.level}!`,
+              headline: isEn
+                ? `${state.studioName} promoted to "${progAfterDay.title}"!`
+                : `ترقية «${state.studioName}» رسمياً إلى مستوى «${progAfterDay.title}»!`,
+              detail: progAfterDay.subtitle,
+              highlightName: progAfterDay.title,
+              extraStatBadge: isEn
+                ? `Level ${progAfterDay.level}/4 · Overhead ${formatMoney(progAfterDay.monthlyOverhead)}/mo`
+                : `المستوى ${progAfterDay.level}/4 · مصاريف ${formatMoney(progAfterDay.monthlyOverhead)} شهرياً`,
+              gameImpactLabel: progAfterDay.subtitle,
+            });
+          }
 
           // 6. Bankruptcy Grace Period & Mandatory Liquidation Tracking (30 game days = 3 game months)
           let nextBankruptcyDeadline = state.bankruptcyDeadlineDay;
@@ -4308,16 +4727,25 @@ export const useGameStore = create<NeelyoGameState>()(
                 ...(updatedDraft.directorId ? [updatedDraft.directorId] : []),
               ])
             );
+            const maxDirsAllowed = computeStudioProgression({
+              marketValue: state.marketValue,
+              releasedProjects: state.releasedProjects,
+              uiLanguage: state.uiLanguage,
+            }).maxDirectors;
             let nextDirs: string[];
             if (currentDirs.includes(talentId)) {
               nextDirs = currentDirs.filter((id) => id !== talentId);
             } else {
-              if (currentDirs.length >= 2) {
+              if (currentDirs.length >= maxDirsAllowed) {
                 return {
                   activeToast: {
                     id: `toast_dir_limit_${Date.now()}`,
                     message:
-                      state.uiLanguage === 'en'
+                      maxDirsAllowed === 1
+                        ? state.uiLanguage === 'en'
+                          ? 'Your studio can sign 1 director right now. Reach Level 3 (250M value + 1 festival award) to hire 2 co-directors!'
+                          : 'مستوى الاستوديو يسمح بمخرج واحد حالياً. وصل للمستوى 3 (قيمة 250M + جائزة مهرجان) للتعاقد مع مخرجَين!'
+                        : state.uiLanguage === 'en'
                         ? 'Maximum directing team is 2 directors (1 to 2)! Deselect one director first to pick another.'
                         : 'الحد الأقصى لفريق الإخراج هو مخرجان اثنان فقط (من 1 إلى 2)! ألغِ اعتماد أحد المخرجين أولاً لاختيار مخرج آخر.',
                     type: 'warning',
@@ -4604,16 +5032,33 @@ export const useGameStore = create<NeelyoGameState>()(
         set((state) => {
           const newCash = state.cash - finalRecord.totalBudget + netInitialGross;
           const nextProjects = [finalRecord, ...state.releasedProjects];
+          const progBeforeRelease = computeStudioProgression({
+            marketValue: state.marketValue,
+            releasedProjects: state.releasedProjects,
+            uiLanguage: state.uiLanguage,
+          });
 
-          const repDelta =
-            record.criticScore >= 7.8
-              ? 6
-              : record.criticScore >= 6.6
-              ? 2
-              : record.criticScore < 5.6
-              ? -5
-              : -1;
-          const nextRep = Math.min(100, Math.max(15, state.reputation + repDelta));
+          const projectedNetProfit =
+            (record.targetGrossRevenue || record.totalGrossRevenue) - record.totalBudget;
+          const isSmartIndieMasterstroke =
+            record.totalBudget <= 24_000_000 &&
+            record.criticScore >= 7.3 &&
+            projectedNetProfit >= 10_000_000;
+          const isSevereFlop =
+            record.criticScore < 5.6 || projectedNetProfit < -6_000_000;
+
+          const repDelta = isSmartIndieMasterstroke
+            ? 9
+            : record.criticScore >= 7.8
+            ? 6
+            : record.criticScore >= 6.6 && projectedNetProfit >= 0
+            ? 3
+            : isSevereFlop
+            ? -8
+            : projectedNetProfit < 0
+            ? -4
+            : -1;
+          const nextRep = Math.min(100, Math.max(10, state.reputation + repDelta));
 
           const nextMarketValue = calculateStudioMarketValue({
             cash: newCash,
@@ -4622,16 +5067,51 @@ export const useGameStore = create<NeelyoGameState>()(
             marketValueModifier: state.marketValueModifier || 0,
           });
 
+          const progAfterRelease = computeStudioProgression({
+            marketValue: nextMarketValue,
+            releasedProjects: nextProjects,
+            uiLanguage: state.uiLanguage,
+          });
+
+          const primaryReg = getPrimaryMarketRegion(state.worldMarket);
           const unlocked = [...state.unlockedRegions];
           const marketConfigs = getMarketConfigsForWorld(state.worldMarket);
           for (const cfg of marketConfigs) {
-            if (cfg.unlockMarketValue > 0 && nextMarketValue >= cfg.unlockMarketValue && !unlocked.includes(cfg.id)) {
+            const reqLv = getMarketRegionRequiredLevel(cfg.id, primaryReg);
+            if (
+              progAfterRelease.level >= reqLv &&
+              cfg.unlockMarketValue > 0 &&
+              nextMarketValue >= cfg.unlockMarketValue &&
+              !unlocked.includes(cfg.id)
+            ) {
               unlocked.push(cfg.id);
             }
           }
 
           const nextActorDynamic = { ...state.actorDynamicState };
           const newNewsItems: WorldBreakingNewsModalItem[] = [];
+          if (progAfterRelease.level > progBeforeRelease.level) {
+            const isEnPromo = state.uiLanguage === 'en';
+            const curLbl = getCurrencyLabel(state.worldMarket, state.uiLanguage);
+            newNewsItems.push({
+              id: `promo_rel_lv_${progAfterRelease.level}_${Date.now()}`,
+              day: state.gameDay,
+              year: state.currentYear,
+              category: 'production_news',
+              badgeLabel: isEnPromo
+                ? `Studio Promoted · Level ${progAfterRelease.level} Unlocked!`
+                : `ترقية الاستوديو · فتح المستوى ${progAfterRelease.level}!`,
+              headline: isEnPromo
+                ? `${state.studioName} ascended to "${progAfterRelease.title}"!`
+                : `ترقية «${state.studioName}» إلى مستوى «${progAfterRelease.title}»!`,
+              detail: progAfterRelease.subtitle,
+              highlightName: progAfterRelease.title,
+              extraStatBadge: isEnPromo
+                ? `Level ${progAfterRelease.level}/4 · Overhead ${formatMoney(progAfterRelease.monthlyOverhead)} ${curLbl}/mo`
+                : `المستوى ${progAfterRelease.level}/4 · مصاريف ${formatMoney(progAfterRelease.monthlyOverhead)} ${curLbl}/شهر`,
+              gameImpactLabel: progAfterRelease.subtitle,
+            });
+          }
           const db = getResolvedDatabase(state.customDbPatch, state.worldMarket);
           const curLabel = getCurrencyLabel(state.worldMarket);
           const allActors = [...state.aiGeneratedActors, ...db.actors];
@@ -4642,10 +5122,8 @@ export const useGameStore = create<NeelyoGameState>()(
             ...state.draft.supportingActorIds,
           ];
 
-          const projectedNetProfit =
-            (record.targetGrossRevenue || record.totalGrossRevenue) - record.totalBudget;
           const isMajorHit = record.criticScore >= 7.4 && projectedNetProfit >= 15_000_000;
-          const isFlop = record.criticScore < 5.8 || projectedNetProfit < -5_000_000;
+          const isFlop = isSevereFlop;
 
           for (const actorId of castIds) {
             const baseActor = allActors.find((a) => a.id === actorId);
@@ -4826,15 +5304,33 @@ export const useGameStore = create<NeelyoGameState>()(
             ],
           };
         });
-        const afterReleaseCash = get().cash;
+        const afterState = get();
         enqueueServerLedgerSync(get, set, {
           transactionType: 'PROJECT_BOX_OFFICE_REVENUE',
-          amountDelta: afterReleaseCash - prevCash,
+          amountDelta: afterState.cash - prevCash,
           previousCash: prevCash,
-          expectedNewCash: afterReleaseCash,
+          expectedNewCash: afterState.cash,
           itemId: finalRecord.id,
           itemLabel: `طرح عمل: ${finalRecord.title}`,
         });
+        // Auto-register/update this studio on the Global Leaderboard in the background
+        if (typeof window !== 'undefined' && afterState.studioCreated) {
+          const totalAw = afterState.releasedProjects.reduce(
+            (sum, p) => sum + (p.awardsWon?.length || 0),
+            0
+          );
+          syncAndFetchRealPlayersLeaderboard({
+            studioName: afterState.studioName,
+            ceoName: afterState.ceoName,
+            marketValue: afterState.marketValue,
+            cash: afterState.cash,
+            reputation: afterState.reputation,
+            releasedCount: afterState.releasedProjects.length,
+            totalAwards: totalAw,
+            ledgerSignature: afterState.ledgerSignature,
+            ownedStudioAssets: afterState.ownedStudioAssets,
+          }).catch(() => {});
+        }
       },
 
       setProjectJuryCommentary: (projectId, commentary) => {
@@ -5499,10 +5995,10 @@ export const useGameStore = create<NeelyoGameState>()(
           founderPerk: 'visionary_director',
           currentRegion: primaryReg,
           unlockedRegions: [primaryReg],
-          cash: 75_000_000,
-          marketValue: 110_000_000,
+          cash: STARTING_INDIE_CASH,
+          marketValue: STARTING_INDIE_MARKET_VALUE,
           marketValueModifier: 0,
-          reputation: 62,
+          reputation: STARTING_INDIE_REPUTATION,
           currentYear: 2026,
           gameDay: 1,
           lastAwardsGalaYear: 2025,
@@ -5556,8 +6052,8 @@ export const useGameStore = create<NeelyoGameState>()(
         enqueueServerLedgerSync(get, set, {
           transactionType: 'INIT_STUDIO',
           amountDelta: 0,
-          previousCash: 75_000_000,
-          expectedNewCash: 75_000_000,
+          previousCash: STARTING_INDIE_CASH,
+          expectedNewCash: STARTING_INDIE_CASH,
           itemLabel: isEn ? 'Full Studio Reset' : 'إعادة التأسيس الكاملة للاستوديو',
         });
       },
@@ -5578,6 +6074,7 @@ export const useGameStore = create<NeelyoGameState>()(
           isChildModalOpen: _omittedChildModal,
           isPrWarRoomOpen: _omittedPrModal,
           isStarForgeOpen: _omittedStarForge,
+          releaseViewInitialStep: _omittedReleaseStep,
           ...persisted
         } = state;
         void _omittedCustomPatch;
@@ -5585,12 +6082,14 @@ export const useGameStore = create<NeelyoGameState>()(
         void _omittedChildModal;
         void _omittedPrModal;
         void _omittedStarForge;
+        void _omittedReleaseStep;
         return persisted;
       },
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.isChildModalOpen = false;
           state.isPrWarRoomOpen = false;
+          state.releaseViewInitialStep = 1;
           if (!state.worldMarket) state.worldMarket = 'egypt';
           const savedLocalLang = readSavedUiLanguage();
           if (savedLocalLang) {

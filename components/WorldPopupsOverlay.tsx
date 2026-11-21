@@ -9,6 +9,7 @@ import {
 } from '@/lib/store';
 import { getResolvedDatabase } from '@/lib/db-resolver';
 import { formatMoney } from '@/lib/game-engine';
+import { computeStudioProgression } from '@/lib/progression';
 import { getMarketAiContext, getCurrencyLabel } from '@/lib/market-profiles';
 import {
   getUiDir,
@@ -38,6 +39,7 @@ import {
   Smartphone,
   Target,
   MessageSquare,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -57,6 +59,8 @@ export function WorldPopupsOverlay() {
     dismissFestivalCeremonyModal,
     studioName,
     cash,
+    marketValue,
+    releasedProjects,
     draft,
     lastReleasedProject,
     yearlyRivalReleases,
@@ -76,6 +80,16 @@ export function WorldPopupsOverlay() {
     customDbPatch,
     showToast,
   } = useGameStore();
+
+  const progression = useMemo(
+    () =>
+      computeStudioProgression({
+        marketValue,
+        releasedProjects,
+        uiLanguage,
+      }),
+    [marketValue, releasedProjects, uiLanguage]
+  );
 
   const isEn = uiLanguage !== 'ar';
   const uiDir = getUiDir(uiLanguage);
@@ -259,7 +273,7 @@ export function WorldPopupsOverlay() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3.5 backdrop-blur-md overscroll-contain touch-none select-none"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3.5 backdrop-blur-md overscroll-contain select-none"
             dir={uiDir}
           >
             {/* 0. MANDATORY BANKRUPTCY & STUDIO LIQUIDATION MODAL */}
@@ -395,96 +409,75 @@ export function WorldPopupsOverlay() {
               </motion.div>
             )}
 
-            {/* 1. ANNUAL FESTIVAL & AWARDS CEREMONY MODAL */}
+            {/* 1. ANNUAL FESTIVAL & AWARDS CEREMONY MODAL — MOBILE-FIRST LUXURY EDITION */}
             {!isBankruptLiquidated && currentFestival && (
               <motion.div
                 key={currentFestival.id}
-                initial={{ scale: 0.93, y: 20, opacity: 0 }}
+                initial={{ scale: 0.94, y: 18, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
-                exit={{ scale: 0.93, y: 20, opacity: 0 }}
+                exit={{ scale: 0.94, y: 18, opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                className="glass-modal relative max-h-[90vh] w-full max-w-xl overflow-y-auto overscroll-contain touch-pan-y rounded-3xl shadow-2xl"
+                className="glass-modal relative flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-3xl shadow-2xl"
               >
-                {/* Royal Gold & Velvet Header */}
-                <div className="relative overflow-hidden border-b-2 border-[#D4AF37] bg-[#1A2530] px-5 py-4 text-[#F9F6F0]">
-                  <div className="pointer-events-none absolute -top-12 -left-12 h-36 w-36 rounded-full bg-[#D4AF37]/20 blur-2xl" />
-                  <div className="relative flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#F9F6F0]/30 bg-[#D4AF37] text-[#1A2530] shadow-lg">
-                        <Trophy className="h-6 w-6" />
+                {/* Compact Velvet & Gold Header */}
+                <div className="shrink-0 border-b-2 border-[#D4AF37] bg-[#1A2530] px-4 py-3.5 text-[#F9F6F0]">
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FDE68A] to-[#D4AF37] text-[#1A2530] shadow">
+                        <Trophy className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/20 px-2.5 py-0.5 text-[10px] font-black text-[#D4AF37]">
-                            <Sparkles className="h-3 w-3" />
-                            <span>
-                              {tr(
+                        <div className="flex items-center gap-1.5 text-[10px] font-black text-[#D4AF37]">
+                          <Sparkles className="h-3 w-3 shrink-0" />
+                          <span className="truncate">
+                            {currentFestival.festivalBuzz ||
+                              tr(
                                 uiLanguage,
-                                `Official Year-End Awards Gala (${currentFestival.year})`,
-                                `البث الرسمي لحفل جوائز نهاية العام (${currentFestival.year})`
+                                `Year-End Gala (${currentFestival.year})`,
+                                `حفل نهاية العام (${currentFestival.year})`
                               )}
-                            </span>
                           </span>
                         </div>
-                        <h2 className="mt-1 font-display text-base font-black leading-snug text-[#F9F6F0] sm:text-lg">
+                        <h2 className="mt-0.5 font-display text-base font-black leading-tight text-white truncate">
                           {localizeEntityName(currentFestival.festivalName, uiLanguage)}
                         </h2>
                       </div>
                     </div>
 
-                    {!allRevealed && (
+                    {!allRevealed ? (
                       <button
                         type="button"
                         onClick={revealAllCategories}
-                        className="shrink-0 rounded-xl border border-[#D4AF37] bg-[#D91624] px-3 py-1.5 text-[11px] font-black text-white transition hover:brightness-110"
+                        className="shrink-0 min-h-[38px] rounded-xl border border-[#D4AF37] bg-[#D91624] px-3 py-1.5 text-[11px] font-black text-white hover:brightness-110 cursor-pointer"
                       >
-                        {tr(uiLanguage, 'Open All Envelopes', 'فتح كل المظاريف')}
+                        {tr(uiLanguage, 'Open All', 'فتح الكل')}
                       </button>
+                    ) : (
+                      <span
+                        className={`shrink-0 rounded-xl px-2.5 py-1 font-mono text-xs font-black tabular-nums ${
+                          playerWonCountInCurrentCeremony > 0
+                            ? 'bg-[#15803D] text-white'
+                            : 'bg-white/15 text-[#FDE68A]'
+                        }`}
+                      >
+                        {playerWonCountInCurrentCeremony}/{currentFestival.awards.length} 🏆
+                      </span>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-3.5 bg-[#F9F6F0] p-4 sm:p-5">
-                  {/* Jury Statement Banner */}
-                  <div className="rounded-2xl border border-[#D4AF37]/60 bg-[#FFF9E6] p-3.5">
-                    <div className="flex items-start gap-2.5">
-                      <Quote className="mt-0.5 h-4 w-4 shrink-0 text-[#D91624]" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold leading-relaxed text-[#1A2530]/85">
-                          {currentFestival.juryStatement}
-                        </p>
-                        {allRevealed && (
-                          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[#D4AF37]/40 pt-2">
-                            <span className="text-[11px] font-bold text-[#1A2530]/65">
-                              {currentFestival.festivalBuzz}
-                            </span>
-                            <span
-                              className={`rounded-xl px-2.5 py-1 text-[11px] font-black ${
-                                playerWonCountInCurrentCeremony > 0
-                                  ? 'bg-[#15803D] text-white'
-                                  : 'bg-[#1A2530]/10 text-[#1A2530]'
-                              }`}
-                            >
-                              {playerWonCountInCurrentCeremony > 0
-                                ? tr(
-                                    uiLanguage,
-                                    `"${studioName}" Swept ${playerWonCountInCurrentCeremony} Awards! 🏆`,
-                                    `حصد استوديو «${studioName}» ${playerWonCountInCurrentCeremony} جوائز! 🏆`
-                                  )
-                                : tr(
-                                    uiLanguage,
-                                    'The jury has finalized this festival’s winners',
-                                    'حسمت اللجان جوائز هذا المهرجان'
-                                  )}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                {/* Scrollable Body — Clean & Scannable Category Cards */}
+                <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-[#F9F6F0] p-3.5 space-y-2.5">
+                  {/* Concise Jury Statement */}
+                  <div className="rounded-2xl border border-[#D4AF37]/60 bg-[#FFF9E6] px-3 py-2.5 flex items-start gap-2">
+                    <Quote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#D91624]" />
+                    <p className="text-[11px] font-bold leading-relaxed text-[#1A2530]/85">
+                      {currentFestival.juryStatement}
+                    </p>
                   </div>
 
-                  {/* Categories Grid */}
-                  <div className="space-y-3">
+                  {/* Compact Envelope Cards */}
+                  <div className="space-y-2">
                     {currentFestival.awards.map((aw) => {
                       const isRevealed =
                         !!revealedCategories[`${currentFestival.id}_${aw.category}`];
@@ -497,142 +490,128 @@ export function WorldPopupsOverlay() {
                       return (
                         <div
                           key={aw.category}
-                          className={`rounded-2xl border-2 p-3.5 transition-all ${
+                          className={`rounded-2xl border-2 p-3 transition-all ${
                             isRevealed && aw.isPlayerWinner
-                              ? 'border-[#D4AF37] bg-[#FFF9E6] shadow-md'
-                              : 'border-[#1A2530]/15 bg-white shadow-2xs'
+                              ? 'border-[#D4AF37] bg-[#FFF9E6] shadow-sm'
+                              : isRevealed
+                              ? 'border-[#1A2530]/12 bg-white'
+                              : 'border-[#1A2530]/15 bg-white'
                           }`}
                         >
-                          <div className="mb-2.5 flex items-center justify-between gap-2">
+                          <div className="flex items-center justify-between gap-2">
                             <div className="flex min-w-0 items-center gap-2">
-                              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                                <Award className="h-4 w-4" />
+                              <div
+                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                                  isRevealed && aw.isPlayerWinner
+                                    ? 'bg-[#D4AF37] text-[#1A2530]'
+                                    : 'bg-[#1A2530]/10 text-[#1A2530]'
+                                }`}
+                              >
+                                {isRevealed && aw.isPlayerWinner ? (
+                                  <Trophy className="h-4 w-4" />
+                                ) : (
+                                  <Award className="h-4 w-4" />
+                                )}
                               </div>
-                              <h3 className="font-display text-xs font-black leading-snug text-slate-900 sm:text-sm">
+                              <h3 className="font-display text-xs sm:text-sm font-black text-[#1A2530] truncate">
                                 {locCategory}
                               </h3>
                             </div>
+
                             {!isRevealed ? (
                               <button
                                 type="button"
                                 onClick={() => toggleRevealCategory(aw.category)}
-                                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-xs transition hover:brightness-105"
+                                className="min-h-[36px] shrink-0 inline-flex items-center gap-1 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#FDE68A] border border-[#1A2530]/20 px-3 py-1 text-[11px] font-black text-[#1A2530] shadow-2xs hover:brightness-105 cursor-pointer"
                               >
-                                <Sparkles className="h-3.5 w-3.5" />
-                                <span>
-                                  {tr(uiLanguage, 'Unseal Envelope', 'فض المظروف الذهبي')}
-                                </span>
+                                <Sparkles className="h-3 w-3" />
+                                <span>{tr(uiLanguage, 'Unseal', 'فض المظروف')}</span>
                               </button>
                             ) : (
                               <span
-                                className={`inline-flex shrink-0 items-center gap-1 rounded-xl px-2.5 py-1 text-[10px] font-black ${
+                                className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-black ${
                                   aw.isPlayerWinner
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-slate-200 text-slate-700'
+                                    ? 'bg-[#15803D] text-white'
+                                    : aw.playerNominated
+                                    ? 'bg-amber-100 text-[#92400E] border border-amber-300'
+                                    : 'bg-[#1A2530]/10 text-[#1A2530]/70'
                                 }`}
                               >
-                                <Trophy className="h-3 w-3" />
-                                <span>
-                                  {aw.isPlayerWinner
-                                    ? tr(uiLanguage, `"${studioName}" Wins!`, `فوز «${studioName}»!`)
-                                    : tr(uiLanguage, `"${locWinningStudio}" Wins`, `فوز «${locWinningStudio}»`)}
-                                </span>
+                                {aw.isPlayerWinner
+                                  ? tr(uiLanguage, 'YOU WON 🏆', 'فزت بالجائزة 🏆')
+                                  : aw.playerNominated
+                                  ? tr(uiLanguage, 'Runner-Up', 'ترشّحت وخسرت')
+                                  : tr(uiLanguage, 'Rival Won', 'فاز المنافس')}
                               </span>
                             )}
                           </div>
 
-                          {/* Nominees List */}
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                            {aw.nominees.map((nomLabel, idx) => {
-                              const isWinnerNominee =
-                                isRevealed &&
-                                (nomLabel.includes(aw.winner) ||
-                                  nomLabel.includes(aw.winningProjectTitle));
-                              return (
-                                <div
-                                  key={idx}
-                                  className={`rounded-xl border p-2.5 transition-all ${
-                                    isWinnerNominee
-                                      ? 'border-[#D4AF37] bg-[#FFF9E6] shadow-xs'
-                                      : isRevealed
-                                      ? 'border-[#1A2530]/10 bg-[#F9F6F0]/60 opacity-65'
-                                      : 'border-[#1A2530]/15 bg-[#F9F6F0]'
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between gap-1">
-                                    <span className="text-xs font-black leading-snug text-[#1A2530]">
-                                      {localizeEntityName(nomLabel, uiLanguage)}
-                                    </span>
-                                    {isWinnerNominee && (
-                                      <Trophy className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
-                                    )}
-                                  </div>
+                          {/* Pre-Reveal Nominees Preview vs Post-Reveal Winner Verdict */}
+                          {!isRevealed ? (
+                            <p className="mt-1.5 text-[10px] font-bold text-[#1A2530]/65 leading-snug">
+                              {tr(uiLanguage, 'Nominees:', 'المرشحون:')}{' '}
+                              {aw.nominees
+                                .map((n) => localizeEntityName(n, uiLanguage))
+                                .join(' · ')}
+                            </p>
+                          ) : (
+                            <div className="mt-2 rounded-xl bg-[#F9F6F0] border border-[#1A2530]/10 px-2.5 py-2 space-y-1">
+                              <div className="flex items-center justify-between gap-2 text-xs font-black text-[#1A2530]">
+                                <span className="truncate">
+                                  🏆 {locWinner}
+                                </span>
+                                <span className="shrink-0 text-[10px] font-extrabold text-[#D91624] truncate max-w-[44%]">
+                                  {locWinningStudio}
+                                </span>
+                              </div>
+                              {aw.marginNote && (
+                                <div className="text-[10px] font-bold text-[#1A2530]/65">
+                                  {aw.marginNote}
                                 </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* Revealed Winner Banner */}
-                          {isRevealed && (
-                            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D4AF37] bg-[#FFF9E6] px-3 py-2">
-                              <span className="text-xs font-black text-[#1A2530]">
-                                {tr(
-                                  uiLanguage,
-                                  `Official Winner: ${locWinner} — for "${aw.winningProjectTitle}"`,
-                                  `الفائز الرسمي: ${locWinner} — عن عمل «${aw.winningProjectTitle}»`
-                                )}
-                              </span>
-                              <span className="text-[11px] font-bold text-[#D91624]">
-                                {tr(uiLanguage, 'Studio:', 'إنتاج:')} {locWinningStudio}
-                              </span>
+                              )}
                             </div>
                           )}
                         </div>
                       );
                     })}
                   </div>
+                </div>
 
-                  {/* Ceremony Footer Action */}
-                  <div className="flex items-center justify-between border-t border-[#1A2530]/15 pt-3">
-                    <span className="text-[11px] font-bold text-[#1A2530]/65">
-                      {festivalModalQueue.length > 1
-                        ? tr(
-                            uiLanguage,
-                            `${festivalModalQueue.length - 1} more festival ceremony remaining`,
-                            `متبقي ${festivalModalQueue.length - 1} مهرجان في ختام الموسم`
-                          )
-                        : tr(
-                            uiLanguage,
-                            'All awards for this season have been presented',
-                            'اكتملت مراسم توزيع جوائز هذا العام'
-                          )}
-                    </span>
-                    {!allRevealed ? (
-                      <button
-                        type="button"
-                        onClick={revealAllCategories}
-                        className="inline-flex min-h-[42px] items-center gap-1.5 rounded-2xl border border-[#1A2530] bg-[#D4AF37] px-5 py-2 text-xs font-black text-[#1A2530] shadow-md transition hover:brightness-105"
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        <span>
-                          {tr(uiLanguage, 'Reveal All Winners Now', 'إعلان جميع الفائزين الآن')}
-                        </span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={dismissFestivalCeremonyModal}
-                        className="inline-flex min-h-[42px] items-center gap-1.5 rounded-2xl border-2 border-[#D4AF37] bg-[#D91624] px-6 py-2.5 text-xs font-black text-white shadow-md transition hover:brightness-110"
-                      >
-                        <Check className="h-4 w-4" />
-                        <span>
-                          {festivalModalQueue.length > 1
-                            ? tr(uiLanguage, 'Next Festival', 'المهرجان التالي')
-                            : tr(uiLanguage, 'Accept Trophies & Continue', 'اعتماد الجوائز ومواصلة العمل')}
-                        </span>
-                      </button>
-                    )}
-                  </div>
+                {/* Fixed Clean Footer Action */}
+                <div className="shrink-0 flex items-center justify-between gap-2 border-t-2 border-[#D4AF37]/40 bg-white px-4 py-3">
+                  <span className="text-[11px] font-bold text-[#1A2530]/65 truncate">
+                    {festivalModalQueue.length > 1
+                      ? tr(
+                          uiLanguage,
+                          `${festivalModalQueue.length - 1} more gala next`,
+                          `متبقي ${festivalModalQueue.length - 1} حفل آخر`
+                        )
+                      : tr(uiLanguage, `${currentFestival.year} Finale`, `ختام ${currentFestival.year}`)}
+                  </span>
+
+                  {!allRevealed ? (
+                    <button
+                      type="button"
+                      onClick={revealAllCategories}
+                      className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border-2 border-[#1A2530] bg-gradient-to-r from-[#D4AF37] to-[#FDE68A] px-4 py-2 text-xs font-black text-[#1A2530] shadow cursor-pointer"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      <span>{tr(uiLanguage, 'Reveal All Winners', 'إعلان كل الفائزين')}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={dismissFestivalCeremonyModal}
+                      className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border-2 border-[#D4AF37] bg-[#D91624] px-5 py-2 text-xs font-black text-white shadow hover:brightness-110 cursor-pointer"
+                    >
+                      <Check className="h-4 w-4" />
+                      <span>
+                        {festivalModalQueue.length > 1
+                          ? tr(uiLanguage, 'Next Festival', 'المهرجان التالي')
+                          : tr(uiLanguage, 'Accept Trophies & Continue', 'اعتماد الجوائز ومواصلة العمل')}
+                      </span>
+                    </button>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1137,18 +1116,35 @@ export function WorldPopupsOverlay() {
                           <button
                             type="button"
                             disabled={launchingCampaignId !== null}
-                            onClick={() =>
+                            onClick={() => {
+                              if (!progression.canUseRivalRumors) {
+                                showToast(
+                                  tr(
+                                    uiLanguage,
+                                    'Rival Rumor Wars unlock at Studio Level 3 (250M valuation + 1 festival award).',
+                                    'حرب الإشاعات ضد المنافسين تُفتح في المستوى 3 (قيمة سوقية 250M + جائزة مهرجان واحدة).'
+                                  ),
+                                  'warning'
+                                );
+                                return;
+                              }
                               runCampaignAndFocusFeed(
                                 'rival_rumor_trolls',
                                 selectedRivalTarget
-                              )
-                            }
-                            className="w-full min-h-[58px] p-3.5 rounded-2xl bg-[#D91624] hover:brightness-110 text-white border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between gap-3 text-start cursor-pointer disabled:opacity-55"
+                              );
+                            }}
+                            className={`w-full min-h-[58px] p-3.5 rounded-2xl text-white border-2 border-[#D4AF37] shadow-md transition flex items-center justify-between gap-3 text-start cursor-pointer disabled:opacity-55 ${
+                              progression.canUseRivalRumors
+                                ? 'bg-[#D91624] hover:brightness-110'
+                                : 'bg-[#1A2530]/90 opacity-90'
+                            }`}
                           >
                             <div className="min-w-0">
                               <div className="font-display text-sm sm:text-base flex items-center gap-1.5">
                                 {launchingCampaignId === 'rival_rumor_trolls' ? (
                                   <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                                ) : !progression.canUseRivalRumors ? (
+                                  <Lock className="w-4 h-4 text-[#D4AF37] shrink-0" />
                                 ) : (
                                   <Flame className="w-4 h-4 text-[#FFF3B0] shrink-0" />
                                 )}
@@ -1161,18 +1157,26 @@ export function WorldPopupsOverlay() {
                                 </span>
                               </div>
                               <p className="text-[11px] font-bold text-white/85 mt-0.5 truncate">
-                                {tr(
-                                  uiLanguage,
-                                  `Direct PR strike against "${selectedRivalTargetDisplay}" to erode box office`,
-                                  `استهداف مباشر ضد «${selectedRivalTargetDisplay}» لتقليص إيراداته`
-                                )}
+                                {!progression.canUseRivalRumors
+                                  ? tr(
+                                      uiLanguage,
+                                      'Unlocks at Level 3 (250M market value + 1 festival award)',
+                                      'تُفتح في المستوى 3 (قيمة 250M + جائزة مهرجان)'
+                                    )
+                                  : tr(
+                                      uiLanguage,
+                                      `Direct PR strike against "${selectedRivalTargetDisplay}" to erode box office`,
+                                      `استهداف مباشر ضد «${selectedRivalTargetDisplay}» لتقليص إيراداته`
+                                    )}
                               </p>
                             </div>
                             <span
                               dir="ltr"
-                              className="shrink-0 font-typewriter text-xs font-black bg-[#1A2530]/85 text-[#D4AF37] px-2.5 py-1.5 rounded-xl border border-[#D4AF37]/50"
+                              className="shrink-0 font-typewriter text-xs font-black bg-[#1A2530]/80 text-[#D4AF37] px-2.5 py-1.5 rounded-xl border border-[#D4AF37]/50"
                             >
-                              5.0M {currencyLabel}
+                              {progression.canUseRivalRumors
+                                ? `5.0M ${currencyLabel}`
+                                : tr(uiLanguage, '🔒 Lv.3', '🔒 م3')}
                             </span>
                           </button>
                         </div>

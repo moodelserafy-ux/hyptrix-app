@@ -26,12 +26,16 @@
     background: transparent !important;
   }
 
-  html,
+  html {
+    width: 100%;
+    overflow-x: clip;
+    touch-action: manipulation;
+  }
+
   body {
     min-height: 100dvh;
     width: 100%;
     overflow-x: clip;
-    overflow-y: auto;
     background-color: #F9F6F0;
     background-image:
       radial-gradient(at 15% 10%, rgba(212, 175, 55, 0.13) 0px, transparent 50%),
@@ -45,6 +49,10 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -78,6 +86,19 @@
   textarea,
   select {
     font-family: var(--font-sans);
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
+
+  img {
+    -webkit-user-drag: none;
+    user-select: none;
   }
 
   button,
@@ -177,21 +198,25 @@
   }
 
   .fut-diamond-card {
-    background: linear-gradient(
-      135deg,
-      #F8FAFC 0%,
-      #E0F2FE 25%,
-      #F3E8FF 50%,
-      #FEF3C7 75%,
-      #ECFEFF 100%
-    );
-    background-size: 260% 260%;
-    animation: holoShimmer 3.8s ease infinite;
-    border: 2.5px solid #38BDF8;
+    background:
+      radial-gradient(circle at 18% 12%, rgba(56, 189, 248, 0.28) 0%, transparent 48%),
+      radial-gradient(circle at 86% 82%, rgba(212, 175, 55, 0.22) 0%, transparent 50%),
+      linear-gradient(
+        145deg,
+        #071324 0%,
+        #0D2240 36%,
+        #16355F 64%,
+        #081529 100%
+      );
+    background-size: 220% 220%;
+    animation: holoShimmer 5.5s ease infinite;
+    border: 2px solid #38BDF8;
+    color: #F8FAFC;
     box-shadow:
-      0 18px 40px -8px rgba(56, 189, 248, 0.42),
-      0 0 22px rgba(212, 175, 55, 0.35),
-      inset 0 0 24px rgba(255, 255, 255, 0.9);
+      0 20px 44px -10px rgba(7, 19, 36, 0.65),
+      0 0 26px rgba(56, 189, 248, 0.32),
+      inset 0 1px 0 rgba(186, 230, 253, 0.35),
+      inset 0 0 24px rgba(56, 189, 248, 0.14);
   }
 
   .vanity-bulb {

@@ -107,6 +107,44 @@ export function TelegramMiniAppBridge({
     if (typeof window === 'undefined') return;
     const tg = window.Telegram?.WebApp;
 
+    // Native mobile-game guard: block pinch zoom, Safari gesture zoom, ctrl+wheel zoom, and accidental copy outside inputs
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target.isContentEditable
+      );
+    };
+
+    const onGesture = (e: Event) => {
+      e.preventDefault();
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+    const onCopy = (e: ClipboardEvent) => {
+      if (!isEditableTarget(e.target)) {
+        e.preventDefault();
+      }
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      if (!isEditableTarget(e.target)) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('gesturestart', onGesture, { passive: false });
+    document.addEventListener('gesturechange', onGesture, { passive: false });
+    document.addEventListener('gestureend', onGesture, { passive: false });
+    window.addEventListener('wheel', onWheel, { passive: false });
+    document.addEventListener('copy', onCopy);
+    document.addEventListener('contextmenu', onContextMenu);
+
     if (tg) {
       try {
         tg.ready?.();
@@ -135,6 +173,15 @@ export function TelegramMiniAppBridge({
         })
         .catch(() => {});
     }
+
+    return () => {
+      document.removeEventListener('gesturestart', onGesture);
+      document.removeEventListener('gesturechange', onGesture);
+      document.removeEventListener('gestureend', onGesture);
+      window.removeEventListener('wheel', onWheel);
+      document.removeEventListener('copy', onCopy);
+      document.removeEventListener('contextmenu', onContextMenu);
+    };
   }, [hydrateCloudState]);
 
   // Automatic Telegram Cloud Save Sync when progress advances (throttled per day / release)

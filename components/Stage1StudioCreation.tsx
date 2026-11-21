@@ -279,7 +279,7 @@ export function Stage1StudioCreation({
 
   return (
     <div
-      className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-[#F9F6F0] text-[#1A2530]"
+      className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-x-clip bg-[#F9F6F0] text-[#1A2530]"
       dir={uiDir}
     >
       {/* Zero-Cost Radial Ambient Glow */}
@@ -335,7 +335,7 @@ export function Stage1StudioCreation({
             {marketLoc.countryName}
           </span>
           <span className="text-[10px] font-black text-[#9A7209]" dir="ltr">
-            · 75M {currencyLabel}
+            · 25M {currencyLabel}
           </span>
         </div>
 
@@ -375,8 +375,8 @@ export function Stage1StudioCreation({
             </span>
             {tr(
               uiLanguage,
-              `You're launching a fresh studio with 75M ${currencyLabel} in the same live timeline and star roster.`,
-              `تبدأ شركة جديدة برأس مال 75M ${currencyLabel} في نفس الزمن ومع نفس النجوم.`
+              `You're launching a fresh indie studio with 25M ${currencyLabel} in the same live timeline and star roster.`,
+              `تبدأ مكتب إنتاج مستقل جديد برأس مال 25M ${currencyLabel} في نفس الزمن ومع نفس النجوم.`
             )}
           </div>
         )}
@@ -690,7 +690,7 @@ export function Stage1StudioCreation({
                           dir="ltr"
                           className="mt-0.5 block font-typewriter text-sm sm:text-base font-black text-[#15803D] tabular-nums"
                         >
-                          75M {currencyLabel}
+                          25M {currencyLabel}
                         </span>
                       </div>
 
@@ -733,7 +733,7 @@ export function Stage1StudioCreation({
                               dir="ltr"
                               className="font-typewriter text-[10px] font-black text-[#1A2530]/65"
                             >
-                              75M
+                              25M
                             </span>
                           </div>
                         )}
@@ -771,7 +771,7 @@ export function Stage1StudioCreation({
                               dir="ltr"
                               className="mt-0.5 font-typewriter text-[11px] font-black text-white tracking-wider"
                             >
-                              75M · {currentYear}
+                              25M · {currentYear}
                             </span>
                           </motion.div>
                         </>

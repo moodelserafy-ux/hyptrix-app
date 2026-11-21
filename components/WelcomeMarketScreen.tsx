@@ -155,7 +155,7 @@ export function WelcomeMarketScreen({
 
   return (
     <div
-      className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-[#F9F6F0] text-[#1A2530]"
+      className="relative flex min-h-[100dvh] w-full flex-col justify-between overflow-x-clip bg-[#F9F6F0] text-[#1A2530]"
       dir={uiDir}
     >
       {/* Zero-Cost Radial Ambient Glow (replaces heavy mobile blur filters for 60 FPS) */}

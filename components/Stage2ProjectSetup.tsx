@@ -18,6 +18,11 @@ import {
   SeriesSeason,
 } from '@/lib/game-engine';
 import {
+  computeStudioProgression,
+  getEpisodesRequiredLevel,
+  getGenreRequiredLevel,
+} from '@/lib/progression';
+import {
   Clapperboard,
   Tv,
   Calendar,
@@ -38,6 +43,7 @@ import {
   BookOpen,
   KeyRound,
   Shield,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -68,7 +74,15 @@ export function Stage2ProjectSetup() {
     preferredGroqModel,
     worldMarket,
     uiLanguage,
+    marketValue,
+    releasedProjects,
   } = useGameStore();
+
+  const progression = computeStudioProgression({
+    marketValue,
+    releasedProjects,
+    uiLanguage,
+  });
 
   const isEn = uiLanguage !== 'ar';
   const uiDir = getUiDir(uiLanguage);
@@ -219,6 +233,24 @@ export function Stage2ProjectSetup() {
   };
 
   const handleSelectGenre = (genreId: GenreId) => {
+    const reqLevel = getGenreRequiredLevel(genreId);
+    if (progression.level < reqLevel) {
+      showToast(
+        reqLevel === 2
+          ? tr(
+              uiLanguage,
+              'This genre unlocks at Studio Level 2 (Release 2 films + 7.0+ critic score or 110M valuation).',
+              'هذا التصنيف يُفتح في المستوى 2 (أنتج عملين + تقييم نقاد 7.0+ أو قيمة سوقية 110M).'
+            )
+          : tr(
+              uiLanguage,
+              'Mega-budget genres unlock at Studio Level 4 (550M valuation + 3 festival awards).',
+              'التصنيفات الضخمة تُفتح في المستوى 4 (قيمة سوقية 550M + 3 جوائز مهرجانات).'
+            ),
+        'warning'
+      );
+      return;
+    }
     if (genrePickMode === 'primary') {
       updateDraft({
         primaryGenre: genreId,
@@ -404,14 +436,35 @@ export function Stage2ProjectSetup() {
 
                 <button
                   type="button"
-                  onClick={() => updateDraft({ format: 'series' })}
+                  onClick={() => {
+                    if (!progression.canProduceSeries) {
+                      showToast(
+                        tr(
+                          uiLanguage,
+                          'Drama Series unlock at Studio Level 2 (Release 2 films + 7.0+ critic score or 110M valuation).',
+                          'المسلسلات الدرامية تُفتح في المستوى 2 (أنتج عملين + تقييم 7.0+ أو قيمة سوقية 110M).'
+                        ),
+                        'warning'
+                      );
+                      return;
+                    }
+                    updateDraft({
+                      format: 'series',
+                      episodes:
+                        !progression.canProduceLongSeries && draft.episodes >= 15
+                          ? 7
+                          : draft.episodes,
+                    });
+                  }}
                   className={`flex flex-col items-start gap-1.5 rounded-2xl border-2 p-3.5 text-start transition-all ${
                     isSeries
                       ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6] shadow-xs'
+                      : !progression.canProduceSeries
+                      ? 'border-[#1A2530]/15 bg-[#F9F6F0]/75 opacity-80'
                       : 'border-[#1A2530]/15 bg-[#F9F6F0] hover:border-[#D4AF37]'
                   }`}
                 >
-                  <div className="flex w-full items-center justify-between">
+                  <div className="flex w-full items-center justify-between gap-1">
                     <div
                       className={`flex h-9 w-9 items-center justify-center rounded-xl ${
                         isSeries
@@ -419,19 +472,36 @@ export function Stage2ProjectSetup() {
                           : 'bg-[#1A2530]/10 text-[#1A2530]'
                       }`}
                     >
-                      <Tv className="h-5 w-5" />
+                      {progression.canProduceSeries ? (
+                        <Tv className="h-5 w-5" />
+                      ) : (
+                        <Lock className="h-4 w-4 text-[#9A7209]" />
+                      )}
                     </div>
-                    {isSeries && (
+                    {isSeries ? (
                       <span className="rounded-lg bg-[#D91624] px-2 py-0.5 text-[9px] font-black text-white">
                         {tr(uiLanguage, 'Selected ✓', 'مختار ✓')}
                       </span>
-                    )}
+                    ) : !progression.canProduceSeries ? (
+                      <span className="inline-flex items-center gap-0.5 rounded-lg bg-[#1A2530] px-2 py-0.5 text-[9px] font-black text-[#D4AF37]">
+                        <Lock className="h-2.5 w-2.5" />
+                        <span>{tr(uiLanguage, 'Lv.2', 'مستوى 2')}</span>
+                      </span>
+                    ) : null}
                   </div>
                   <p className="text-xs font-black text-[#1A2530]">
                     {tr(uiLanguage, 'Drama Series', 'مسلسل درامي')}
                   </p>
                   <p className="text-[10px] leading-relaxed font-bold text-[#1A2530]/75">
-                    {isEn ? (
+                    {!progression.canProduceSeries ? (
+                      <span className="text-[#9A7209]">
+                        {tr(
+                          uiLanguage,
+                          'Unlocks at Level 2 (2 films + 7.0+ critics or 110M value)',
+                          'يُفتح في المستوى 2 (عملين + تقييم 7.0+ أو قيمة 110M)'
+                        )}
+                      </span>
+                    ) : isEn ? (
                       <>
                         Driven by <strong className="text-[#D91624]">Millions of Views</strong> plus streaming & TV broadcast deals
                       </>
@@ -450,27 +520,56 @@ export function Stage2ProjectSetup() {
                     {tr(uiLanguage, 'Episode Count:', 'عدد حلقات المسلسل:')}
                   </p>
                   <div className="grid grid-cols-2 gap-2">
-                    {episodeCounts.map((ep) => (
-                      <button
-                        key={ep.count}
-                        type="button"
-                        onClick={() => updateDraft({ episodes: ep.count })}
-                        className={`rounded-xl border-2 p-2.5 text-start transition ${
-                          draft.episodes === ep.count
-                            ? 'border-[#D4AF37] border-b-4 border-b-[#A6841D] bg-[#1A2530] text-[#F9F6F0]'
-                            : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
-                        }`}
-                      >
-                        <p className="text-xs font-black">{ep.label}</p>
-                        <p
-                          className={`mt-0.5 text-[10px] ${
-                            draft.episodes === ep.count ? 'text-[#F9F6F0]/75' : 'text-[#1A2530]/65'
+                    {episodeCounts.map((ep) => {
+                      const epReqLevel = getEpisodesRequiredLevel(ep.count);
+                      const isEpLocked = progression.level < epReqLevel;
+                      return (
+                        <button
+                          key={ep.count}
+                          type="button"
+                          onClick={() => {
+                            if (isEpLocked) {
+                              showToast(
+                                tr(
+                                  uiLanguage,
+                                  '15 & 30-episode Ramadan marathons unlock at Studio Level 3 (250M valuation + 1 festival award).',
+                                  'مسلسلات 15 و30 حلقة تُفتح في المستوى 3 (قيمة سوقية 250M + جائزة مهرجان).'
+                                ),
+                                'warning'
+                              );
+                              return;
+                            }
+                            updateDraft({ episodes: ep.count });
+                          }}
+                          className={`rounded-xl border-2 p-2.5 text-start transition ${
+                            draft.episodes === ep.count
+                              ? 'border-[#D4AF37] border-b-4 border-b-[#A6841D] bg-[#1A2530] text-[#F9F6F0]'
+                              : isEpLocked
+                              ? 'border-[#1A2530]/15 bg-[#F9F6F0]/75 text-[#1A2530]/65'
+                              : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
                           }`}
                         >
-                          {ep.desc}
-                        </p>
-                      </button>
-                    ))}
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="text-xs font-black">{ep.label}</p>
+                            {isEpLocked && (
+                              <span className="inline-flex items-center gap-0.5 rounded bg-[#1A2530] px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37]">
+                                <Lock className="h-2.5 w-2.5" />
+                                <span>{tr(uiLanguage, 'Lv.3', 'م3')}</span>
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            className={`mt-0.5 text-[10px] ${
+                              draft.episodes === ep.count ? 'text-[#F9F6F0]/75' : 'text-[#1A2530]/65'
+                            }`}
+                          >
+                            {isEpLocked
+                              ? tr(uiLanguage, 'Requires Lv.3 (250M + 1 Award)', 'يتطلب مستوى 3 (250M + جائزة)')
+                              : ep.desc}
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -630,6 +729,8 @@ export function Stage2ProjectSetup() {
                 {GENRES.map((g) => {
                   const isPrimary = draft.primaryGenre === g.id;
                   const isSecondary = draft.secondaryGenre === g.id;
+                  const reqLevel = getGenreRequiredLevel(g.id as GenreId);
+                  const isLocked = progression.level < reqLevel;
                   const IconComp = GENRE_ICON_MAP[g.icon] || Sparkles;
                   const locGenre = getLocalizedGenreInfo(g.id as GenreId, uiLanguage);
                   return (
@@ -642,20 +743,28 @@ export function Stage2ProjectSetup() {
                           ? 'border-[#D4AF37] border-b-4 border-b-[#9A7A16] bg-[#1A2530] text-[#F9F6F0] shadow-md'
                           : isSecondary
                           ? 'border-[#D91624] border-b-4 border-b-[#9E0F19] bg-[#FFF9E6] text-[#1A2530]'
+                          : isLocked
+                          ? 'border-[#1A2530]/12 bg-[#F9F6F0]/70 text-[#1A2530]/75 opacity-85'
                           : 'border-[#1A2530]/15 bg-[#F9F6F0] text-[#1A2530] hover:border-[#D4AF37]'
                       }`}
                     >
-                      <div className="flex w-full items-center justify-between">
+                      <div className="flex w-full items-center justify-between gap-1">
                         <div
-                          className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                          className={`flex h-8 w-8 items-center justify-center rounded-xl ${
                             isPrimary
                               ? 'bg-[#D4AF37] text-[#1A2530]'
                               : isSecondary
                               ? 'bg-[#D91624] text-white'
+                              : isLocked
+                              ? 'bg-[#1A2530]/10 text-[#9A7209]'
                               : 'bg-[#1A2530]/10 text-[#1A2530]'
                           }`}
                         >
-                          <IconComp className="h-4 w-4" />
+                          {isLocked ? (
+                            <Lock className="h-3.5 w-3.5" />
+                          ) : (
+                            <IconComp className="h-4 w-4" />
+                          )}
                         </div>
                         {isPrimary && (
                           <span className="rounded-lg bg-[#D4AF37] px-2 py-0.5 text-[9px] font-black text-[#1A2530]">
@@ -667,15 +776,29 @@ export function Stage2ProjectSetup() {
                             {tr(uiLanguage, 'Sub ✓', 'فرعي ✓')}
                           </span>
                         )}
+                        {!isPrimary && !isSecondary && isLocked && (
+                          <span className="inline-flex items-center gap-0.5 rounded-lg bg-[#1A2530] px-1.5 py-0.5 text-[9px] font-black text-[#D4AF37]">
+                            <Lock className="h-2.5 w-2.5" />
+                            <span>{tr(uiLanguage, `Lv.${reqLevel}`, `م${reqLevel}`)}</span>
+                          </span>
+                        )}
                       </div>
                       <div className="mt-2">
                         <p className="text-xs font-black">{locGenre.name}</p>
                         <p
                           className={`mt-0.5 text-[10px] leading-relaxed ${
-                            isPrimary ? 'text-[#F9F6F0]/75' : 'text-[#1A2530]/65'
+                            isPrimary
+                              ? 'text-[#F9F6F0]/75'
+                              : isLocked
+                              ? 'text-[#9A7209] font-bold'
+                              : 'text-[#1A2530]/65'
                           }`}
                         >
-                          {locGenre.description}
+                          {isLocked
+                            ? reqLevel === 2
+                              ? tr(uiLanguage, 'Unlocks at Level 2 (2 Films)', 'يُفتح مستوى 2 (عملين)')
+                              : tr(uiLanguage, 'Unlocks at Level 4 (550M + 3 Awards)', 'يُفتح مستوى 4 (550M + 3 جوائز)')
+                            : locGenre.description}
                         </p>
                       </div>
                     </button>

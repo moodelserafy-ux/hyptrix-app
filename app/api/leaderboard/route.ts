@@ -371,10 +371,12 @@ export async function POST(req: NextRequest) {
       updated_at: nowIso,
     };
 
+    let supabaseSyncError: string | null = null;
+
     if (supabase) {
       try {
         // Keyed strictly on studio_instance_id so duplicate studio names never overwrite each other!
-        const { error: upsertErr } = await supabase
+        let { error: upsertErr } = await supabase
           .from('neelyo_leaderboard')
           .upsert(
             {
@@ -393,30 +395,62 @@ export async function POST(req: NextRequest) {
             { onConflict: 'studio_instance_id' }
           );
 
-        if (!upsertErr) {
-          const { data, error } = await supabase
+        // Resilient fallback if an existing Supabase table lacks newer optional columns
+        if (upsertErr) {
+          const retryRes = await supabase
             .from('neelyo_leaderboard')
-            .select('*')
-            .order('market_value', { ascending: false })
-            .limit(500);
-
-          if (!error && Array.isArray(data)) {
-            const mapped = data.map((r) =>
-              mapSupabaseRow(r as Record<string, unknown>)
+            .upsert(
+              {
+                studio_instance_id: studioInstanceId,
+                studio_name: studioName,
+                ceo_name: ceoName,
+                market_value: verifiedMarketValue,
+                cash: verifiedCash,
+                reputation,
+                released_count: releasedCount,
+                total_awards: totalAwards,
+                updated_at: nowIso,
+              },
+              { onConflict: 'studio_instance_id' }
             );
-            return NextResponse.json(
-              buildRankedResponse(
-                mapped,
-                studioInstanceId,
-                studioName,
-                'supabase',
-                { tamperClamped, verified: isLedgerVerified }
-              )
-            );
-          }
+          upsertErr = retryRes.error;
         }
-      } catch {
-        // fall through to local fallback
+
+        if (upsertErr) {
+          supabaseSyncError = upsertErr.message;
+          console.error('Supabase neelyo_leaderboard upsert error:', upsertErr.message);
+        }
+
+        const { data, error: selectErr } = await supabase
+          .from('neelyo_leaderboard')
+          .select('*')
+          .order('market_value', { ascending: false })
+          .limit(500);
+
+        if (!selectErr && Array.isArray(data)) {
+          const mapped = data.map((r) =>
+            mapSupabaseRow(r as Record<string, unknown>)
+          );
+          // Ensure syncing player is always visible even if write was blocked by RLS
+          if (!mapped.some((r) => r.studio_instance_id === studioInstanceId)) {
+            mapped.push(rowPayload);
+          }
+          return NextResponse.json({
+            ...buildRankedResponse(
+              mapped,
+              studioInstanceId,
+              studioName,
+              upsertErr ? 'local_fallback' : 'supabase',
+              { tamperClamped, verified: isLedgerVerified }
+            ),
+            syncWarning: supabaseSyncError || undefined,
+          });
+        } else if (selectErr) {
+          supabaseSyncError = selectErr.message;
+          console.error('Supabase neelyo_leaderboard select error:', selectErr.message);
+        }
+      } catch (e) {
+        supabaseSyncError = e instanceof Error ? e.message : 'Supabase connection error';
       }
     }
 
@@ -432,15 +466,16 @@ export async function POST(req: NextRequest) {
     }
     writeLocalFallback(fallbackRows);
 
-    return NextResponse.json(
-      buildRankedResponse(
+    return NextResponse.json({
+      ...buildRankedResponse(
         fallbackRows,
         studioInstanceId,
         studioName,
         'local_fallback',
         { tamperClamped, verified: isLedgerVerified }
-      )
-    );
+      ),
+      syncWarning: supabaseSyncError || undefined,
+    });
   } catch (err) {
     console.error('leaderboard POST error:', err);
     return NextResponse.json(

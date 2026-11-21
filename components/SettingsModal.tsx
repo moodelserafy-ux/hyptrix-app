@@ -58,7 +58,7 @@ export function SettingsModal({ isOpen, open, onClose }: SettingsModalProps) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
           onClick={handleClose}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 backdrop-blur-sm sm:items-center sm:p-4 overscroll-contain touch-none select-none"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 backdrop-blur-sm sm:items-center sm:p-4 overscroll-contain select-none"
           dir={dir}
         >
           {/* Mobile-First Bottom Sheet on Phones -> Centered Luxury Dialog on Desktop */}

@@ -96,7 +96,8 @@ export function LeaderboardAndSettingsView() {
 
   const [realLeaderboard, setRealLeaderboard] =
     useState<RealPlayersLeaderboardResponse | null>(null);
-  const [loadingReal, setLoadingReal] = useState(false);
+  const [loadingReal, setLoadingReal] = useState(true);
+  const [realSyncFailed, setRealSyncFailed] = useState(false);
 
   const [weeklyChallenge, setWeeklyChallenge] =
     useState<WeeklyChallengeData | null>(null);
@@ -127,6 +128,7 @@ export function LeaderboardAndSettingsView() {
 
   const loadRealPlayersRanking = useCallback(async () => {
     setLoadingReal(true);
+    setRealSyncFailed(false);
     try {
       const data = await syncAndFetchRealPlayersLeaderboard({
         studioName: studioName || marketInfo.defaultStudioName,
@@ -139,9 +141,13 @@ export function LeaderboardAndSettingsView() {
         ledgerSignature,
         ownedStudioAssets,
       });
-      if (data) {
+      if (data && Array.isArray(data.top15)) {
         setRealLeaderboard(data);
+      } else {
+        setRealSyncFailed(true);
       }
+    } catch {
+      setRealSyncFailed(true);
     } finally {
       setLoadingReal(false);
     }
@@ -173,11 +179,22 @@ export function LeaderboardAndSettingsView() {
       totalAwards: playerTotalAwards,
       ledgerSignature,
       ownedStudioAssets,
-    }).then((data) => {
-      if (active && data) {
-        setRealLeaderboard(data);
-      }
-    });
+    })
+      .then((data) => {
+        if (!active) return;
+        if (data && Array.isArray(data.top15)) {
+          setRealLeaderboard(data);
+          setRealSyncFailed(false);
+        } else {
+          setRealSyncFailed(true);
+        }
+      })
+      .catch(() => {
+        if (active) setRealSyncFailed(true);
+      })
+      .finally(() => {
+        if (active) setLoadingReal(false);
+      });
 
     return () => {
       active = false;
@@ -262,13 +279,56 @@ export function LeaderboardAndSettingsView() {
   );
 
   const myStudioInstanceId = useMemo(() => getOrCreateStudioInstanceId(), []);
-  const top15RealPlayers = (realLeaderboard?.top15 || []).slice(0, 15);
-  const myRealRank = realLeaderboard?.currentPlayerRank ?? null;
+  const top15RealPlayers = useMemo(() => {
+    const serverRows = (realLeaderboard?.top15 || []).slice(0, 15);
+    if (serverRows.length > 0) return serverRows;
+    if (loadingReal) return [];
+    // Guaranteed optimistic fallback row so the global leaderboard is NEVER blank
+    return [
+      {
+        studio_instance_id: myStudioInstanceId,
+        studio_name: studioName || marketInfo.defaultStudioName,
+        ceo_name: ceoName || defaultCeoFallback,
+        market_value: marketValue,
+        cash,
+        reputation,
+        released_count: releasedProjects.length,
+        total_awards: playerTotalAwards,
+        isCurrentPlayer: true,
+      },
+    ];
+  }, [
+    realLeaderboard,
+    loadingReal,
+    myStudioInstanceId,
+    studioName,
+    marketInfo.defaultStudioName,
+    ceoName,
+    defaultCeoFallback,
+    marketValue,
+    cash,
+    reputation,
+    releasedProjects.length,
+    playerTotalAwards,
+  ]);
+  const myRealRank =
+    realLeaderboard?.currentPlayerRank ?? (top15RealPlayers.length > 0 ? 1 : null);
   const isPlayerBelowTop15 = myRealRank !== null && myRealRank > 15;
   const gapToTop15 =
     isPlayerBelowTop15 && realLeaderboard?.fifteenthMarketValue
       ? Math.max(0, realLeaderboard.fifteenthMarketValue - marketValue + 1_000_000)
       : 0;
+
+  const getEntryStudioLevel = (entry: {
+    market_value: number;
+    released_count: number;
+    total_awards: number;
+  }): number => {
+    const l2 = entry.released_count >= 2 && entry.market_value >= 110_000_000;
+    const l3 = l2 && entry.market_value >= 250_000_000 && entry.total_awards >= 1;
+    const l4 = l3 && entry.market_value >= 550_000_000 && entry.total_awards >= 3;
+    return l4 ? 4 : l3 ? 3 : l2 ? 2 : 1;
+  };
 
   const loadSocialGrowthData = useCallback(async () => {
     setLoadingSocial(true);
@@ -561,29 +621,36 @@ export function LeaderboardAndSettingsView() {
             )}
           </div>
 
+          {(realSyncFailed || realLeaderboard?.syncWarning) && !loadingReal && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs font-bold text-amber-950">
+              <span>
+                {realSyncFailed
+                  ? tr(
+                      uiLanguage,
+                      'Showing your live studio locally — tap Refresh to reconnect to the global server.',
+                      'يتم عرض شركتك محلياً حالياً — اضغط تحديث لإعادة المزامنة مع الترتيب العالمي.'
+                    )
+                  : tr(
+                      uiLanguage,
+                      'Global cloud sync is active in fallback mode — your rank is preserved.',
+                      'المزامنة العالمية تعمل في الوضع الاحتياطي حالياً — تم حفظ ترتيبك.'
+                    )}
+              </span>
+              <button
+                type="button"
+                onClick={loadRealPlayersRanking}
+                className="rounded-lg bg-[#1A2530] px-2.5 py-1 text-[11px] font-black text-[#D4AF37] cursor-pointer"
+              >
+                {tr(uiLanguage, 'Retry Sync', 'إعادة المزامنة')}
+              </button>
+            </div>
+          )}
+
           {loadingReal && top15RealPlayers.length === 0 ? (
             <div className="rounded-3xl border-2 border-[#1A2530]/20 bg-white p-8 text-center space-y-2">
               <RefreshCw className="mx-auto h-6 w-6 animate-spin text-[#D91624]" />
               <p className="text-xs font-extrabold text-[#1A2530]">
                 {tr(uiLanguage, 'Syncing global player rankings...', 'جاري مزامنة ترتيب اللاعبين الحقيقيين...')}
-              </p>
-            </div>
-          ) : top15RealPlayers.length === 0 ? (
-            <div className="rounded-3xl border-2 border-[#D4AF37] bg-white p-6 text-center space-y-2">
-              <Trophy className="mx-auto h-8 w-8 text-[#D4AF37]" />
-              <p className="text-sm font-black text-[#1A2530]">
-                {tr(
-                  uiLanguage,
-                  'You are the first studio registered on the global board!',
-                  'أنت أول شركة إنتاج مسجلة حالياً في الترتيب العالمي!'
-                )}
-              </p>
-              <p className="text-xs font-bold text-[#1A2530]/70">
-                {tr(
-                  uiLanguage,
-                  'Other real players will appear automatically as they launch their empires.',
-                  'سيظهر باقي اللاعبين الحقيقيين هنا تلقائياً فور دخولهم وبناء استوديوهاتهم.'
-                )}
               </p>
             </div>
           ) : (
@@ -594,6 +661,7 @@ export function LeaderboardAndSettingsView() {
                   entry.isCurrentPlayer === true ||
                   (Boolean(entry.studio_instance_id) &&
                     entry.studio_instance_id === myStudioInstanceId);
+                const entryLevel = getEntryStudioLevel(entry);
                 return (
                   <div
                     key={`${entry.studio_instance_id || entry.studio_name}_${idx}`}
@@ -631,6 +699,9 @@ export function LeaderboardAndSettingsView() {
                           <h4 className="font-display text-xs font-black text-[#1A2530] sm:text-sm">
                             {entry.studio_name}
                           </h4>
+                          <span className="rounded bg-[#1A2530] px-1.5 py-0.5 font-typewriter text-[9px] font-black text-[#D4AF37]">
+                            Lv.{entryLevel}
+                          </span>
                           {isMe && (
                             <span className="rounded bg-[#D91624] px-1.5 py-0.5 text-[9px] font-black text-white">
                               {tr(uiLanguage, 'YOU', 'شركتك')}

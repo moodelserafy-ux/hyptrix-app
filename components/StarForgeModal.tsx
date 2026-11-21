@@ -735,7 +735,7 @@ export default function StarForgeModal() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[150] flex items-center justify-center p-2.5 sm:p-4 bg-[#1A2530]/88 backdrop-blur-md overflow-y-auto overscroll-contain touch-none select-none"
+        className="fixed inset-0 z-[150] flex items-center justify-center p-2.5 sm:p-4 bg-[#1A2530]/88 backdrop-blur-md overflow-y-auto overscroll-contain select-none"
         dir={dir}
       >
         {/* Camera Flash Overlay when photo is uploaded */}
@@ -1447,41 +1447,51 @@ export default function StarForgeModal() {
               {castingStep === 3 && (
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
                   <div className="sm:col-span-6 flex justify-center">
-                    <div className="w-full max-w-[290px]">
-                      <Fut3DTiltCard tier="DIAMOND" className="p-4 text-[#F9F6F0]">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-extrabold text-[#D4AF37]">
-                            {archetypeTitle} · {effectiveStarAge}{' '}
-                            {tr(uiLanguage, 'yrs', 'سنة')}
-                          </span>
-                          <span className="font-typewriter text-xl font-black text-[#D4AF37]">
-                            {overallRating} OVR
-                          </span>
+                    <div className="w-full max-w-[300px]">
+                      <Fut3DTiltCard tier="DIAMOND" className="p-4 text-[#F8FAFC]">
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <div className="min-w-0">
+                            <span className="block text-[11px] font-black text-[#7DD3FC] truncate">
+                              {archetypeTitle}
+                            </span>
+                            <span className="text-[10px] font-bold text-[#CBD5E1]">
+                              {effectiveStarAge} {tr(uiLanguage, 'yrs', 'سنة')}
+                            </span>
+                          </div>
+                          <div className="shrink-0 px-2.5 py-1 rounded-xl bg-[#040B16]/90 border border-[#FDE68A]/70 text-center">
+                            <span className="font-typewriter text-lg font-black text-[#FDE68A] leading-none block tabular-nums">
+                              {overallRating}
+                            </span>
+                            <span className="text-[8px] font-black tracking-widest text-[#7DD3FC]">
+                              OVR
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="relative w-full h-44 rounded-xl overflow-hidden border-2 border-[#D4AF37] mb-2.5 bg-[#1A2530]">
+                        <div className="relative w-full h-44 rounded-2xl overflow-hidden border-2 border-[#38BDF8]/75 mb-3 bg-[#040B16] shadow-lg">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={previewPortraitUrl}
                             alt={starName}
                             className="w-full h-full object-cover contrast-105"
                           />
-                          <div className="absolute bottom-2 left-2.5 bg-[#1A2530]/90 px-3 py-0.5 rounded-lg border border-[#D4AF37]">
-                            <span className="font-ruqaa text-lg text-[#D4AF37]">
+                          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#040B16]/95 via-[#040B16]/55 to-transparent" />
+                          <div className="absolute bottom-2 inset-x-2.5 flex items-end justify-between gap-2">
+                            <h3 className="font-display text-lg text-[#FFFFFF] drop-shadow truncate">
+                              {starName}
+                            </h3>
+                            <span className="font-ruqaa text-base text-[#FDE68A] shrink-0">
                               {starName.trim() || tr(uiLanguage, 'Autograph', 'توقيع النجم')}
                             </span>
                           </div>
                         </div>
 
-                        <h3 className="font-display text-xl text-white text-center mb-2">
-                          {starName}
-                        </h3>
-
-                        <div className="flex justify-center bg-[#F9F6F0] rounded-xl p-1.5">
+                        <div className="flex justify-center bg-[#040B16]/65 border border-[#38BDF8]/30 rounded-2xl p-2">
                           <HexagonalRadarChartSvg
                             stats={radarStats}
-                            size={135}
+                            size={145}
                             isDiamond
+                            darkSurface
                           />
                         </div>
                       </Fut3DTiltCard>
@@ -1611,46 +1621,48 @@ export default function StarForgeModal() {
             transition={{ type: 'spring', stiffness: 260, damping: 20 }}
             className="relative w-full max-w-md my-auto"
           >
-            <Fut3DTiltCard tier="DIAMOND" className="p-5 text-[#F9F6F0]">
-              <div className="flex items-center justify-between border-b border-[#D4AF37]/40 pb-2.5 mb-3">
-                <div>
-                  <span className="px-2.5 py-0.5 rounded bg-[#D4AF37] text-[#1A2530] font-typewriter text-[10px] font-black">
-                    {tr(uiLanguage, 'EXCLUSIVE TALENT · DIAMOND CARD', 'موهبة حصرية · كارت ألماظ')}
+            <Fut3DTiltCard tier="DIAMOND" className="p-4 sm:p-5 text-[#F8FAFC]">
+              <div className="flex items-center justify-between border-b border-[#38BDF8]/30 pb-2.5 mb-3 gap-2">
+                <div className="min-w-0">
+                  <span className="inline-block px-2.5 py-0.5 rounded-md bg-[#FDE68A] text-[#071324] font-typewriter text-[10px] font-black">
+                    {tr(uiLanguage, 'EXCLUSIVE TALENT · DIAMOND', 'موهبة حصرية · كارت ألماظ')}
                   </span>
-                  <h2 className="font-display text-2xl text-white mt-1">
+                  <h2 className="font-display text-xl sm:text-2xl text-[#FFFFFF] mt-1 truncate">
                     {revealedStar.name}
                   </h2>
                 </div>
-                <div className="text-center px-3 py-1.5 rounded-2xl bg-[#1A2530] border-2 border-[#D4AF37]">
-                  <span className="font-typewriter text-2xl font-black text-[#D4AF37] block leading-none">
+                <div className="shrink-0 text-center px-3 py-1.5 rounded-2xl bg-[#040B16]/90 border-2 border-[#FDE68A]">
+                  <span className="font-typewriter text-2xl font-black text-[#FDE68A] block leading-none tabular-nums">
                     {revealedStar.stats.overall}
                   </span>
-                  <span className="text-[10px] font-extrabold text-[#F9F6F0]">
-                    DIAMOND
+                  <span className="text-[9px] font-black tracking-widest text-[#7DD3FC]">
+                    OVR
                   </span>
                 </div>
               </div>
 
-              <div className="relative w-full h-52 rounded-2xl overflow-hidden border-2 border-[#D4AF37] mb-3 bg-[#1A2530]">
+              <div className="relative w-full h-52 rounded-2xl overflow-hidden border-2 border-[#38BDF8]/80 mb-3 bg-[#040B16] shadow-lg">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={revealedStar.image_url}
                   alt={revealedStar.name}
                   className="w-full h-full object-cover contrast-105"
                 />
-                <div className="absolute bottom-2.5 left-3 bg-[#1A2530]/85 backdrop-blur-sm px-3.5 py-1 rounded-xl border border-[#D4AF37]">
-                  <span className="font-ruqaa text-2xl text-[#D4AF37] -rotate-3 block">
+                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#040B16]/90 to-transparent" />
+                <div className="absolute bottom-2.5 left-3 bg-[#040B16]/85 backdrop-blur-sm px-3 py-1 rounded-xl border border-[#FDE68A]/80">
+                  <span className="font-ruqaa text-xl text-[#FDE68A] -rotate-2 block">
                     {revealedStar.autographSignature || revealedStar.name}
                   </span>
                 </div>
               </div>
 
               {revealedStar.radarStats && (
-                <div className="flex justify-center bg-[#F9F6F0] rounded-2xl p-2 border-2 border-[#D4AF37] mb-3">
+                <div className="flex justify-center bg-[#040B16]/65 rounded-2xl p-2 border border-[#38BDF8]/35 mb-3">
                   <HexagonalRadarChartSvg
                     stats={revealedStar.radarStats}
-                    size={165}
+                    size={160}
                     isDiamond
+                    darkSurface
                   />
                 </div>
               )}
@@ -1658,7 +1670,7 @@ export default function StarForgeModal() {
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-full min-h-[48px] py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FFF3B0] to-[#B8860B] text-[#1A2530] font-display text-base shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full min-h-[48px] py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#FDE68A] to-[#D4AF37] text-[#071324] font-display text-base font-black shadow-lg hover:brightness-105 transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-5 h-5" />
                 <span>
