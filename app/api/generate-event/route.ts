@@ -1762,8 +1762,8 @@ async function handleGenerateAiMemoryNews(
   const ceoName = String(payload?.ceoName || (isEn ? 'Executive Producer' : 'المنتج التنفيذي'));
   const gameDay = Number(payload?.gameDay || 10);
   const currentYear = Number(payload?.currentYear || 2026);
-  const marketValue = Number(payload?.marketValue || 110_000_000);
-  const cash = Number(payload?.cash || 75_000_000);
+  const marketValue = Number(payload?.marketValue || 55_000_000);
+  const cash = Number(payload?.cash || 25_000_000);
   const memoryArr = Array.isArray(payload?.aiMemoryLog)
     ? (payload.aiMemoryLog as string[])
     : [];

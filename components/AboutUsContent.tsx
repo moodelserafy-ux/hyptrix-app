@@ -32,7 +32,7 @@ const CONTENT = {
       {
         num: '01',
         title: 'Studio Founding & The Executive Desk',
-        body: 'Launch your studio with 75M virtual starting capital, customize your company name, royal crest, and strategic founder perk, and command every decision directly from the interactive Executive Desk.',
+        body: 'Launch your studio with 25M virtual starting capital, customize your company name, royal crest, and strategic founder perk, and command every decision directly from the interactive Executive Desk.',
       },
       {
         num: '02',
@@ -135,7 +135,7 @@ const CONTENT = {
       {
         num: '01',
         title: 'تأسيس الاستوديو ومكتب الإمبراطور',
-        body: 'ابدأ برأس مال تأسيسي 75 مليون عملة افتراضية، واختر اسم شركتك وشعارها الملكي وميزة المؤسس الاستراتيجية، وأدر كافة قراراتك من مكتب الإمبراطور التفاعلي.',
+        body: 'ابدأ برأس مال تأسيسي 25 مليون عملة افتراضية، واختر اسم شركتك وشعارها الملكي وميزة المؤسس الاستراتيجية، وأدر كافة قراراتك من مكتب الإمبراطور التفاعلي.',
       },
       {
         num: '02',

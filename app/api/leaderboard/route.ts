@@ -10,6 +10,11 @@ import {
   MAX_PLAUSIBLE_MARKET_VALUE,
   getServerMemoryWallet,
 } from '@/lib/ledger-security';
+import {
+  STARTING_INDIE_CASH,
+  STARTING_INDIE_MARKET_VALUE,
+  STARTING_INDIE_REPUTATION,
+} from '@/lib/progression';
 
 export const dynamic = 'force-dynamic';
 
@@ -221,16 +226,16 @@ export async function POST(req: NextRequest) {
           0,
           Math.min(MAX_PLAUSIBLE_MARKET_VALUE, Math.round(Number(body.marketValue)))
         )
-      : 110_000_000;
+      : STARTING_INDIE_MARKET_VALUE;
     const claimedCash = Number.isFinite(Number(body?.cash))
       ? Math.max(
           -500_000_000,
           Math.min(MAX_PLAUSIBLE_CASH, Math.round(Number(body.cash)))
         )
-      : 75_000_000;
+      : STARTING_INDIE_CASH;
     const reputation = Number.isFinite(Number(body?.reputation))
       ? Math.max(0, Math.min(100, Math.round(Number(body.reputation))))
-      : 60;
+      : STARTING_INDIE_REPUTATION;
     const releasedCount = Number.isFinite(Number(body?.releasedCount))
       ? Math.max(0, Math.min(200, Math.round(Number(body.releasedCount))))
       : 0;
@@ -353,7 +358,10 @@ export async function POST(req: NextRequest) {
       isLedgerVerified = false;
       verifiedMarketValue =
         serverWalletMarketValue !== null
-          ? Math.min(mvCeiling, Math.max(serverWalletMarketValue, 110_000_000))
+          ? Math.min(
+              mvCeiling,
+              Math.max(serverWalletMarketValue, STARTING_INDIE_MARKET_VALUE)
+            )
           : mvCeiling;
     }
 

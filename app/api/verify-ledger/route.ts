@@ -11,6 +11,11 @@ import {
   getServerMemoryWallet,
   setServerMemoryWallet,
 } from '@/lib/ledger-security';
+import {
+  STARTING_INDIE_CASH,
+  STARTING_INDIE_MARKET_VALUE,
+  STARTING_INDIE_REPUTATION,
+} from '@/lib/progression';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,16 +107,16 @@ export async function POST(req: NextRequest) {
       : 0;
     const safePrevCash = Number.isFinite(Number(previousCash))
       ? clampCash(Number(previousCash))
-      : 75_000_000;
+      : STARTING_INDIE_CASH;
     const safeExpectedCash = Number.isFinite(Number(expectedNewCash))
       ? clampCash(Number(expectedNewCash))
       : clampCash(safePrevCash + safeDelta);
     const safeMarketValue = Number.isFinite(Number(marketValue))
       ? clampMarketValue(Number(marketValue))
-      : 110_000_000;
+      : STARTING_INDIE_MARKET_VALUE;
     const safeRep = Number.isFinite(Number(reputation))
       ? Math.max(0, Math.min(100, Math.round(Number(reputation))))
-      : 62;
+      : STARTING_INDIE_REPUTATION;
     const safeReleasedCount = Number.isFinite(Number(releasedCount))
       ? Math.max(0, Math.min(200, Math.round(Number(releasedCount))))
       : 0;
@@ -162,7 +167,7 @@ export async function POST(req: NextRequest) {
     ) => {
       if (txType === 'INIT_STUDIO') {
         return {
-          finalCash: 75_000_000,
+          finalCash: STARTING_INDIE_CASH,
           finalAssets: [] as string[],
           tampered: false,
         };
@@ -391,12 +396,14 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const studioInstanceId = searchParams.get('studioInstanceId') || '';
     const clientCash = Number(
-      searchParams.get('cash') ?? searchParams.get('clientCash') ?? '75000000'
+      searchParams.get('cash') ??
+        searchParams.get('clientCash') ??
+        String(STARTING_INDIE_CASH)
     );
     const clientMarketValue = Number(
       searchParams.get('marketValue') ??
         searchParams.get('clientMarketValue') ??
-        '110000000'
+        String(STARTING_INDIE_MARKET_VALUE)
     );
     const clientSignature =
       searchParams.get('sig') ?? searchParams.get('signature') ?? '';
@@ -416,7 +423,14 @@ export async function GET(req: NextRequest) {
     );
     const reputation = Math.max(
       0,
-      Math.min(100, Math.round(Number(searchParams.get('reputation') || '62')))
+      Math.min(
+        100,
+        Math.round(
+          Number(
+            searchParams.get('reputation') || String(STARTING_INDIE_REPUTATION)
+          )
+        )
+      )
     );
 
     if (!studioInstanceId) {

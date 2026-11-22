@@ -376,8 +376,8 @@ export function WelcomeMarketScreen({
           <p className="mt-1 text-xs sm:text-sm font-bold text-[#1A2530]/65">
             {tr(
               selectedLang,
-              'Dedicated stars, seasons, awards & currency · 75M Starting Capital',
-              'عالم مستقل بنجومه ومواسمه وعملته · رأس مال افتتاحي 75M'
+              'Dedicated stars, seasons, awards & currency · 25M Starting Capital',
+              'عالم مستقل بنجومه ومواسمه وعملته · رأس مال افتتاحي 25M'
             )}
           </p>
         </div>

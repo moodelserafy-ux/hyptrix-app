@@ -194,7 +194,7 @@ export default async function RootLayout({
         description:
           'Neelyo is a comprehensive strategic business simulation game in English and Arabic that puts you in charge of your own film and television production empire. Craft studio identity, greenlight movies or 7–30 episode series, negotiate multi-day contracts with 180+ actors, 1–2 directors, cinematographers, composers, and editors, balance set design and VFX budgets, resolve live production crises, license streaming and broadcast rights, expand across regional and global markets, and compete at annual awards ceremonies.',
         featureList: [
-          'Found your cinema & TV studio with 75M starting capital, custom royal emblem, and a strategic founder perk',
+          'Found your cinema & TV studio with 25M starting capital, custom royal emblem, and a strategic founder perk',
           'Two distinct production tracks: theatrical feature films (box office revenue & screen count) and TV series from 7 to 30 episodes (million-viewer ratings, streaming & broadcast deals)',
           'Deep talent roster of 180+ S/A/B/C-tier stars plus AI-discovered rising talents emerging dynamically over time',
           'Flexible directing system supporting 1 or 2 co-directors per project with realistic agent negotiations',
@@ -417,7 +417,7 @@ export default async function RootLayout({
             Neelyo — AI-Powered Cinema &amp; Television Studio Tycoon Simulation Game
           </h1>
           <p>
-            Neelyo is a bilingual (English &amp; Arabic) strategic cinema and television production tycoon game where you found and lead your own studio starting with 75M virtual capital. Powered by dynamic AI storytelling, the world evolves continuously with rising actors, rival studios, script evaluations, multi-day contract negotiations, on-set crises, PR trend wars, theatrical box-office races, streaming contracts, and annual awards ceremonies.
+            Neelyo is a bilingual (English &amp; Arabic) strategic cinema and television production tycoon game where you found and lead your own studio starting with 25M virtual capital. Powered by dynamic AI storytelling, the world evolves continuously with rising actors, rival studios, script evaluations, multi-day contract negotiations, on-set crises, PR trend wars, theatrical box-office races, streaming contracts, and annual awards ceremonies.
           </p>
           <h2>The Star Forge (99 OVR Diamond Card Creator)</h2>
           <p>

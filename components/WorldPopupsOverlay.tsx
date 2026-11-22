@@ -347,11 +347,11 @@ export function WorldPopupsOverlay() {
                     <li>
                       {isEn ? (
                         <>
-                          You will immediately found a brand-new studio with fresh capital (75M {currencyLabel}) <strong>in the same living world &amp; timeline ({formatGameDate(gameDay, currentYear, uiLanguage)})</strong> with all evolved stars and rivals intact!
+                          You will immediately found a brand-new studio with fresh capital (25M {currencyLabel}) <strong>in the same living world &amp; timeline ({formatGameDate(gameDay, currentYear, uiLanguage)})</strong> with all evolved stars and rivals intact!
                         </>
                       ) : (
                         <>
-                          ستبدأ فوراً بتأسيس شركة إنتاج جديدة برأس مال جديد (75M {currencyLabel}) <strong>في نفس العالم ونفس الزمن ({formatGameDate(gameDay, currentYear, uiLanguage)})</strong> مع استمرار نفس النجوم وتطورهم ونفس الشركات المنافسة!
+                          ستبدأ فوراً بتأسيس شركة إنتاج جديدة برأس مال جديد (25M {currencyLabel}) <strong>في نفس العالم ونفس الزمن ({formatGameDate(gameDay, currentYear, uiLanguage)})</strong> مع استمرار نفس النجوم وتطورهم ونفس الشركات المنافسة!
                         </>
                       )}
                     </li>

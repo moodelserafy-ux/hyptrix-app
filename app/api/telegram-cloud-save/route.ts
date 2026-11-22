@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
       telegram_user_id: tgUser.id,
       studio_name: String(stateSnapshot.studioName || 'Neelyo Studio').slice(0, 80),
       ceo_name: String(stateSnapshot.ceoName || tgUser.firstName || 'المنتج').slice(0, 80),
-      market_value: Math.round(Number(stateSnapshot.marketValue || 75_000_000)),
+      market_value: Math.round(Number(stateSnapshot.marketValue || 55_000_000)),
       game_day: Math.max(1, Math.round(Number(stateSnapshot.gameDay || 1))),
       state_json: stateSnapshot,
       updated_at: new Date().toISOString(),
